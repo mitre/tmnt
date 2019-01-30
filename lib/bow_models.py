@@ -18,7 +18,7 @@ class BowNTM(HybridBlock):
 
 
     def hybrid_forward(self, F, data):
-        ## data should have shame N x V
+        ## data should have shame N x V - but be SPARSE
         enc_out = self.encoder(data)
         mu_lv = F.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
         mu = mu_lv[0]
@@ -26,13 +26,13 @@ class BowNTM(HybridBlock):
         ## Standard Gaussian VAE/VED
         eps = F.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
         z = mu + F.exp(0.5*lv)*eps
-        y = self.decoder(z)
+        
         KL = 0.5*F.sum(1+lv-mu*mu-F.exp(lv),axis=1)
 
         gen_out = self.generator(z)  ## just mu when predicting??
         res = gen_out + z
 
         dec_out = decoder(res)
-        ## TODO:
-        ## get reconstruction loss
-        ## get L1 penalty
+        y = F.log_softmax(dec_out)
+        return -y - KL
+        
