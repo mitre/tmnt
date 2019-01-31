@@ -56,27 +56,52 @@ def collect_stream_as_sparse_matrix(stream, min_freq=3, max_vocab_size=None):
     indptrs = [0]
     cumulative = 0
     ndocs = 0
-    #all_toks = []
+    total_num_words = 0
     for i,doc in enumerate(strm):
         ndocs += 1
-        doc_toks = list(doc)[0]
-        #all_toks.append(doc_toks)
+        doc_toks = list(doc)[0]  # each document is a single sample        
         inds, vs = zip(*doc_toks)
         ln = len(doc_toks)
         cumulative += ln
+        total_num_words += sum(vs)
         indptrs.append(cumulative)
         values.extend(vs)
         indices.extend(inds)
     # can use this with NDArrayIter
     # dataiter = mx.io.NDArrayIter(data, labels, batch_size, last_batch_handle='discard')
     ## inspect - [ batch.data[0] for batch in dataiter ]
-    return mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
+    csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
+    return csr_mat, vocab, total_num_words
     
-        
+
+class DataIterLoader():
+    """
+    This is a simple wrapper around a `DataIter` geared for unsupervised learning datasets
+    where the label is `None`. Not totally necessary but means means client code (e.g. in the `train_model`
+    method can follow the standard API for `DataLoader` objects.
+    """
+    def __init__(self, data_iter):
+        self.data_iter = data_iter
+
+    def __iter__(self):
+        self.data_iter.reset()
+        return self
+
+    def __next__(self):
+        batch = self.data_iter.__next__()
+        data = batch.data[0]
+        if len(batch.data) == len(batch.label):            
+            label = batch.label[0]
+        else:
+            label = None
+        return data, label
+
+    def next(self):
+        return self.__next__()
     
 
 class BowDataSet(SimpleDatasetStream):
-    def __init__(self, root, pattern, bos, eos, skip_empty):
+    def __init__(self, root, pattern):
         self._root = root
         self._file_pattern = os.path.join(root, pattern)
         self.codec = 'utf-8'
