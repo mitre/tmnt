@@ -18,7 +18,7 @@ class BowNTM(HybridBlock):
             self.generator = gluon.nn.HybridSequential()
             with self.generator.name_scope():
                 for i in range(gen_layers):
-                    self.generator.add(gluon.nn.Dense(in_units=n_latent, units=n_latent, activation='tanh'))
+                    self.generator.add(gluon.nn.Dense(units=n_latent, activation='tanh'))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=vocab_size, activation='tanh')
 
 
@@ -38,8 +38,12 @@ class BowNTM(HybridBlock):
         res = gen_out + z
         dec_out = self.decoder(res)
         y = F.log_softmax(dec_out)
+
+        ## L1 regularization penalty on decoder weights
+        dec_weights = self.decoder.params.get('weight').data() ## use .var() for a symbol
+        l1_weights = F.broadcast_to(F.sum(F.abs(dec_weights)), (self.batch_size,))
         
         ce_loss = -F.sparse.sum(data * y, axis=(-1))
         KL = 0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
-        return ce_loss - KL, ce_loss
+        return l1_weights + ce_loss - KL, ce_loss, l1_weights
         

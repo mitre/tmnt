@@ -10,5 +10,4 @@ single document in each file.
 ```
  > cd bin
  > python3 train_bow_vae.py --train_dir ./input-data --file_pat '*.txt' --epochs 400 --n_latent 32 --batch_size 32 --lr 0.00005
-
 ```

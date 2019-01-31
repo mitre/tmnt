@@ -26,16 +26,18 @@ def train(args, vocabulary, data_train_csr, total_num_words, data_val=None, ctx=
     for epoch in range(args.epochs):
         epoch_loss = 0
         total_rec_loss = 0
+        total_l1_pen = 0
         for i, (data,_) in enumerate(train_dataloader):
             data = data.as_in_context(ctx)
             with autograd.record():
-                elbo, rec_loss = model(data)
+                elbo, rec_loss, l1_pen = model(data)
             elbo.backward()
             trainer.step(data.shape[0]) ## step based on batch size
+            total_l1_pen += l1_pen.sum().asscalar()
             total_rec_loss += rec_loss.sum().asscalar()
-            epoch_loss += elbo.sum().asscalar()
+            epoch_loss += elbo.sum().asscalar()            
         perplexity = math.exp(total_rec_loss / total_num_words)
-        print("Loss = {}, Training perplexity = {}".format(epoch_loss, perplexity))
+        print("Loss = {}, Training perplexity = {} [ L1 Pen = {} ]".format(epoch_loss, perplexity, total_l1_pen))
         #logging.info("Epoch loss = {}".format(epoch_loss))
 
 
