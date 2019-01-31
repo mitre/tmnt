@@ -2,4 +2,4 @@
 
 Topic modeling with Neural Variational Models
 
-Project layout using ./lib for general source code and ./bin for command-line executable scripts.
+Project layout using ./tmnt for general source code and ./bin for command-line executable scripts.
