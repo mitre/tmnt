@@ -22,6 +22,7 @@ def train(args, vocabulary, data_train_csr, total_num_words, data_val=None, ctx=
     train_dataloader = DataIterLoader(train_iter)
     model = BowNTM(args.batch_size, len(vocabulary), l1_dim, args.n_latent)
     model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)
+    #model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
     for epoch in range(args.epochs):
         epoch_loss = 0

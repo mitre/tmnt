@@ -11,7 +11,10 @@ class BowNTM(HybridBlock):
         self.batch_size = batch_size
         self.n_latent = n_latent
         self.model_ctx = ctx
+
+        
         with self.name_scope():
+            #self.l1_pen_coef = mx.sym.var('l1_penalty_weight', shape=(1,), init=mx.init.Constant(0.9))
             self.encoder = gluon.nn.HybridSequential()
             self.encoder.add(gluon.nn.Dense(units = l1_dim, activation='tanh'))
             self.encoder.add(gluon.nn.Dense(units = n_latent*2, activation=None))
@@ -23,6 +26,9 @@ class BowNTM(HybridBlock):
 
 
     def hybrid_forward(self, F, data):
+        
+        
+            
         ## data should have shame N x V - but be SPARSE
         enc_out = self.encoder(data)
         mu_lv = F.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
@@ -40,10 +46,14 @@ class BowNTM(HybridBlock):
         y = F.log_softmax(dec_out)
 
         ## L1 regularization penalty on decoder weights
-        dec_weights = self.decoder.params.get('weight').data() ## use .var() for a symbol
+        if F is mx.ndarray:
+            dec_weights = self.decoder.params.get('weight').data()
+        else:
+            dec_weights = self.decoder.params.get('weight').var()
         l1_weights = F.broadcast_to(F.sum(F.abs(dec_weights)), (self.batch_size,))
         
         ce_loss = -F.sparse.sum(data * y, axis=(-1))
         KL = 0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
+
         return l1_weights + ce_loss - KL, ce_loss, l1_weights
         

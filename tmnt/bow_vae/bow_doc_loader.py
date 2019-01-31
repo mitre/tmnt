@@ -111,9 +111,46 @@ class BowDataSet(SimpleDatasetStream):
             file_sampler='random',
             sample_splitter=NullSplitter())
 
-
 class NullSplitter(nlp.data.Splitter):
 
     def __call__(self, s):
         return [s]
-        
+
+
+def load_vocab(vocab_file):
+    w_dict = {}
+    with io.open(vocab_file, 'r') as fp:
+        for line in fp.read():
+            els = line.split(' ')
+            w_dict[els[0]] = els[1]
+    return nlp.Vocab(nlp.data.Counter(w_dict))
+
+def file_to_sp_vec(sp_file):
+    labels = []
+    indices = []
+    values = []
+    indptrs = [0]
+    cumulative = 0
+    total_num_words = 0
+    with io.open(sp_file, 'r') as fp:
+        for line in fp.read():
+            els = line.split(' ')
+            labels.append(els[0])
+            els_sp = map(els, lambda e: e.split(':'))
+            pairs = sorted( [ (el[0], el[1] ) for el in els_sp[1:] ] )
+            inds, vs = zip(*pairs)
+            cumulative += len(pairs)
+            total_num_words += sum(vs)
+            indptrs.append(cumulative)
+            values.extend(vs)
+            indices.extend(inds)
+    csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
+    return csr_mat, total_num_words
+                
+                
+
+def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None):
+    vocab = load_vocab(vocab_file)
+    tr_mat, total_tr = file_to_sp_vec(sp_vec_file)
+    return tr_mat, total_tr, vocab
+    
