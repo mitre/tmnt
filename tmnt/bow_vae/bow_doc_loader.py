@@ -13,19 +13,22 @@ import gluonnlp as nlp
 import functools
 import warnings
 import os
+import io
 
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 
 
-def preprocess_dataset_stream(stream, min_freq=3, max_vocab_size=None):
-    counter = None
-    for data in iter(stream):
-        counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter = counter)
-        #logging.info('.. counter size = {} ..'.format(str(len(counter))))
-    vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
-                          bos_token=None, eos_token=None, min_freq=min_freq,
-                          max_size=max_vocab_size)
-    idx_to_counts = [counter[w] for w in vocab.idx_to_token]
+def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
+    if pre_vocab:
+        vocab = pre_vocab
+    else:
+        counter = None
+        for data in iter(stream):
+            counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter = counter)
+            #logging.info('.. counter size = {} ..'.format(str(len(counter))))
+            vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
+                              bos_token=None, eos_token=None, min_freq=min_freq,
+                              max_size=max_vocab_size)
 
     def code(doc):
         """
@@ -46,11 +49,15 @@ def preprocess_dataset_stream(stream, min_freq=3, max_vocab_size=None):
         return corpus.transform(code)
 
     stream = stream.transform(code_corpus) 
-    return stream, vocab, idx_to_counts
+    return stream, vocab
 
 
-def collect_stream_as_sparse_matrix(stream, min_freq=3, max_vocab_size=None):
-    strm, vocab, idx_to_counts = preprocess_dataset_stream(stream, min_freq, max_vocab_size)
+def collect_stream_as_sparse_matrix(stream, pre_vocab=None, min_freq=3, max_vocab_size=None):
+    """
+    Read in a `DatasetStream` and read into main memory as a sparse matrix
+    If no vocabulary is provided, one will be constructed from the data; otherwise it will be used
+    """
+    strm, vocab = preprocess_dataset_stream(stream, pre_vocab=pre_vocab, min_freq=min_freq, max_vocab_size=max_vocab_size)
     indices = []
     values = []
     indptrs = [0]
@@ -120,37 +127,45 @@ class NullSplitter(nlp.data.Splitter):
 def load_vocab(vocab_file):
     w_dict = {}
     with io.open(vocab_file, 'r') as fp:
-        for line in fp.read():
+        for line in fp:
             els = line.split(' ')
-            w_dict[els[0]] = els[1]
-    return nlp.Vocab(nlp.data.Counter(w_dict))
+            w_dict[els[0]] = int(els[1])
+    return nlp.Vocab(nlp.data.Counter(w_dict), unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 
-def file_to_sp_vec(sp_file):
+def file_to_sp_vec(sp_file, voc_size):
     labels = []
     indices = []
     values = []
     indptrs = [0]
     cumulative = 0
     total_num_words = 0
+    ndocs = 0
     with io.open(sp_file, 'r') as fp:
-        for line in fp.read():
+        for line in fp:
+            ndocs += 1
             els = line.split(' ')
-            labels.append(els[0])
-            els_sp = map(els, lambda e: e.split(':'))
-            pairs = sorted( [ (el[0], el[1] ) for el in els_sp[1:] ] )
+            labels.append(int(els[0]))
+            els_sp = list(map(lambda e: e.split(':'), els))
+            pairs = sorted( [ (int(el[0]), int(el[1]) ) for el in els_sp[1:] ] )
             inds, vs = zip(*pairs)
             cumulative += len(pairs)
             total_num_words += sum(vs)
             indptrs.append(cumulative)
             values.extend(vs)
             indices.extend(inds)
-    csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
-    return csr_mat, total_num_words
+    csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, voc_size))
+    return csr_mat, total_num_words, labels
                 
                 
 
 def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None):
     vocab = load_vocab(vocab_file)
-    tr_mat, total_tr = file_to_sp_vec(sp_vec_file)
-    return tr_mat, total_tr, vocab
+    tr_mat, total_tr, _ = file_to_sp_vec(sp_vec_file, len(vocab))
+
+    if sp_vec_test_file:
+        tst_mat, total_tst, _ = file_to_sp_vec(sp_vec_test_file, len(vocab))
+    else:
+        tst_mat = None
+        total_tst = 0    
+    return vocab, tr_mat, total_tr, tst_mat, total_tst
     

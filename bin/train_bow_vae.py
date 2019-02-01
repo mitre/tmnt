@@ -12,6 +12,9 @@ parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', 
 parser.add_argument('--lr',type=float, help='Learning rate', default=0.001)
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=16)
 parser.add_argument('--n_latent', type=int, help='Number of latent dimensions (topics)', default=64)
+parser.add_argument('--tr_vec_file', type=str, help='Training file in sparse vector format')
+parser.add_argument('--tst_vec_file', type=str, help='Test/validation file in sparse vector format')
+parser.add_argument('--vocab_file', type=str, help='Vocabulary file associated with sparse vector data')
 
 args = parser.parse_args()
 

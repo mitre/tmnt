@@ -55,5 +55,6 @@ class BowNTM(HybridBlock):
         ce_loss = -F.sparse.sum(data * y, axis=(-1))
         KL = 0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
 
-        return l1_weights + ce_loss - KL, ce_loss, l1_weights
+        return ce_loss - KL, ce_loss, l1_weights
+        #return l1_weights + ce_loss - KL, ce_loss, l1_weights
         
