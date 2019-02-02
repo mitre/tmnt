@@ -5,16 +5,12 @@ File/module contains routines for loading in text documents to sparse matrix rep
 for efficient neural variational model training.
 """
 
-import mxnet as mx
-import mxnet.ndarray as F
-import codecs
-import itertools
-import gluonnlp as nlp
-import functools
-import warnings
-import os
 import io
+import itertools
+import os
 
+import gluonnlp as nlp
+import mxnet as mx
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 
 

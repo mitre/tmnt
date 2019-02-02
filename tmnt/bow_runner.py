@@ -1,19 +1,13 @@
 # coding: utf-8
 
-import argparse
 import math
-import logging
-import mxnet as mx
-import numpy as np
-from mxnet import gluon
-from mxnet.gluon import nn
-from mxnet import autograd
-from mxnet.gluon.data import DataLoader
-import gluonnlp as nlp
-from sklearn.metrics import precision_recall_curve, average_precision_score
 
-from bow_vae.bow_doc_loader import *
-from bow_vae.bow_models import BowNTM
+import mxnet as mx
+from mxnet import autograd
+from mxnet import gluon
+
+from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
+from tmnt.bow_vae.bow_models import BowNTM
 
 l1_dim = 300
 
