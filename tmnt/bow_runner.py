@@ -10,6 +10,8 @@ from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, Bow
 from tmnt.bow_vae.bow_models import BowNTM
 
 l1_dim = 300
+epsilon = 1e-3
+target_sparsity = 0.5
 
 def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, ctx=mx.cpu()):
     train_iter = mx.io.NDArrayIter(data_train_csr, None, args.batch_size, last_batch_handle='discard', shuffle=True)
@@ -21,10 +23,12 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
     model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)
     model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
+    new_l1_coef = 0.05
     for epoch in range(args.epochs):
         epoch_loss = 0
         total_rec_loss = 0
-        total_l1_pen = 0
+        total_l1_pen = 0        
+        model.l1_pen_const.set_data(mx.nd.array([new_l1_coef]))
         for i, (data,_) in enumerate(train_dataloader):
             data = data.as_in_context(ctx)
             with autograd.record():
@@ -36,6 +40,12 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
             epoch_loss += elbo.sum().asscalar()            
         perplexity = math.exp(total_rec_loss / total_tr_words)
         print("Loss = {}, Training perplexity = {} [ L1 Pen = {} ]".format(epoch_loss, perplexity, total_l1_pen))
+        ## Update L1 coefficient
+        dec_weights = model.decoder.collect_params().get('weight').data()
+        ratio_small_weights = (dec_weights < epsilon).sum().asscalar() / dec_weights.size
+        print("Ratio smmall weights = {}".format(ratio_small_weights))
+        ## get weights less than a certain epsilong (via predicate)
+        new_l1_coef = new_l1_coef * math.pow(2.0, target_sparsity - ratio_small_weights)
         evaluate(model, test_dataloader, total_tst_words, ctx)
 
 

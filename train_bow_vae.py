@@ -18,9 +18,8 @@ parser.add_argument('--vocab_file', type=str, help='Vocabulary file associated w
 
 args = parser.parse_args()
 
-LIB_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(LIB_ROOT, "tmnt"))
-from bow_runner import train_bow_vae
+#sys.path.insert(0, LIB_ROOT)  ## set LIB_ROOT to level above 'tmnt' library sub-dir
+from tmnt.bow_runner import train_bow_vae
 
 train_bow_vae(args)
 

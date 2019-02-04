@@ -14,6 +14,8 @@ import mxnet as mx
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 
 
+__all__ = ['DataIterLoader', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix']
+
 def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
     if pre_vocab:
         vocab = pre_vocab
