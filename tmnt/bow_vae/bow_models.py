@@ -26,9 +26,6 @@ class BowNTM(HybridBlock):
 
 
     def hybrid_forward(self, F, data):
-        
-        
-            
         ## data should have shame N x V - but be SPARSE
         enc_out = self.encoder(data)
         mu_lv = F.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
