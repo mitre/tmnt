@@ -17,11 +17,9 @@ class BowNTM(HybridBlock):
         self.model_ctx = ctx
 
         with self.name_scope():
-            #self.l1_pen_const = self.params.get('l1_pen_const', gluon.Constant('l1_pen_const', mx.nd.array([0.0001])))
-            #self.l1_pen_const = gluon.Constant('l1_pen_const', mx.nd.array([0.0001]))
             self.l1_pen_const = self.params.get('l1_pen_const',
                                       shape=(1,),
-                                      init=mx.init.Constant([0.9]), 
+                                      init=mx.init.Constant([0.001]), 
                                       differentiable=False)
             self.encoder = gluon.nn.HybridSequential()
             self.encoder.add(gluon.nn.Dense(units = l1_dim, activation='tanh'))
@@ -30,7 +28,7 @@ class BowNTM(HybridBlock):
             with self.generator.name_scope():
                 for i in range(gen_layers):
                     self.generator.add(gluon.nn.Dense(units=n_latent, activation='tanh'))
-            self.decoder = gluon.nn.Dense(in_units=n_latent, units=vocab_size, activation='tanh')
+            self.decoder = gluon.nn.Dense(in_units=n_latent, units=vocab_size, activation=None)
 
 
     def hybrid_forward(self, F, data, l1_pen_const):
