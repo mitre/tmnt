@@ -23,7 +23,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
     model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)
     model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
-    new_l1_coef = 0.05
+    new_l1_coef = 0.01
     for epoch in range(args.epochs):
         epoch_loss = 0
         total_rec_loss = 0
