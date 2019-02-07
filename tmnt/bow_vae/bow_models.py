@@ -21,26 +21,33 @@ class BowNTM(HybridBlock):
                                       shape=(1,),
                                       init=mx.init.Constant([0.001]), 
                                       differentiable=False)
-            self.encoder = gluon.nn.HybridSequential()
-            self.encoder.add(gluon.nn.Dense(units = l1_dim, activation='tanh'))
-            self.encoder.add(gluon.nn.Dense(units = n_latent*2, activation=None))
+            self.encoder = gluon.nn.Dense(units = l1_dim, activation='tanh') ## just single FC layer
+            self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
+            self.lv_encoder = gluon.nn.Dense(units = n_latent, activation='softrelu')
             self.generator = gluon.nn.HybridSequential()
             with self.generator.name_scope():
                 for i in range(gen_layers):
                     self.generator.add(gluon.nn.Dense(units=n_latent, activation='tanh'))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=vocab_size, activation=None)
 
+    def get_gaussian_sample(mu, lv):
+        eps = F.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
+        z = mu + F.exp(0.5*lv) * eps
+        return z
+
+    def get_gaussian_kl(mu, lv):
+        return 0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
+
+    def get_vmf_sample(mu, lv):
+        
+        
 
     def hybrid_forward(self, F, data, l1_pen_const):
-        ## data should have shame N x V - but be SPARSE
         enc_out = self.encoder(data)
-        mu_lv = F.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
-        mu = mu_lv[0]  ## mean
-        lv = mu_lv[1]  ## log of the variance
+        mu = self.mu_encoder(enc_out)
+        lv = self.lv_encoder(enc_out)
         ## Standard Gaussian VAE - using reparameterization trick
-        eps = F.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
-        ## z is the (single) sample 
-        z = mu + F.exp(0.5*lv) * eps        
+        z = get_gaussian_sample(mu, lv)
 
         ## generate and decode
         gen_out = self.generator(z)  
@@ -57,8 +64,7 @@ class BowNTM(HybridBlock):
         l1_weights = F.broadcast_to(l1_weights_1, (self.batch_size,))
         
         ce_loss = -F.sparse.sum(data * y, axis=(-1))
-        KL = 0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
+        KL = get_gaussian_kl(mu, lv)
 
-        #return ce_loss - KL, ce_loss, l1_weights
         return l1_weights + ce_loss - KL, ce_loss, l1_weights
         

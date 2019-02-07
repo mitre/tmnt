@@ -19,10 +19,8 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         test_iter = mx.io.NDArrayIter(data_test_csr, None, args.batch_size, last_batch_handle='discard', shuffle=False)
         test_dataloader = DataIterLoader(test_iter)
     model = BowNTM(args.batch_size, len(vocabulary), args.hidden_dim, args.n_latent, gen_layers=args.num_gen_layers, ctx=ctx)
-    model.l1_pen_const.initialize()
-    model.encoder.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=False)
-    model.generator.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=False)
-    model.decoder.initialize(mx.init.Uniform(1.0), ctx=ctx, force_reinit=False)
+    model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=False)
+    model.decoder.initialize(mx.init.Uniform(0.1), ctx=ctx, force_reinit=True)
 
     model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
