@@ -9,9 +9,10 @@ parser.add_argument('--train_dir', type=str, help='Directory containing files re
 parser.add_argument('--file_pat', type=str, help='Regexp file pattern to match for documents')
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
-parser.add_argument('--lr',type=float, help='Learning rate', default=0.01)
-parser.add_argument('--batch_size',type=int, help='Training batch size', default=16)
-parser.add_argument('--n_latent', type=int, help='Number of latent dimensions (topics)', default=64)
+parser.add_argument('--lr',type=float, help='Learning rate', default=0.0001)
+parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
+parser.add_argument('--batch_size',type=int, help='Training batch size', default=32)
+parser.add_argument('--n_latent', type=int, help='Number of latent dimensions (topics)', default=32)
 parser.add_argument('--tr_vec_file', type=str, help='Training file in sparse vector format')
 parser.add_argument('--tst_vec_file', type=str, help='Test/validation file in sparse vector format')
 parser.add_argument('--vocab_file', type=str, help='Vocabulary file associated with sparse vector data')
@@ -20,6 +21,10 @@ parser.add_argument('--target_sparsity', type=float,
 parser.add_argument('--sparsity_threshold', type=float, default=1e-3,
                     help='Threshold under which a weight is deemed close to zero for estimating sparsity')
 parser.add_argument('--init_sparsity_pen', type=float, default = 0.0001)
+parser.add_argument('--hidden_dim', type=int, help='Dimension of hidden layers in encoder and network', default=500)
+parser.add_argument('--num_gen_layers', type=int, help='Number of fully connected layers in generator', default=3)
+parser.add_argument('--save_dir', type=str, default='_experiments')
+
 
 args = parser.parse_args()
 
