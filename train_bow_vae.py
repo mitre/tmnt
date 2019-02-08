@@ -24,6 +24,7 @@ parser.add_argument('--init_sparsity_pen', type=float, default = 0.0001)
 parser.add_argument('--hidden_dim', type=int, help='Dimension of hidden layers in encoder and network', default=500)
 parser.add_argument('--num_gen_layers', type=int, help='Number of fully connected layers in generator', default=3)
 parser.add_argument('--save_dir', type=str, default='_experiments')
+parser.add_argument('--model_dir', type=str, default=None, help='Save final model and associated meta-data to this directory (default None)')
 
 
 args = parser.parse_args()

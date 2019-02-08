@@ -10,7 +10,7 @@ __all__ = ['BowNTM']
 
 class BowNTM(HybridBlock):
 
-    def __init__(self, batch_size, vocab_size, l1_dim, n_latent, gen_layers=3, ctx=mx.cpu()):
+    def __init__(self, vocab_size, enc_dim, n_latent, gen_layers=3, batch_size=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self.n_latent = n_latent
@@ -21,7 +21,7 @@ class BowNTM(HybridBlock):
                                       shape=(1,),
                                       init=mx.init.Constant([0.001]), 
                                       differentiable=False)
-            self.encoder = gluon.nn.Dense(units = l1_dim, activation='tanh') ## just single FC layer
+            self.encoder = gluon.nn.Dense(units = enc_dim, activation='tanh') ## just single FC layer 'encoder'
             self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
             self.lv_encoder = gluon.nn.Dense(units = n_latent, activation='softrelu')
             self.generator = gluon.nn.HybridSequential()
@@ -30,24 +30,27 @@ class BowNTM(HybridBlock):
                     self.generator.add(gluon.nn.Dense(units=n_latent, activation='tanh'))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=vocab_size, activation=None)
 
-    def get_gaussian_sample(mu, lv):
-        eps = F.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
+    def get_gaussian_sample(self, F, mu, lv, batch_size):
+        eps = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent), ctx=self.model_ctx)
         z = mu + F.exp(0.5*lv) * eps
         return z
 
-    def get_gaussian_kl(mu, lv):
+    def get_gaussian_kl(self, F, mu, lv):
         return 0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
 
-    def get_vmf_sample(mu, lv):
+    #def get_vmf_sample(mu, lv):
         
-        
+    def encode_data(self, data):
+        return self.mu_encoder(self.encoder(data))
+    
 
     def hybrid_forward(self, F, data, l1_pen_const):
+        batch_size = F.shape(data)[0] if F is mx.ndarray else self.batch_size
         enc_out = self.encoder(data)
         mu = self.mu_encoder(enc_out)
         lv = self.lv_encoder(enc_out)
         ## Standard Gaussian VAE - using reparameterization trick
-        z = get_gaussian_sample(mu, lv)
+        z = self.get_gaussian_sample(F, mu, lv, batch_size)
 
         ## generate and decode
         gen_out = self.generator(z)  
@@ -61,10 +64,10 @@ class BowNTM(HybridBlock):
         else:
             dec_weights = self.decoder.params.get('weight').var()
         l1_weights_1 = l1_pen_const * F.sum(F.abs(dec_weights))
-        l1_weights = F.broadcast_to(l1_weights_1, (self.batch_size,))
+        l1_weights = F.broadcast_to(l1_weights_1, (batch_size,))
         
         ce_loss = -F.sparse.sum(data * y, axis=(-1))
-        KL = get_gaussian_kl(mu, lv)
+        KL = self.get_gaussian_kl(F, mu, lv)
 
         return l1_weights + ce_loss - KL, ce_loss, l1_weights
         

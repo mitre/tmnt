@@ -3,6 +3,9 @@
 import math
 import logging
 import datetime
+import io
+import os
+import json
 import mxnet as mx
 from mxnet import autograd
 from mxnet import gluon
@@ -18,7 +21,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
     if data_test_csr is not None:
         test_iter = mx.io.NDArrayIter(data_test_csr, None, args.batch_size, last_batch_handle='discard', shuffle=False)
         test_dataloader = DataIterLoader(test_iter)
-    model = BowNTM(args.batch_size, len(vocabulary), args.hidden_dim, args.n_latent, gen_layers=args.num_gen_layers, ctx=ctx)
+    model = BowNTM(len(vocabulary), args.hidden_dim, args.n_latent, gen_layers=args.num_gen_layers, batch_size=args.batch_size, ctx=ctx)
     model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=False)
     model.decoder.initialize(mx.init.Uniform(0.1), ctx=ctx, force_reinit=True)
 
@@ -48,6 +51,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
             logging.info("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(new_l1_coef, ratio_small_weights))
             model.l1_pen_const.set_data(mx.nd.array([new_l1_coef]))
         evaluate(model, test_dataloader, total_tst_words, ctx)
+    return model
 
 
 def evaluate(model, data_loader, total_words, ctx=mx.cpu()):
@@ -74,4 +78,18 @@ def train_bow_vae(args):
         tst_dataset = BowDataSet(args.test_dir, args.file_pat)
         tst_csr_mat, _, total_tst_words = collect_stream_as_sparse_matrix(tst_dataset, pre_vocab=vocab)
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
-    train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, ctx=ctx)
+    m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, ctx=ctx)
+    if args.model_dir:
+        pfile = os.path.join(args.model_dir, 'model.params')
+        sp_file = os.path.join(args.model_dir, 'model.specs')
+        vocab_file = os.path.join(args.model_dir, 'vocab.json')
+        m.save_parameters(pfile)
+        sp = {}
+        sp['enc_dim'] = args.hidden_dim
+        sp['n_latent'] = args.n_latent
+        sp['gen_layers'] = args.num_gen_layers
+        specs = json.dumps(sp)
+        with open(sp_file, 'w') as f:
+            f.write(specs)
+        with open(vocab_file, 'w') as f:
+            f.write(vocab.to_json())
