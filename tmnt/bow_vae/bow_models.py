@@ -21,13 +21,13 @@ class BowNTM(HybridBlock):
     batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
     ctx : context device (default is mx.cpu())
     """
-    def __init__(self, wd_freqs, enc_dim, n_latent, batch_size=None, ctx=mx.cpu()):
+    def __init__(self, vocab_size, enc_dim, n_latent, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self.n_latent = n_latent
         self.model_ctx = ctx
         self.alpha = 1.0
-        self.vocab_size = len(wd_freqs)
+        self.vocab_size = vocab_size
         
         prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
         self.prior_var = prior_var
@@ -45,13 +45,14 @@ class BowNTM(HybridBlock):
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         ## Initialize decoder bias terms to corpus frequencies
-        freq_nd = mx.nd.array(wd_freqs, ctx=ctx) + 1
-        total = freq_nd.sum()
-        log_freq = freq_nd.log() - freq_nd.sum().log()
-        bias_param = self.decoder.collect_params().get('bias')
-        bias_param.set_data(log_freq)
-        bias_param.grad_req = 'null'
-        self.out_bias = bias_param.data()
+        if wd_freqs:
+            freq_nd = mx.nd.array(wd_freqs, ctx=ctx) + 1
+            total = freq_nd.sum()
+            log_freq = freq_nd.log() - freq_nd.sum().log()
+            bias_param = self.decoder.collect_params().get('bias')
+            bias_param.set_data(log_freq)
+            bias_param.grad_req = 'null'
+            self.out_bias = bias_param.data()
 
             
     def encode_data(self, data):
@@ -120,8 +121,8 @@ class RichGeneratorBowNTM(BowNTM):
     batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
     ctx : context device (default is mx.cpu())
     """
-    def __init__(self, wd_freqs, enc_dim, n_latent, gen_layers=3, batch_size=None, ctx=mx.cpu()):
-        super(RichGeneratorBowNTM, self).__init__(wd_freqs, enc_dim, n_latent, batch_size=batch_size, ctx=ctx)
+    def __init__(self, vocab_size, enc_dim, n_latent, gen_layers=3, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
+        super(RichGeneratorBowNTM, self).__init__(vocab_size, enc_dim, n_latent, batch_size=batch_size, wd_freqs=wd_freqs, ctx=ctx)
 
         self.gen_layers = gen_layers
         with self.name_scope():

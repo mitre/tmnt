@@ -17,10 +17,9 @@ from tmnt.utils.log_utils import logging_config
 
 
 def get_wd_freqs(data_csr, n_terms, max_sample_size=500):
-    data = data_csr[:500].asnumpy()
+    data = data_csr[:10000].asnumpy() # only take first 10000 to estimate frequencies
     sums = np.sum(data, axis=0)
     return list(sums)
-    
     
 
 def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, ctx=mx.cpu()):
@@ -32,10 +31,12 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         test_iter = mx.io.NDArrayIter(data_test_csr, None, args.batch_size, last_batch_handle='discard', shuffle=False)
         test_dataloader = DataIterLoader(test_iter)
     model = \
-        BowNTM(wd_freqs, args.hidden_dim, args.n_latent, batch_size=args.batch_size, ctx=ctx) if args.num_gen_layers < 1 \
-        else RichGeneratorBowNTM(wd_freqs, args.hidden_dim, args.n_latent, gen_layers = args.num_gen_layers, batch_size=args.batch_size, ctx=ctx)
+        BowNTM(len(vocabulary), args.hidden_dim, args.n_latent, batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx) if args.num_gen_layers < 1 \
+        else RichGeneratorBowNTM(len(vocabulary), args.hidden_dim, args.n_latent, gen_layers = args.num_gen_layers,
+                                 batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
 
-    model.hybridize(static_alloc=True)
+    if (args.hybridize):
+        model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
     l1_coef = args.init_sparsity_pen
     for epoch in range(args.epochs):

@@ -25,7 +25,7 @@ parser.add_argument('--hidden_dim', type=int, help='Dimension of hidden layers i
 parser.add_argument('--num_gen_layers', type=int, help='Number of fully connected layers in generator', default=0)
 parser.add_argument('--save_dir', type=str, default='_experiments')
 parser.add_argument('--model_dir', type=str, default=None, help='Save final model and associated meta-data to this directory (default None)')
-
+parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
 
 args = parser.parse_args()
 

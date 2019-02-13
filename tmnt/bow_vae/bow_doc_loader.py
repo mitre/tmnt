@@ -23,7 +23,6 @@ def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_si
         counter = None
         for data in iter(stream):
             counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter = counter)
-            #logging.info('.. counter size = {} ..'.format(str(len(counter))))
             vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                               bos_token=None, eos_token=None, min_freq=min_freq,
                               max_size=max_vocab_size)
@@ -52,8 +51,8 @@ def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_si
 
 def collect_stream_as_sparse_matrix(stream, pre_vocab=None, min_freq=3, max_vocab_size=None):
     """
-    Read in a `DatasetStream` and read into main memory as a sparse matrix
-    If no vocabulary is provided, one will be constructed from the data; otherwise it will be used
+    Read in a `DatasetStream` (specifically a `BowDataSet`) and load into main memory as a sparse matrix
+    If no vocabulary is provided, one will be constructed from the data; otherwise it will be used    
     """
     strm, vocab = preprocess_dataset_stream(stream, pre_vocab=pre_vocab, min_freq=min_freq, max_vocab_size=max_vocab_size)
     indices = []
@@ -72,9 +71,6 @@ def collect_stream_as_sparse_matrix(stream, pre_vocab=None, min_freq=3, max_voca
         indptrs.append(cumulative)
         values.extend(vs)
         indices.extend(inds)
-    # can use this with NDArrayIter
-    # dataiter = mx.io.NDArrayIter(data, labels, batch_size, last_batch_handle='discard')
-    ## inspect - [ batch.data[0] for batch in dataiter ]
     csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
     return csr_mat, vocab, total_num_words
 
@@ -112,18 +108,22 @@ class DataIterLoader():
     
 
 class BowDataSet(SimpleDatasetStream):
-    def __init__(self, root, pattern):
+    def __init__(self, root, pattern, sampler='random'):
         self._root = root
         self._file_pattern = os.path.join(root, pattern)
         self.codec = 'utf-8'
         super(BowDataSet, self).__init__(
             dataset=CorpusDataset,
             file_pattern = self._file_pattern,
-            file_sampler='random',
+            file_sampler=sampler,
             sample_splitter=NullSplitter())
+        
 
 class NullSplitter(nlp.data.Splitter):
-
+    """
+    This splitter takes an entire document and returns it as a single list rather than
+    splitting up into sentences.
+    """
     def __call__(self, s):
         return [s]
 
