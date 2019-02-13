@@ -3,6 +3,8 @@
 import math
 import mxnet as mx
 
+__all__ = ['HyperSphericalUniform']
+
 class HyperSphericalUniform(object):
 
     def __init__(self, dim, ctx):

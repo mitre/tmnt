@@ -3,6 +3,7 @@
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import HybridBlock
+from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution
 import numpy as np
 import math
 
@@ -26,21 +27,16 @@ class BowNTM(HybridBlock):
         self.batch_size = batch_size
         self.n_latent = n_latent
         self.model_ctx = ctx
-        self.alpha = 1.0
         self.vocab_size = vocab_size
         
-        prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
-        self.prior_var = prior_var
-        self.prior_logvar = math.log(prior_var)
-
         with self.name_scope():
             self.l1_pen_const = self.params.get('l1_pen_const',
                                       shape=(1,),
                                       init=mx.init.Constant([0.001]), 
                                       differentiable=False)
             self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
-            self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
-            self.lv_encoder = gluon.nn.Dense(units = n_latent, activation=None)
+            ## Consider a second encoder layer so the first could be initialized with e.g. word embeddings
+            self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
             self.post_sample_dr_o = gluon.nn.Dropout(0.2)
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
@@ -56,34 +52,11 @@ class BowNTM(HybridBlock):
 
             
     def encode_data(self, data):
-        return self.mu_encoder(self.encoder(data))
+        """
+        Encode data to the mean of the latent distribution defined by the input `data`
+        """
+        return self.latent_dist.mu_encoder(self.encoder(data))
     
-            
-    def get_gaussian_sample(self, F, mu, lv, batch_size):
-        eps = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent), ctx=self.model_ctx)
-        z = mu + F.exp(0.5*lv) * eps
-        return self.post_sample_dr_o(z) ## DROPOUT to further reduce co-adaptation in decoder weights
-
-    def get_gaussian_kl(self, F, mu, lv):
-        return -0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
-
-
-    def get_logistic_normal_kl(self, F, mu, lv):
-        posterior_var = F.exp(lv)
-        delta = mu
-        dt = delta * delta / self.prior_var
-        v_div = posterior_var / self.prior_var
-        lv_div = self.prior_logvar - lv
-        return F.sum(0.5 * (F.sum((v_div + dt + lv_div), axis=1) - self.n_latent))
-
-
-    def get_mean_and_logvar(self, F, data):        
-        enc_out = self.encoder(data)
-        mu = self.mu_encoder(enc_out)
-        lv = self.lv_encoder(enc_out)
-        return mu, lv
-    
-
     def get_l1_penalty_term(self, F, l1_pen_const, batch_size):
         if F is mx.ndarray:
             dec_weights = self.decoder.params.get('weight').data()
@@ -94,16 +67,16 @@ class BowNTM(HybridBlock):
 
     def hybrid_forward(self, F, data, l1_pen_const):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
-        mu, lv = self.get_mean_and_logvar(F, data)
-        z = self.get_gaussian_sample(F, mu, lv, batch_size)
-
+        enc_out = self.encoder(data)
+        z, KL = self.latent_dist(enc_out, batch_size)
+        z_do = self.post_sample_dr_o(z)
+        
         res = F.softmax(z)
         dec_out = self.decoder(res)
         y = F.softmax(dec_out, axis=1)
 
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
         recon_loss = -F.sparse.sum( data * F.log(y+1e-12))
-        KL = self.get_logistic_normal_kl(F, mu, lv)
 
         return recon_loss+l1_pen+KL, recon_loss, l1_pen, y
         

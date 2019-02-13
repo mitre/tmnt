@@ -129,6 +129,9 @@ class NullSplitter(nlp.data.Splitter):
 
 
 def load_vocab(vocab_file):
+    """
+    Load a pre-derived vocabulary, assumes format consisting of "word id" on each line
+    """
     w_dict = {}
     with io.open(vocab_file, 'r') as fp:
         for line in fp:
@@ -160,7 +163,6 @@ def file_to_sp_vec(sp_file, voc_size):
             indices.extend(inds)
     csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, voc_size))
     return csr_mat, total_num_words, labels
-                
                 
 
 def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None):

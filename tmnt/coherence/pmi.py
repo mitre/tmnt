@@ -4,6 +4,7 @@ from collections import Counter
 import numpy as np
 
 class PMI(object):
+
     def __init__(self, unigram_freq: Counter, bigram_freq: Counter):
         self.unigram_freq = unigram_freq
         self.bigram_freq = bigram_freq
