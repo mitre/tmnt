@@ -17,10 +17,11 @@ class BowNTMInference(object):
             voc_js = f.read()
         self.vocab = nlp.Vocab.from_json(voc_js)
         self.ctx = ctx
+        self.n_latent = specs['n_latent']
         enc_dim = specs['enc_dim']
-        n_latent = specs['n_latent']
+        
         gen_layers = specs['gen_layers']
-        self.model = BowNTM(len(self.vocab), enc_dim, n_latent, gen_layers, ctx=ctx)
+        self.model = BowNTM(len(self.vocab), enc_dim, self.n_latent, gen_layers, ctx=ctx)
         self.model.load_parameters(param_file)
         
 
@@ -34,3 +35,13 @@ class BowNTMInference(object):
             data = data.as_in_context(self.ctx)
             encodings.append(self.model.encode_data(data))
         return encodings
+
+    def get_top_k_words_per_topic(self, k):
+        w = self.model.decoder.collect_params().get('weight').data()
+        sorted_ids = w.argsort(axis=0, is_ascend=False)
+        topic_terms = []
+        for t in range(self.n_latent):
+            top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]
+            topic_terms.append(top_k)
+        return topic_terms
+            

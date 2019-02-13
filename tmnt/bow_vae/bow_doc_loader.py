@@ -134,7 +134,8 @@ def load_vocab(vocab_file):
         for line in fp:
             els = line.split(' ')
             w_dict[els[0]] = int(els[1])
-    return nlp.Vocab(nlp.data.Counter(w_dict), unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
+    counter = nlp.data.Counter(w_dict)
+    return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 
 def file_to_sp_vec(sp_file, voc_size):
     labels = []
