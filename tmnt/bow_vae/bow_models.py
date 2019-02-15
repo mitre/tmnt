@@ -3,7 +3,7 @@
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import HybridBlock
-from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution
+from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
 import numpy as np
 import math
 
@@ -37,6 +37,7 @@ class BowNTM(HybridBlock):
             self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             ## Consider a second encoder layer so the first could be initialized with e.g. word embeddings
             self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
+            #self.latent_dist = HyperSphericalLatentDistribution(self.batch_size, n_latent, ctx)
             self.post_sample_dr_o = gluon.nn.Dropout(0.2)
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
