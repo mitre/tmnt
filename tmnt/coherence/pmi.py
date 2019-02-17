@@ -18,7 +18,8 @@ class PMI(object):
         """
         pw1 = self.unigram_freq[w1] / self.num_unigrams
         pw2 = self.unigram_freq[w2] / self.num_unigrams
-        pw1_w2 = self.bigram_freq[(w1, w2)] / self.num_bigrams
+        # bigrams are stored unordered to save space. If you can't find bigram (w1, w2), try (w2, w1)
+        pw1_w2 = self.bigram_freq.get((w1, w2), self.bigram_freq[(w2, w1)]) / self.num_bigrams
         return log2(pw1_w2 / pw1 / pw2)
 
     def npmi(self, w1: str, w2: str):
@@ -26,5 +27,6 @@ class PMI(object):
         NPMI(w_i, w_j) = PMI(w_i, w_j) / -log_10(p(w_i, w_j))
         """
         pmi = self.pmi(w1, w2)
-        pw1_w2 = self.bigram_freq[(w1, w2)] / self.num_bigrams
+        # bigrams are stored unordered to save space. If you can't find bigram (w1, w2), try (w2, w1)
+        pw1_w2 = self.bigram_freq.get((w1, w2), self.bigram_freq[(w2, w1)]) / self.num_bigrams
         return pmi / -log10(pw1_w2)
