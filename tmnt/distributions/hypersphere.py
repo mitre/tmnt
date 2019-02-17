@@ -11,10 +11,10 @@ __all__ = ['HyperSphericalLatentDistribution']
 
 class HyperSphericalLatentDistribution(LatentDistribution):
 
-    def __init__(self, batch_size, n_latent, ctx):
+    def __init__(self, batch_size, n_latent, kappa=100.0, ctx=mx.cpu()):
         super(HyperSphericalLatentDistribution, self).__init__(n_latent, ctx)
         self.batch_size = batch_size
-        self.kappa = 100.0
+        self.kappa = kappa
         self.kld_v = mx.nd.array(HyperSphericalLatentDistribution._vmf_kld(self.kappa, self.n_latent), ctx=ctx)
         #print("Shape kld_v = {}".format(self.kld_v.shape))
         self.kld = mx.nd.broadcast_to(self.kld_v, shape=(batch_size,))

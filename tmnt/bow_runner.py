@@ -31,8 +31,10 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         test_iter = mx.io.NDArrayIter(data_test_csr, None, args.batch_size, last_batch_handle='discard', shuffle=False)
         test_dataloader = DataIterLoader(test_iter)
     model = \
-        BowNTM(len(vocabulary), args.hidden_dim, args.n_latent, batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx) if args.num_gen_layers < 1 \
-        else RichGeneratorBowNTM(len(vocabulary), args.hidden_dim, args.n_latent, gen_layers = args.num_gen_layers,
+        BowNTM(len(vocabulary), args.hidden_dim, args.n_latent, latent_distrib=args.latent_distribution,
+               batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx) if args.num_gen_layers < 1 \
+        else RichGeneratorBowNTM(len(vocabulary), args.hidden_dim, args.n_latent, latent_distrib=args.latent_distribution,
+                                 gen_layers = args.num_gen_layers,
                                  batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
 
     if (args.hybridize):
