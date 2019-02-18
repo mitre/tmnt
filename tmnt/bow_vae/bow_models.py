@@ -15,28 +15,30 @@ class BowNTM(HybridBlock):
     """
     Parameters
     ----------
-    vocab_size : int size of the vocabulary
+    vocabulary : int size of the vocabulary
     enc_dim : int number of dimension of input encoder (first FC layer)
     n_latent : int number of dimensions of the latent dimension (i.e. number of topics)
     gen_layers : int (default = 3) number of generator layers (after sample); size is the same as n_latent
     batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
     ctx : context device (default is mx.cpu())
     """
-    def __init__(self, vocab_size, enc_dim, n_latent, latent_distrib='logistic_gaussian',
+    def __init__(self, vocabulary, enc_dim, n_latent, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self.n_latent = n_latent
         self.model_ctx = ctx
-        self.vocab_size = vocab_size
+        self.vocab_size = len(vocabulary)
         self.coherence_reg_penalty = coherence_reg_penalty
+        self.default_embedding_size = 300
+        self.wd_embed_size = vocabulary.embedding.idx_to_vec[0].size if vocabulary.embedding else self.default_embedding_size
         with self.name_scope():
             self.l1_pen_const = self.params.get('l1_pen_const',
                                       shape=(1,),
                                       init=mx.init.Constant([init_l1]), 
                                       differentiable=False)
+            self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.wd_embed_size, activation = 'relu')
             self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
-            ## Consider a second encoder layer so the first could be initialized with e.g. word embeddings
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
             elif latent_distrib == 'vmf':
@@ -47,6 +49,12 @@ class BowNTM(HybridBlock):
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
             self.coherence_regularization = CoherenceRegularizer(coherence_reg_penalty)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        if vocabulary.embedding:
+            emb = vocabulary.embedding.idx_to_vec.transpose()
+            emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=1)
+            emb_norm = mx.nd.broadcast_div(emb, emb_norm_val)
+            self.embedding.weight.set_data(emb_norm)
+            self.embedding.collect_params().setattr('grad_req', 'null') ## XXX - make this an option
         ## Initialize decoder bias terms to corpus frequencies
         if wd_freqs:
             freq_nd = mx.nd.array(wd_freqs, ctx=ctx) + 1
@@ -73,7 +81,8 @@ class BowNTM(HybridBlock):
 
     def hybrid_forward(self, F, data, l1_pen_const):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
-        enc_out = self.encoder(data)
+        emb_out = self.embedding(data)
+        enc_out = self.encoder(emb_out)
         z, KL = self.latent_dist(enc_out, batch_size)
         z_do = self.post_sample_dr_o(z)
         
@@ -90,10 +99,10 @@ class BowNTM(HybridBlock):
         if self.coherence_reg_penalty > 0.0:
             if F is mx.ndarray:
                 w = self.decoder.params.get('weight').data()
-                emb = self.encoder.params.get('weight').data()
+                emb = self.embedding.params.get('weight').data()
             else:
                 w = self.decoder.params.get('weight').var()
-                emb = self.encoder.params.get('weight').var()
+                emb = self.embedding.params.get('weight').var()
             c = self.coherence_regularization(w, emb) * self.coherence_reg_penalty
             final_loss = i_loss + c
         else:
@@ -161,10 +170,11 @@ class CoherenceRegularizer(HybridBlock):
         # w NORM over columns
             
         w_norm_val = F.norm(w, keepdims=True, axis=0)
-        emb_norm_val = F.norm(emb, keepdims=True, axis=1)
+        #emb_norm_val = F.norm(emb, keepdims=True, axis=1)
         
         w_norm = F.broadcast_div(w, w_norm_val)
-        emb_norm = F.broadcast_div(emb, emb_norm_val)
+        #emb_norm = F.broadcast_div(emb, emb_norm_val)
+        emb_norm = emb  ## assume this is normalized up front (esp. if fixed)
 
         T = F.linalg.gemm2(emb_norm, w_norm)
         
