@@ -29,6 +29,7 @@ parser.add_argument('--num_gen_layers', type=int, help='Number of fully connecte
 parser.add_argument('--save_dir', type=str, default='_experiments')
 parser.add_argument('--model_dir', type=str, default=None, help='Save final model and associated meta-data to this directory (default None)')
 parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
+parser.add_argument('--coherence_regularizer_penalty', type=float, help='Use word-embedding coherence regularization', default=0.0)
 
 args = parser.parse_args()
 

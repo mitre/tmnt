@@ -23,12 +23,13 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocab_size, enc_dim, n_latent, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self.n_latent = n_latent
         self.model_ctx = ctx
         self.vocab_size = vocab_size
+        self.coherence_reg_penalty = coherence_reg_penalty
         with self.name_scope():
             self.l1_pen_const = self.params.get('l1_pen_const',
                                       shape=(1,),
@@ -44,7 +45,7 @@ class BowNTM(HybridBlock):
                 self.latent_dist = GaussianLatentDistribution(n_latent, ctx)                
             self.post_sample_dr_o = gluon.nn.Dropout(0.2)
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
-            self.coherence_regularization = CoherenceRegularizer()
+            self.coherence_regularization = CoherenceRegularizer(coherence_reg_penalty)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         ## Initialize decoder bias terms to corpus frequencies
         if wd_freqs:
@@ -83,17 +84,22 @@ class BowNTM(HybridBlock):
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
         recon_loss = -F.sparse.sum( data * F.log(y+1e-12))
 
-        ## coherence regularization
-        if False:
+        i_loss = recon_loss + l1_pen + KL
+        
+        ## coherence-focused regularization term
+        if self.coherence_reg_penalty > 0.0:
             if F is mx.ndarray:
                 w = self.decoder.params.get('weight').data()
                 emb = self.encoder.params.get('weight').data()
             else:
                 w = self.decoder.params.get('weight').var()
                 emb = self.encoder.params.get('weight').var()
-            c = self.coherence_regularization(w, emb) * 10000
+            c = self.coherence_regularization(w, emb) * self.coherence_reg_penalty
+            final_loss = i_loss + c
+        else:
+            final_loss = i_loss
 
-        return recon_loss + l1_pen + KL, recon_loss, l1_pen, y
+        return final_loss, recon_loss, l1_pen, y
         
 
 class RichGeneratorBowNTM(BowNTM):
@@ -144,8 +150,10 @@ class CoherenceRegularizer(HybridBlock):
 
     ## Follows paper: http://aclweb.org/anthology/D18-1096
 
-    def __init__(self):
+    def __init__(self, regularizer_pen):
         super(CoherenceRegularizer, self).__init__()
+        self.regularizer_pen = regularizer_pen
+        
 
     def hybrid_forward(self, F, w, emb):
         ## emb should have shape (V x D)
@@ -155,21 +163,14 @@ class CoherenceRegularizer(HybridBlock):
         w_norm_val = F.norm(w, keepdims=True, axis=0)
         emb_norm_val = F.norm(emb, keepdims=True, axis=1)
         
-        w_norm = w / w_norm_val
-        emb_norm = emb / emb_norm_val
+        w_norm = F.broadcast_div(w, w_norm_val)
+        emb_norm = F.broadcast_div(emb, emb_norm_val)
 
-        #print("Shape w_norm = {}, emb_norm = {}".format(w_norm.shape, emb_norm.shape))
-        
         T = F.linalg.gemm2(emb_norm, w_norm)
         
         T_norm_vals = F.norm(T, keepdims=True, axis=0)
-        T_norm = T / T_norm_vals
-        ## T should have shape (D x K)
-        #print("Shape T_norm = {}, emb_norm = {}".format(T_norm.shape, emb_norm.shape))
+        T_norm = F.broadcast_div(T, T_norm_vals)
         S = F.linalg.gemm2(F.transpose(emb_norm), T_norm) # (V x K)
-        C_mat = S * w_norm
-        #C_vec = F.sum(C, axis=0) # some over vocab - i.e. rows
-        C = F.sum(C_mat) ## coherence-based regularization
-        #print("C = {} val = {}".format(C.shape, C.asscalar()))
+        C = F.sum(S * w_norm)
         return C
         
