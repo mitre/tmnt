@@ -10,6 +10,7 @@ import mxnet as mx
 import numpy as np
 from mxnet import autograd
 from mxnet import gluon
+import gluonnlp as nlp
 
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
 from tmnt.bow_vae.bow_models import BowNTM, RichGeneratorBowNTM
@@ -106,6 +107,9 @@ def train_bow_vae(args):
         tst_dataset = BowDataSet(args.test_dir, args.file_pat)
         tst_csr_mat, _, _, total_tst_words = collect_stream_as_sparse_matrix(tst_dataset, pre_vocab=vocab)
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
+    if args.embedding_source:
+        glove_twitter = nlp.embedding.create('glove', source=args.embedding_source)
+        vocab.set_embedding(glove_twitter)
     m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, ctx=ctx)
     if args.model_dir:
         pfile = os.path.join(args.model_dir, 'model.params')

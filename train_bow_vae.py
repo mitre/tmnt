@@ -31,6 +31,9 @@ parser.add_argument('--model_dir', type=str, default=None, help='Save final mode
 parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
 parser.add_argument('--coherence_regularizer_penalty', type=float, help='Use word-embedding coherence regularization', default=0.0)
 
+parser.add_argument('--embedding_source', type=str, help='Use pre-trained embedding to initialize first encoder layer', default=None)
+
+
 args = parser.parse_args()
 
 from tmnt.bow_runner import train_bow_vae
