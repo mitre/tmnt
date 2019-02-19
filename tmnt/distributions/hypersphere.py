@@ -37,9 +37,9 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         mu = mu # F.norm(...)  - already normalized
         sw = self._get_weight_batch(F)
         sw = F.expand_dims(sw, axis=1)
-        sw_v = sw * F.ones((self.batch_size, self.n_latent))
+        sw_v = sw * F.ones((self.batch_size, self.n_latent), ctx=self.model_ctx)
         vv = self._get_orthonormal_batch(F, mu)
-        sc11 = F.ones((self.batch_size, self.n_latent))
+        sc11 = F.ones((self.batch_size, self.n_latent), ctx=self.model_ctx)
         sc22 = sw_v ** 2.0
         sc_factor = F.sqrt(sc11 - sc22)
         orth_term = vv * sc_factor
@@ -58,7 +58,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         return np.array([tmp])
 
     def _get_weight_batch(self, F):
-        batch_sample = F.zeros((self.batch_size,))
+        batch_sample = F.zeros((self.batch_size,), ctx=self.model_ctx)
         for i in range(self.batch_size):
             batch_sample[i] = self._get_single_weight()
         return batch_sample
