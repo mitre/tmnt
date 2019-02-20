@@ -3,10 +3,8 @@
 import json
 import mxnet as mx
 import gluonnlp as nlp
-from mxnet import gluon
-from mxnet.gluon import HybridBlock
-from bow_models import BowNTM
-from bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet
+from .bow_models import BowNTM
+from .bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet
 
 class BowNTMInference(object):
 
@@ -21,8 +19,8 @@ class BowNTMInference(object):
         self.n_latent = specs['n_latent']
         enc_dim = specs['enc_dim']
         gen_layers = specs['gen_layers']
-        self.model = BowNTM(len(self.vocab), enc_dim, self.n_latent, ctx=ctx)
-        self.model.load_parameters(param_file)
+        self.model = BowNTM(self.vocab, enc_dim, self.n_latent, ctx=ctx)
+        self.model.load_parameters(str(param_file))
         
 
     def encode_texts(self, intexts):
