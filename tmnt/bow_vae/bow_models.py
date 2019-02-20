@@ -28,7 +28,6 @@ class BowNTM(HybridBlock):
         self.batch_size = batch_size
         self.n_latent = n_latent
         self.model_ctx = ctx
-        print(vocabulary)
         self.vocab_size = len(vocabulary)
         self.coherence_reg_penalty = coherence_reg_penalty
         self.default_embedding_size = 300
