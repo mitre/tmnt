@@ -1,3 +1,3 @@
 # coding: utf-8
 
-__all__ = ['bow_vae', 'st_vae', 'coherence']
+__all__ = ['bow_vae', 'st_vae', 'coherence', 'distributions']

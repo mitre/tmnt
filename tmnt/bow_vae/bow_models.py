@@ -69,7 +69,7 @@ class BowNTM(HybridBlock):
         """
         Encode data to the mean of the latent distribution defined by the input `data`
         """
-        return self.latent_dist.mu_encoder(self.encoder(data))
+        return self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
     
     def get_l1_penalty_term(self, F, l1_pen_const, batch_size):
         if F is mx.ndarray:

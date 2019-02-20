@@ -3,8 +3,8 @@
 import json
 import mxnet as mx
 import gluonnlp as nlp
-from .bow_models import BowNTM
-from .bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet
+from tmnt.bow_vae.bow_models import BowNTM
+from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet
 
 class BowNTMInference(object):
 

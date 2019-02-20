@@ -22,8 +22,7 @@ To train using the example data in sparse vector (libSVM) format, run:
 To load a saved model via the API, do:
 
 ```
- > cd tmnt/bow_vae
- > python3 -i runtime.py
+ > python3 -i tmnt/bow_vae/runtime.py
  > infer = BowNTMInference('_model_dir/model.params','_model_dir/model.specs', '_model_dir/vocab.json')
  > top_k_terms = infer.get_top_k_words_per_topic(10) # top 10 words per topic
  > encodings = infer._test_inference_on_directory('<some directory of .txt files>', '*.txt') ## encode documents 
