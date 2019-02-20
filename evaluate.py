@@ -24,6 +24,16 @@ def setup_parser():
                         help='The directory where the params, specs, and vocab should be found.')
     return parser
 
+def read_vector_file(file):
+    labels = []
+    docs = []
+    with open(file) as f:
+        for line in map(str.strip, f):
+            label, *words = line.split()
+            labels.append(int(label))
+            docs.append(list(map(lambda t: int(t.split(":")[0]), words)))
+    return labels, docs
+
 def get_top_k_words_per_topic(inference, num_topics, k):
     w = inference.model.decoder.collect_params().get('weight').data()
     sorted_ids = w.argsort(axis=0, is_ascend=False)
@@ -54,6 +64,16 @@ if __name__ == "__main__":
                                       ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
 
     top_k_words_per_topic = get_top_k_word_idx_per_topic(inference_model, 5, 5)
+
+    labels, words = read_vector_file(args.vec_file)
+
+    words = [
+        [inference_model.vocab.idx_to_token[i-1] for i in doc] for doc in words
+    ]
+
+    #inference_model.model.hybridize(static_alloc=True)
+    print(inference_model.encode_texts(words))
+
 
     unigram_reader = UnigramReader(args.vocab_file)
     bigram_reader = BigramReader(args.vec_file)
