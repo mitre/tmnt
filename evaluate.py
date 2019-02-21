@@ -11,14 +11,20 @@ from tmnt.utils.ngram_helpers import UnigramReader, BigramReader
 
 from itertools import combinations
 
-from pprint import pprint
+import umap
 from pathlib import Path
+
+import numpy as np
+
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 def setup_parser():
     parser = argparse.ArgumentParser(
         description='Evaluate a Variational AutoEncoder topic model')
     parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
-    parser.add_argument('--vec_file', type=str, required=True, help='ile in sparse vector format')
+    parser.add_argument('--train_file', type=str, required=True, help='file in sparse vector format')
+    parser.add_argument('--eval_file', type=str, required=True, help='file in sparse vector format')    
     parser.add_argument('--vocab_file', type=str, required=True, help='Vocabulary file associated with sparse vector data')
     parser.add_argument('--model_dir', required=True, type=Path,
                         help='The directory where the params, specs, and vocab should be found.')
@@ -65,18 +71,29 @@ if __name__ == "__main__":
 
     top_k_words_per_topic = get_top_k_word_idx_per_topic(inference_model, 5, 5)
 
-    labels, words = read_vector_file(args.vec_file)
+    labels, words = read_vector_file(args.eval_file)
 
     words = [
         [inference_model.vocab.idx_to_token[i-1] for i in doc] for doc in words
     ]
 
     #inference_model.model.hybridize(static_alloc=True)
-    print(inference_model.encode_texts(words))
 
+    encoded = inference_model.encode_texts(words)
+
+    encodings = np.array([doc.asnumpy() for doc in encoded])
+
+    print("There are {0} labels and {1} encodings".format(len(labels), len(encodings)))
+
+    umap_model = umap.UMAP()
+    embeddings = umap_model.fit_transform(encodings)
+    print(embeddings.shape)
+
+    plt.scatter(embeddings[:, 0], embeddings[:, 1], c=labels)
+    plt.savefig("something.png", dpi=1000)
 
     unigram_reader = UnigramReader(args.vocab_file)
-    bigram_reader = BigramReader(args.vec_file)
+    bigram_reader = BigramReader(args.train_file)
 
     pmi = PMI(unigram_reader.unigrams, bigram_reader.bigrams)
 
