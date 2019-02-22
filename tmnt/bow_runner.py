@@ -13,28 +13,38 @@ from mxnet import gluon
 import gluonnlp as nlp
 
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
-from tmnt.bow_vae.bow_models import BowNTM, RichGeneratorBowNTM
+from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.utils.log_utils import logging_config
 
 
-def get_wd_freqs(data_csr, n_terms, max_sample_size=500):
-    data = data_csr[:10000].asnumpy() # only take first 10000 to estimate frequencies
+def get_wd_freqs(data_csr, n_terms, max_sample_size=10000):
+    data = data_csr[:max_sample_size].asnumpy() # only take first 10000 to estimate frequencies
     sums = np.sum(data, axis=0)
     return list(sums)
     
 
-def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, ctx=mx.cpu()):
+def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, train_labels=None, test_labels=None, ctx=mx.cpu()):
     wd_freqs = get_wd_freqs(data_train_csr, len(vocabulary))
+
+    if args.use_labels_as_covars and train_labels is not None:
+        n_covars = mx.nd.max(train_labels).asscalar() + 1
+        train_labels = mx.nd.one_hot(train_labels, n_covars)
+        test_labels = mx.nd.one_hot(test_labels, n_covars) if test_labels is not None else None
+        model = \
+            MetaDataBowNTM(n_covars,vocabulary, args.hidden_dim, args.n_latent, latent_distrib=args.latent_distribution,
+               coherence_reg_penalty=args.coherence_regularizer_penalty,
+               batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
+    else:
+        model = \
+            BowNTM(vocabulary, args.hidden_dim, args.n_latent, latent_distrib=args.latent_distribution,
+               coherence_reg_penalty=args.coherence_regularizer_penalty,
+               batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
     
-    train_iter = mx.io.NDArrayIter(data_train_csr, None, args.batch_size, last_batch_handle='discard', shuffle=True)
+    train_iter = mx.io.NDArrayIter(data_train_csr, train_labels, args.batch_size, last_batch_handle='discard', shuffle=True)
     train_dataloader = DataIterLoader(train_iter)    
     if data_test_csr is not None:
-        test_iter = mx.io.NDArrayIter(data_test_csr, None, args.batch_size, last_batch_handle='discard', shuffle=False)
-        test_dataloader = DataIterLoader(test_iter)
-    model = \
-        BowNTM(vocabulary, args.hidden_dim, args.n_latent, latent_distrib=args.latent_distribution,
-               coherence_reg_penalty=args.coherence_regularizer_penalty,
-               batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx) 
+        test_iter = mx.io.NDArrayIter(data_test_csr, test_labels, args.batch_size, last_batch_handle='discard', shuffle=False)
+        test_dataloader = DataIterLoader(test_iter)        
     if (args.hybridize):
         model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
@@ -44,11 +54,14 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         total_rec_loss = 0
         total_l1_pen = 0
         tr_size = 0
-        for i, (data,_) in enumerate(train_dataloader):
+        for i, (data, labels) in enumerate(train_dataloader):
             tr_size += data.shape[0]
             data = data.as_in_context(ctx)
+            if labels is None or labels.size == 0:
+                labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+            labels = labels.as_in_context(ctx)
             with autograd.record():
-                elbo, rec_loss, l1_pen, _ = model(data)
+                elbo, rec_loss, l1_pen, _ = model(data, labels) if args.use_labels_as_covars else model(data)
                 elbo_mean = elbo.mean()
             elbo_mean.backward()
             trainer.step(data.shape[0]) ## step based on batch size
@@ -64,16 +77,19 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
             l1_coef = l1_coef * math.pow(2.0, args.target_sparsity - ratio_small_weights)
             logging.info("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(l1_coef, ratio_small_weights))
             model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
-        evaluate(model, test_dataloader, total_tst_words, ctx)
+        evaluate(model, test_dataloader, total_tst_words, args, ctx)
     log_top_k_words_per_topic(model, vocabulary, args.n_latent, 10)
     return model
 
 
-def evaluate(model, data_loader, total_words, ctx=mx.cpu(), debug=False):
+def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
     total_rec_loss = 0
-    for i, (data,_) in enumerate(data_loader):
+    for i, (data,labels) in enumerate(data_loader):
         data = data.as_in_context(ctx)
-        _, rec_loss, _, log_out = model(data)
+        if labels is None:            
+            labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+        labels = labels.as_in_context(ctx)
+        _, rec_loss, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         total_rec_loss += rec_loss.sum().asscalar()
     perplexity = math.exp(total_rec_loss / total_words)
     logging.info("TEST/VALIDATION Perplexity = {}".format(perplexity))
@@ -95,7 +111,7 @@ def train_bow_vae(args):
     logging_config(folder=train_out_dir, name='bow_ntm', level=logging.INFO)
     tr_file = args.train_dir
     if args.vocab_file and args.tr_vec_file:
-        vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words = \
+        vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels = \
             collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file)
     else:
         tr_dataset = BowDataSet(args.train_dir, args.file_pat)    
@@ -106,7 +122,9 @@ def train_bow_vae(args):
     if args.embedding_source:
         glove_twitter = nlp.embedding.create('glove', source=args.embedding_source)
         vocab.set_embedding(glove_twitter)
-    m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, ctx=ctx)
+        
+    ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
+    m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx)
     if args.model_dir:
         pfile = os.path.join(args.model_dir, 'model.params')
         sp_file = os.path.join(args.model_dir, 'model.specs')

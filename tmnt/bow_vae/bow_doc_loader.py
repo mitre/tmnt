@@ -167,12 +167,14 @@ def file_to_sp_vec(sp_file, voc_size):
 
 def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None):
     vocab = load_vocab(vocab_file)
-    tr_mat, total_tr, _ = file_to_sp_vec(sp_vec_file, len(vocab))
-
+    tr_mat, total_tr, tr_labels_li = file_to_sp_vec(sp_vec_file, len(vocab))
+    tr_labels = mx.nd.array(tr_labels_li, dtype='int') - 1
     if sp_vec_test_file:
-        tst_mat, total_tst, _ = file_to_sp_vec(sp_vec_test_file, len(vocab))
+        tst_mat, total_tst, tst_labels_li = file_to_sp_vec(sp_vec_test_file, len(vocab))
+        tst_labels = mx.nd.array(tst_labels_li, dtype='int') - 1
     else:
         tst_mat = None
+        tst_labels = None
         total_tst = 0    
-    return vocab, tr_mat, total_tr, tst_mat, total_tst
+    return vocab, tr_mat, total_tr, tst_mat, total_tst, tr_labels, tst_labels
     

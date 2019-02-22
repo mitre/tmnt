@@ -7,7 +7,7 @@ from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLaten
 import numpy as np
 import math
 
-__all__ = ['BowNTM', 'RichGeneratorBowNTM']
+__all__ = ['BowNTM', 'MetaDataBowNTM']
 
 
 
@@ -79,15 +79,16 @@ class BowNTM(HybridBlock):
         return l1_pen_const * F.sum(F.abs(dec_weights))
         
 
-    def hybrid_forward(self, F, data, l1_pen_const):
+    def hybrid_forward(self, F, data, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
         enc_out = self.encoder(emb_out)
         z, KL = self.latent_dist(enc_out, batch_size)
         z_do = self.post_sample_dr_o(z)
         
-        res = F.softmax(z)
+        res = F.softmax(z_do)
         dec_out = self.decoder(res)
+        
         y = F.softmax(dec_out, axis=1)
 
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
@@ -107,53 +108,81 @@ class BowNTM(HybridBlock):
             final_loss = i_loss + c
         else:
             final_loss = i_loss
-
         return final_loss, recon_loss, l1_pen, y
-        
 
-class RichGeneratorBowNTM(BowNTM):
-    """
-    Adds a series of generator FC layers between latent code and decoder/output layer.
 
-    Parameters
-    ----------
-    vocab_size : int size of the vocabulary
-    enc_dim : int number of dimension of input encoder (first FC layer)
-    n_latent : int number of dimensions of the latent dimension (i.e. number of topics)
-    gen_layers : int (default = 3) number of generator layers (after sample); size is the same as n_latent
-    batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
-    ctx : context device (default is mx.cpu())
-    """
-    def __init__(self, vocab_size, enc_dim, n_latent, latent_distrib='logistic_gaussian', init_l1=0.0,
-                 gen_layers=3, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
-        super(RichGeneratorBowNTM, self).__init__(vocab_size, enc_dim, n_latent, latent_distrib=latent_distrib, init_l1=init_l1,
-                                                  batch_size=batch_size, wd_freqs=wd_freqs, ctx=ctx)
-        self.gen_layers = gen_layers
+class MetaDataBowNTM(BowNTM):
+
+    def __init__(self, n_covars, vocabulary, enc_dim, n_latent, latent_distrib='logistic_gaussian',
+                 init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
+        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, latent_distrib, init_l1, coherence_reg_penalty, batch_size, wd_freqs, ctx)
+        self.n_covars = n_covars
         with self.name_scope():
-            self.generator = gluon.nn.HybridSequential()
-            with self.generator.name_scope():
-                for i in range(gen_layers):
-                    self.generator.add(gluon.nn.Dense(units=n_latent, activation='relu'))
+            self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=False)
 
-
-    def hybrid_forward(self, F, data, l1_pen_const):
+    def hybrid_forward(self, F, data, labels, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
-        mu, lv = self.get_mean_and_logvar(F, data)
-        z = self.get_gaussian_sample(F, mu, lv, batch_size)
+        emb_out = self.embedding(data)
+        enc_out = self.encoder(F.concat(emb_out, labels))
 
-        gen_out = self.generator(z)  
-        res_1 = gen_out + z if self.gen_layers > 1 else gen_out
-        res = F.softmax(res_1)
+        z, KL = self.latent_dist(enc_out, batch_size)
+        z_do = self.post_sample_dr_o(z)
+        res = F.softmax(z_do)
         dec_out = self.decoder(res)
-        y = F.softmax(dec_out, axis=1)
-        
-        # loss terms
+        cov_dec_out = self.cov_decoder(res, labels)
+        y = F.softmax(dec_out + cov_dec_out, axis=1)
+
+        ###  Lots of cut and pasting ... refactor this!!
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
         recon_loss = -F.sparse.sum( data * F.log(y+1e-12))
-        KL = self.get_logistic_normal_kl(F, mu, lv)
+        i_loss = recon_loss + l1_pen + KL
+        
+        ## coherence-focused regularization term
+        if self.coherence_reg_penalty > 0.0:
+            if F is mx.ndarray:
+                w = self.decoder.params.get('weight').data()
+                emb = self.embedding.params.get('weight').data()
+            else:
+                w = self.decoder.params.get('weight').var()
+                emb = self.embedding.params.get('weight').var()
+            c = self.coherence_regularization(w, emb) * self.coherence_reg_penalty
+            final_loss = i_loss + c
+        else:
+            final_loss = i_loss
+        return final_loss, recon_loss, l1_pen, y
+    
+        
+class CovariateModel(HybridBlock):
 
-        return recon_loss + KL + l1_pen, recon_loss, l1_pen, y
+    def __init__(self, n_topics, n_covars, vocab_size, batch_size=None, interactions=False, ctx=mx.cpu()):
+        self.n_topics = n_topics
+        self.n_covars = n_covars
+        self.vocab_size = vocab_size
+        self.interactions = interactions
+        self.batch_size = batch_size
+        self.model_ctx = ctx
+        super(CovariateModel, self).__init__()
+        with self.name_scope():
+            self.cov_decoder = gluon.nn.Dense(in_units=n_covars, units=self.vocab_size, activation=None, use_bias=False)
+            if self.interactions:
+                self.cov_inter_decoder = gluon.nn.Dense(in_units = self.n_covars * self.n_topics, units=self.vocab_size, activation=None, use_bias=False)
+        self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+                
 
+    def hybrid_forward(self, F, topic_distrib, covars):
+        score_C = self.cov_decoder(covars)
+        if self.interactions:
+            td_rsh = F.expand_dims(topic_distrib, 2)
+            cov_rsh = F.expand_dims(covars, 1)
+            cov_interactions = td_rsh * cov_rsh
+            batch_size = cov_interactions.shape[0] if F is mx.ndarray else self.batch_size
+            cov_interactions_rsh = F.reshape(cov_interactions, (batch_size, self.n_topics * self.n_covars))
+            score_CI = self.cov_inter_decoder(cov_interactions_rsh)
+            return score_C + score_CI
+        else:
+            return score_C
+            
+    
 
 class CoherenceRegularizer(HybridBlock):
 

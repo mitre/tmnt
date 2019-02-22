@@ -30,9 +30,8 @@ parser.add_argument('--save_dir', type=str, default='_experiments')
 parser.add_argument('--model_dir', type=str, default=None, help='Save final model and associated meta-data to this directory (default None)')
 parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
 parser.add_argument('--coherence_regularizer_penalty', type=float, help='Use word-embedding coherence regularization', default=0.0)
-
 parser.add_argument('--embedding_source', type=str, help='Use pre-trained embedding to initialize first encoder layer', default=None)
-
+parser.add_argument('--use_labels_as_covars', action='store_true', help='If labels/meta-data are provided, use as covariates in model', default=False)
 
 args = parser.parse_args()
 
