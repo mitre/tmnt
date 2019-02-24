@@ -1,0 +1,41 @@
+Title: Neural Topic Modeling
+
+Extracting useful information from unstructured texts remains a challenge, despite recent advances in
+natural language processing.
+While deep learning approaches have advanced the state of the art, they
+often require modest to large-sized annotated datasets. In contrast, purely unsupervised
+machine learning methods such as topic models require no labeled data
+while discovering latent topic structures important for a wide-variety of use-cases including
+discovery, search, and temporal/spatial analysis of texts.
+
+Traditional topic models such as Latent Dirichlet Allocation (LDA) tend to work reasonably well on
+"well-behaved" document collections, yet the face of noisy, short texts, such models may perform poorly.
+There are many potential avenues for improvement, yet it remains difficult to extend LDA in ways to, for example,
+leverage additional meta-data, word-embeddings or other types of word representations.
+Recently, neural network-based topic
+models in the form of variational autoencoders have been developed that provide a number of advantages
+over LDA and related models. These advantages include: better overall topic models measured by intrinsic measures such as
+perplexity and coherence,
+improved robustness by leveraing word or contextual embeddings as pre-trained input representaions,
+and greater modeling flexibility to change prior distributions over the latent topic space as well as the
+inference (encoding) and generative (decoding) aspects of the model.
+Further, implemented as a neural network, the neural topic models can easily be extended
+in various ways. For example, arbitrary meta-data can be incorporated along with documents to provide "faceted" topic models.
+Another variation involves using partially labeled document collections to perform semi-supervised topic modeling
+and classification within a multi-task learning framework.
+
+This talk will provide an overview of neural network-based topic models while emphasizing
+practical considerations as part of MITRE's Topic Modeling Neural Toolkit.
+
+
+=====================
+
+Short - version:
+
+
+Recently, neural network-based topic
+models based on variational autoencoders have been introduced that provide advantages
+over traditional topic models such as LDA, including: robustness through use of 
+word embeddings and other pre-trained models, greater modeling flexibility and simpler ways to extend
+the models to incorporate meta-data and partially categorized datasets. This talk will provide an overview of neural
+topic models and the capabilities within MITRE's Topic Modeling Neural Toolkit.
