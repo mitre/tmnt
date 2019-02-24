@@ -18,9 +18,10 @@ class BowNTMInference(object):
         self.ctx = ctx
         self.n_latent = specs['n_latent']
         enc_dim = specs['enc_dim']
-        gen_layers = specs['gen_layers']
-        self.model = BowNTM(self.vocab, enc_dim, self.n_latent, ctx=ctx)
-        self.model.load_parameters(str(param_file))
+        lat_distrib = specs['latent_distribution']
+        emb_size = specs['emb_size']
+        self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
+        self.model.load_parameters(str(param_file), allow_missing=False)
         
 
     def encode_texts(self, intexts):

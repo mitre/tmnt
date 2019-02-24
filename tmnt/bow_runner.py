@@ -25,18 +25,18 @@ def get_wd_freqs(data_csr, n_terms, max_sample_size=10000):
 
 def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, train_labels=None, test_labels=None, ctx=mx.cpu()):
     wd_freqs = get_wd_freqs(data_train_csr, len(vocabulary))
-
+    emb_size = vocabulary.embedding.idx_to_vec[0].size if vocabulary.embedding else args.embedding_size
     if args.use_labels_as_covars and train_labels is not None:
         n_covars = mx.nd.max(train_labels).asscalar() + 1
         train_labels = mx.nd.one_hot(train_labels, n_covars)
         test_labels = mx.nd.one_hot(test_labels, n_covars) if test_labels is not None else None
         model = \
-            MetaDataBowNTM(n_covars,vocabulary, args.hidden_dim, args.n_latent, latent_distrib=args.latent_distribution,
+            MetaDataBowNTM(n_covars,vocabulary, args.hidden_dim, args.n_latent, emb_size, latent_distrib=args.latent_distribution,
                coherence_reg_penalty=args.coherence_regularizer_penalty,
                batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
     else:
         model = \
-            BowNTM(vocabulary, args.hidden_dim, args.n_latent, latent_distrib=args.latent_distribution,
+            BowNTM(vocabulary, args.hidden_dim, args.n_latent, emb_size, latent_distrib=args.latent_distribution,
                coherence_reg_penalty=args.coherence_regularizer_penalty,
                batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
     
@@ -133,7 +133,8 @@ def train_bow_vae(args):
         sp = {}
         sp['enc_dim'] = args.hidden_dim
         sp['n_latent'] = args.n_latent
-        sp['gen_layers'] = args.num_gen_layers
+        sp['latent_distribution'] = args.latent_distribution
+        sp['emb_size'] = vocab.embedding.idx_to_vec[0].size if vocab.embedding else args.embedding_size
         specs = json.dumps(sp)
         with open(sp_file, 'w') as f:
             f.write(specs)

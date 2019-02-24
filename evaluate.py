@@ -74,7 +74,7 @@ if __name__ == "__main__":
     labels, words = read_vector_file(args.eval_file)
 
     words = [
-        [inference_model.vocab.idx_to_token[i-1] for i in doc] for doc in words
+        [inference_model.vocab.idx_to_token[i] for i in doc] for doc in words
     ]
 
     #inference_model.model.hybridize(static_alloc=True)
@@ -85,11 +85,11 @@ if __name__ == "__main__":
 
     print("There are {0} labels and {1} encodings".format(len(labels), len(encodings)))
 
-    umap_model = umap.UMAP()
+    umap_model = umap.UMAP(n_neighbors=25, min_dist=0.4)
     embeddings = umap_model.fit_transform(encodings)
     print(embeddings.shape)
 
-    plt.scatter(embeddings[:, 0], embeddings[:, 1], c=labels)
+    plt.scatter(*embeddings.T, c=labels, s=0.1, alpha=1.0, cmap='Spectral')
     plt.savefig("something.png", dpi=1000)
 
     unigram_reader = UnigramReader(args.vocab_file)

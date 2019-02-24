@@ -22,7 +22,7 @@ class BowNTM(HybridBlock):
     batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
     ctx : context device (default is mx.cpu())
     """
-    def __init__(self, vocabulary, enc_dim, n_latent, latent_distrib='logistic_gaussian',
+    def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
@@ -30,19 +30,20 @@ class BowNTM(HybridBlock):
         self.model_ctx = ctx
         self.vocab_size = len(vocabulary)
         self.coherence_reg_penalty = coherence_reg_penalty
-        self.default_embedding_size = 300
-        self.wd_embed_size = vocabulary.embedding.idx_to_vec[0].size if vocabulary.embedding else self.default_embedding_size
+        self.embedding_size = embedding_size
+        if vocabulary.embedding:
+            assert vocabulary.embedding.idx_to_vec[0].size == embedding_size
         with self.name_scope():
             self.l1_pen_const = self.params.get('l1_pen_const',
                                       shape=(1,),
                                       init=mx.init.Constant([init_l1]), 
                                       differentiable=False)
-            self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.wd_embed_size, activation = 'relu')
+            self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation = 'relu')
             self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
             elif latent_distrib == 'vmf':
-                self.latent_dist = HyperSphericalLatentDistribution(self.batch_size, n_latent, kappa=100.0, ctx=self.model_ctx)
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=100.0, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
                 self.latent_dist = GaussianLatentDistribution(n_latent, ctx)                
             self.post_sample_dr_o = gluon.nn.Dropout(0.2)
@@ -113,9 +114,9 @@ class BowNTM(HybridBlock):
 
 class MetaDataBowNTM(BowNTM):
 
-    def __init__(self, n_covars, vocabulary, enc_dim, n_latent, latent_distrib='logistic_gaussian',
+    def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
-        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, latent_distrib, init_l1, coherence_reg_penalty, batch_size, wd_freqs, ctx)
+        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, latent_distrib, init_l1, coherence_reg_penalty, batch_size, wd_freqs, ctx)
         self.n_covars = n_covars
         with self.name_scope():
             self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=False)

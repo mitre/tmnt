@@ -11,13 +11,11 @@ __all__ = ['HyperSphericalLatentDistribution']
 
 class HyperSphericalLatentDistribution(LatentDistribution):
 
-    def __init__(self, batch_size, n_latent, kappa=100.0, ctx=mx.cpu()):
+    def __init__(self, n_latent, kappa=100.0, ctx=mx.cpu()):
         super(HyperSphericalLatentDistribution, self).__init__(n_latent, ctx)
-        self.batch_size = batch_size
         self.kappa = kappa
         self.kld_v = mx.nd.array(HyperSphericalLatentDistribution._vmf_kld(self.kappa, self.n_latent), ctx=ctx)
-        #print("Shape kld_v = {}".format(self.kld_v.shape))
-        self.kld = mx.nd.broadcast_to(self.kld_v, shape=(batch_size,))
+        #self.kld = mx.nd.broadcast_to(self.kld_v, shape=(batch_size,), ctx=ctx)
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
 
@@ -28,18 +26,19 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         norm = F.norm(mu, axis=1, keepdims=True)
         #print("Shape norm = {}".format(norm.shape))                
         mu = F.broadcast_div(mu, norm)
-        kld = self.kld
-        vec = self._get_hypersphere_sample(F, mu)
+        #kld = self.kld
+        kld = F.broadcast_to(self.kld_v, shape=(batch_size,))
+        vec = self._get_hypersphere_sample(F, mu, batch_size)
         return vec, kld
     
         
-    def _get_hypersphere_sample(self, F, mu):
+    def _get_hypersphere_sample(self, F, mu, batch_size):
         mu = mu # F.norm(...)  - already normalized
-        sw = self._get_weight_batch(F)
+        sw = self._get_weight_batch(F, batch_size)
         sw = F.expand_dims(sw, axis=1)
-        sw_v = sw * F.ones((self.batch_size, self.n_latent), ctx=self.model_ctx)
+        sw_v = sw * F.ones((batch_size, self.n_latent), ctx=self.model_ctx)
         vv = self._get_orthonormal_batch(F, mu)
-        sc11 = F.ones((self.batch_size, self.n_latent), ctx=self.model_ctx)
+        sc11 = F.ones((batch_size, self.n_latent), ctx=self.model_ctx)
         sc22 = sw_v ** 2.0
         sc_factor = F.sqrt(sc11 - sc22)
         orth_term = vv * sc_factor
@@ -57,9 +56,9 @@ class HyperSphericalLatentDistribution(LatentDistribution):
             exit()
         return np.array([tmp])
 
-    def _get_weight_batch(self, F):
-        batch_sample = F.zeros((self.batch_size,), ctx=self.model_ctx)
-        for i in range(self.batch_size):
+    def _get_weight_batch(self, F, batch_size):
+        batch_sample = F.zeros((batch_size,), ctx=self.model_ctx)
+        for i in range(batch_size):
             batch_sample[i] = self._get_single_weight()
         return batch_sample
 
