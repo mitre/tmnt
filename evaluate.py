@@ -48,6 +48,7 @@ def get_top_k_words_per_topic(inference, num_topics, k):
 def get_top_k_word_idx_per_topic(inference, num_topics, k):
     w = inference.model.decoder.collect_params().get('weight').data()
     sorted_ids = w.argsort(axis=0, is_ascend=False)
+    num_topics = min(num_topics, sorted_ids.shape[-1])
     return [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
 
 def evaluate(inference, data_loader, total_words, ctx=mx.cpu()):
@@ -59,9 +60,18 @@ def evaluate(inference, data_loader, total_words, ctx=mx.cpu()):
     perplexity = math.exp(total_rec_loss / total_words)
     return perplexity
 
+
+def test_npmi(tr_file):
+    bigram_reader = BigramReader(tr_file)
+    pmi = PMI(bigram_reader.unigrams, bigram_reader.bigrams)
+    return pmi
+    
+
 if __name__ == "__main__":
     parser = setup_parser()
     args = parser.parse_args()
+
+    verbose = False ### XXX - add as argument
 
     param_file, specs_file, vocab_file = \
         args.model_dir / "model.params", args.model_dir / "model.specs", args.model_dir / "vocab.json"
@@ -69,44 +79,41 @@ if __name__ == "__main__":
     inference_model = BowNTMInference(param_file, specs_file, vocab_file,
                                       ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
 
-    top_k_words_per_topic = get_top_k_word_idx_per_topic(inference_model, 5, 5)
+    top_k_words_per_topic = get_top_k_word_idx_per_topic(inference_model, 100, 10)
 
-    #labels, words = read_vector_file(args.eval_file)
-
-    #words = [
-    #    [inference_model.vocab.idx_to_token[i] for i in doc] for doc in words
-    #]
-
-    #inference_model.model.hybridize(static_alloc=True)
-
-    #encoded = inference_model.encode_texts(words)
-
-    
     encoded, labels = inference_model.encode_vec_file(args.eval_file)
     encodings = np.array([doc.asnumpy() for doc in encoded])
-    
 
     print("There are {0} labels and {1} encodings".format(len(labels), len(encodings)))
 
-    umap_model = umap.UMAP(n_neighbors=5, min_dist=0.1, metric='euclidean')
-    embeddings = umap_model.fit_transform(encodings)
-    print(embeddings.shape)
+    if False: # get UMAP embedding visualization
+        umap_model = umap.UMAP(n_neighbors=5, min_dist=0.1, metric='euclidean')
+        embeddings = umap_model.fit_transform(encodings)
+        plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.9, cmap='Spectral')
+        plt.savefig("something.png", dpi=1000)
 
-    plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.9, cmap='Spectral')
-    plt.savefig("something.png", dpi=1000)
-
-    unigram_reader = UnigramReader(args.vocab_file)
+    #unigram_reader = UnigramReader(args.vocab_file)
     bigram_reader = BigramReader(args.train_file)
 
-    pmi = PMI(unigram_reader.unigrams, bigram_reader.bigrams)
+    pmi = PMI(bigram_reader.unigrams, bigram_reader.bigrams)
 
+    total_npmi = 0
     for i, words_per_topic in enumerate(top_k_words_per_topic):
-        print("Topic {0}".format(i))
-        for (w1, w2) in combinations(words_per_topic, 2):
-            print("NPMI({0}, {1}) = {2}".format(
-                inference_model.vocab.idx_to_token[w1],
-                inference_model.vocab.idx_to_token[w2],
-                pmi.npmi(w1, w2))
-            )
+        total_topic_npmi = 0
+        N = len(words_per_topic)
+        for (w1, w2) in combinations(sorted(words_per_topic), 2):
+            wp_npmi = pmi.npmi(w1, w2)
+            if verbose:
+                print("NPMI({}, {}) = {}".format(
+                    inference_model.vocab.idx_to_token[w1],
+                    inference_model.vocab.idx_to_token[w2],
+                    wp_npmi)
+                )
+            total_topic_npmi += wp_npmi
+        total_topic_npmi *= (2 / (N * (N-1)))
+        print("Topic {}, NPMI = {}".format(i, total_topic_npmi))
+        total_npmi += total_topic_npmi
+    print("**** FINAL NPMI = {} *******".format(total_npmi / len(top_k_words_per_topic)))
+              
 
 

@@ -10,15 +10,20 @@ class UnigramReader(object):
                 _, count = line.strip().split()
                 self.unigrams[i] = int(count)
 
+                
 class BigramReader(object):
     def __init__(self, training_file):
         self.bigrams = Counter()
+        self.unigrams = Counter()
         with open(training_file) as f:
             for line in f:
                 label, *word_occurrences = line.strip().split()
-                counts = {int(word) for word, _ in map(lambda s: s.split(":"), word_occurrences)}
+                counts = sorted(map(lambda s: int(s.split(":")[0]), word_occurrences))
+                for w in counts:
+                    self.unigrams[w] += 1
                 for (w_i, w_j) in C(counts, 2):
                     # If we've previously stored this in a different order, keep storing it that way
+                    ## BRW - leaving this here, but it shouldn't happen as we've sorted these
                     if self.bigrams[(w_j, w_i)] != 0:
                         self.bigrams[(w_j, w_i)] += 1
                     else:
