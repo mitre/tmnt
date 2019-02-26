@@ -71,25 +71,28 @@ if __name__ == "__main__":
 
     top_k_words_per_topic = get_top_k_word_idx_per_topic(inference_model, 5, 5)
 
-    labels, words = read_vector_file(args.eval_file)
+    #labels, words = read_vector_file(args.eval_file)
 
-    words = [
-        [inference_model.vocab.idx_to_token[i] for i in doc] for doc in words
-    ]
+    #words = [
+    #    [inference_model.vocab.idx_to_token[i] for i in doc] for doc in words
+    #]
 
     #inference_model.model.hybridize(static_alloc=True)
 
-    encoded = inference_model.encode_texts(words)
+    #encoded = inference_model.encode_texts(words)
 
+    
+    encoded, labels = inference_model.encode_vec_file(args.eval_file)
     encodings = np.array([doc.asnumpy() for doc in encoded])
+    
 
     print("There are {0} labels and {1} encodings".format(len(labels), len(encodings)))
 
-    umap_model = umap.UMAP(n_neighbors=25, min_dist=0.4)
+    umap_model = umap.UMAP(n_neighbors=5, min_dist=0.1, metric='euclidean')
     embeddings = umap_model.fit_transform(encodings)
     print(embeddings.shape)
 
-    plt.scatter(*embeddings.T, c=labels, s=0.1, alpha=1.0, cmap='Spectral')
+    plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.9, cmap='Spectral')
     plt.savefig("something.png", dpi=1000)
 
     unigram_reader = UnigramReader(args.vocab_file)

@@ -15,8 +15,8 @@ class LogisticGaussianLatentDistribution(LatentDistribution):
         self.alpha = 1.0
 
         prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
-        self.prior_var = prior_var
-        self.prior_logvar = math.log(prior_var)
+        self.prior_var = mx.nd.array([prior_var])
+        self.prior_logvar = mx.nd.array([math.log(prior_var)])
 
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
@@ -25,8 +25,8 @@ class LogisticGaussianLatentDistribution(LatentDistribution):
     def _get_kl_term(self, F, mu, lv):
         posterior_var = F.exp(lv)
         delta = mu
-        dt = delta * delta / self.prior_var
-        v_div = posterior_var / self.prior_var
+        dt = F.broadcast_div(delta * delta, self.prior_var)
+        v_div = F.broadcast_div(posterior_var, self.prior_var)
         lv_div = self.prior_logvar - lv
         return F.sum(0.5 * (F.sum((v_div + dt + lv_div), axis=1) - self.n_latent))
 

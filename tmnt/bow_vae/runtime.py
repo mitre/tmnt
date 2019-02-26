@@ -4,7 +4,7 @@ import json
 import mxnet as mx
 import gluonnlp as nlp
 from tmnt.bow_vae.bow_models import BowNTM
-from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet
+from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
 
 class BowNTMInference(object):
 
@@ -32,8 +32,15 @@ class BowNTMInference(object):
         strm = nlp.data.SimpleDataStream(in_strms)
         return self.encode_text_stream(strm)
 
+    def encode_vec_file(self, sp_vec_file):
+        data_csr, _, labels = file_to_sp_vec(sp_vec_file, len(self.vocab))
+        return self.encode_csr(data_csr), labels
+
     def encode_text_stream(self, strm):
         csr, _, _ = collect_stream_as_sparse_matrix(strm, pre_vocab=self.vocab)
+        return self.encode_csr(csr)
+
+    def encode_csr(self, csr):
         batch_size = min(csr.shape[0], self.max_batch_size)
         last_batch_size = csr.shape[0] % batch_size        
         infer_iter = DataIterLoader(mx.io.NDArrayIter(csr[:-last_batch_size], None, batch_size, last_batch_handle='discard', shuffle=False))

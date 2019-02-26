@@ -22,7 +22,7 @@ class BowNTM(HybridBlock):
     batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
     ctx : context device (default is mx.cpu())
     """
-    def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, latent_distrib='logistic_gaussian',
+    def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
@@ -38,7 +38,7 @@ class BowNTM(HybridBlock):
                                       shape=(1,),
                                       init=mx.init.Constant([init_l1]), 
                                       differentiable=False)
-            self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation = 'relu')
+            self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
             self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
@@ -50,12 +50,16 @@ class BowNTM(HybridBlock):
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
             self.coherence_regularization = CoherenceRegularizer(coherence_reg_penalty)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-        if vocabulary.embedding:
+        if vocabulary.embedding:            
             emb = vocabulary.embedding.idx_to_vec.transpose()
-            emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=1)
-            emb_norm = mx.nd.broadcast_div(emb, emb_norm_val)
+            #g_noise = mx.nd.random.normal(loc=0.0, scale=0.1, shape=emb_1.shape)
+            #emb = emb_1 + g_noise
+            emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
+            emb_norm = emb / emb_norm_val
+            #print("Emb norm = {} with sum = {}".format(emb_norm, emb_norm.sum()))
             self.embedding.weight.set_data(emb_norm)
-            self.embedding.collect_params().setattr('grad_req', 'null') ## XXX - make this an option
+            if fixed_embedding:
+                self.embedding.collect_params().setattr('grad_req', 'null')
         ## Initialize decoder bias terms to corpus frequencies
         if wd_freqs:
             freq_nd = mx.nd.array(wd_freqs, ctx=ctx) + 1
@@ -70,7 +74,9 @@ class BowNTM(HybridBlock):
         """
         Encode data to the mean of the latent distribution defined by the input `data`
         """
-        return self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
+        mu = self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
+        norm = mx.nd.norm(mu, axis=1, keepdims=True)
+        return mu / norm
     
     def get_l1_penalty_term(self, F, l1_pen_const, batch_size):
         if F is mx.ndarray:

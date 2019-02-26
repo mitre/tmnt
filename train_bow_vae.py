@@ -32,6 +32,7 @@ parser.add_argument('--hybridize', action='store_true', help='Use Symbolic compu
 parser.add_argument('--coherence_regularizer_penalty', type=float, help='Use word-embedding coherence regularization', default=0.0)
 parser.add_argument('--embedding_source', type=str, help='Use pre-trained embedding to initialize first encoder layer', default=None)
 parser.add_argument('--embedding_size', type=int, help='Embedding size when no pre-trained embedding is used (default 300)', default=300)
+parser.add_argument('--fixed_embedding', action='store_true', help='Keep embedding layer fixed during training', default=False)
 parser.add_argument('--use_labels_as_covars', action='store_true', help='If labels/meta-data are provided, use as covariates in model', default=False)
 
 args = parser.parse_args()

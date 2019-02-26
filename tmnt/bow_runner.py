@@ -21,7 +21,7 @@ def get_wd_freqs(data_csr, n_terms, max_sample_size=10000):
     data = data_csr[:max_sample_size].asnumpy() # only take first 10000 to estimate frequencies
     sums = np.sum(data, axis=0)
     return list(sums)
-    
+
 
 def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, train_labels=None, test_labels=None, ctx=mx.cpu()):
     wd_freqs = get_wd_freqs(data_train_csr, len(vocabulary))
@@ -31,15 +31,15 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         train_labels = mx.nd.one_hot(train_labels, n_covars)
         test_labels = mx.nd.one_hot(test_labels, n_covars) if test_labels is not None else None
         model = \
-            MetaDataBowNTM(n_covars,vocabulary, args.hidden_dim, args.n_latent, emb_size, latent_distrib=args.latent_distribution,
-               coherence_reg_penalty=args.coherence_regularizer_penalty,
-               batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
+            MetaDataBowNTM(n_covars,vocabulary, args.hidden_dim, args.n_latent, emb_size,
+                           fixed_embedding=args.fixed_embedding, latent_distrib=args.latent_distribution,
+                           coherence_reg_penalty=args.coherence_regularizer_penalty,
+                           batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
     else:
         model = \
-            BowNTM(vocabulary, args.hidden_dim, args.n_latent, emb_size, latent_distrib=args.latent_distribution,
-               coherence_reg_penalty=args.coherence_regularizer_penalty,
-               batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
-    
+            BowNTM(vocabulary, args.hidden_dim, args.n_latent, emb_size, fixed_embedding=args.fixed_embedding, latent_distrib=args.latent_distribution,
+                   coherence_reg_penalty=args.coherence_regularizer_penalty,
+                   batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
     train_iter = mx.io.NDArrayIter(data_train_csr, train_labels, args.batch_size, last_batch_handle='discard', shuffle=True)
     train_dataloader = DataIterLoader(train_iter)    
     if data_test_csr is not None:
@@ -122,6 +122,10 @@ def train_bow_vae(args):
     if args.embedding_source:
         glove_twitter = nlp.embedding.create('glove', source=args.embedding_source)
         vocab.set_embedding(glove_twitter)
+        emb_size = len(vocab.embedding.idx_to_vec[0])
+        for word in vocab.embedding._idx_to_token:
+            if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                vocab.embedding[word] = mx.nd.random.normal(-1.0, 1.0, emb_size)
         
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx)
