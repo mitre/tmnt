@@ -35,6 +35,8 @@ python3 evaluate.py --model_dir model --eval_file data/test.feat.vec --train_fil
 
 # Experimental Rubric
 
+Below provides info and outline for experiments prior to Tech Talk on 03/14/2019
+
 ## Hyper-parameter Settings
 
 ### Learning Rate
@@ -49,12 +51,12 @@ Batch sizes should be in the range of 128 to 256 in most cases.
 
 Generally training for 100 to 200 epochs is sufficient.
 
-
 ### Experimental factors
 
 factor | values
 -------| ------
 dataset | 20news, IMDB, Yahoo
+latent dims | 20, 50, 100, 200
 latent distribution | gaussian, logistic_gaussian, vmf
 pre trained embeddings | fixed-glove, tuned-glove, none
 L1 regularizer (target sparsity) | 0, 0.2, 0.4, 0.75
