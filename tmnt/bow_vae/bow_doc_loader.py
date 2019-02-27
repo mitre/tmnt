@@ -136,7 +136,8 @@ def load_vocab(vocab_file):
     with io.open(vocab_file, 'r') as fp:
         for line in fp:
             els = line.split(' ')
-            w_dict[els[0]] = int(els[1])
+            cnt = int(els[1]) if len(els) > 1 else 1
+            w_dict[els[0].strip()] = cnt
     counter = nlp.data.Counter(w_dict)
     return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 

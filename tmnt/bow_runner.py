@@ -17,7 +17,7 @@ from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.utils.log_utils import logging_config
 
 
-def get_wd_freqs(data_csr, n_terms, max_sample_size=10000):
+def get_wd_freqs(data_csr, max_sample_size=10000000):
     data = data_csr[:max_sample_size].asnumpy() # only take first 10000 to estimate frequencies
     sums = np.sum(data, axis=0)
     return list(sums)

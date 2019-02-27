@@ -32,3 +32,31 @@ To evaluate a model, run:
 ```
 python3 evaluate.py --model_dir model --eval_file data/test.feat.vec --train_file data/train.feat.vec --vocab_file data/20news.vocab
 ```
+
+# Experimental Rubric
+
+## Hyper-parameter Settings
+
+### Learning Rate
+When using the `gaussian` or `logistic_gaussian` distribution the recommended default learning rate is in the range: `0.0001` to `0.001`.
+
+When using the `vmf` latent distribution, it is best to use a higher learning rate ranging from `0.01` to `0.1`
+
+### Batch Size
+Batch sizes should be in the range of 128 to 256 in most cases.
+
+### Number of Epochs
+
+Generally training for 100 to 200 epochs is sufficient.
+
+
+### Experimental factors
+
+factor | values
+-------| ------
+dataset | 20news, IMDB, Yahoo
+latent distribution | gaussian, logistic_gaussian, vmf
+pre trained embeddings | fixed-glove, tuned-glove, none
+L1 regularizer (target sparsity) | 0, 0.2, 0.4, 0.75
+WETC regularizer | 0, 10, 50, 100
+
