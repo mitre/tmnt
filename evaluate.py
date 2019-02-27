@@ -7,6 +7,7 @@ import mxnet as mx
 
 from tmnt.bow_vae.runtime import BowNTMInference
 from tmnt.coherence.pmi import PMI
+from tmnt.coherence.npmi import NPMI
 from tmnt.utils.ngram_helpers import UnigramReader, BigramReader
 
 from itertools import combinations
@@ -61,11 +62,6 @@ def evaluate(inference, data_loader, total_words, ctx=mx.cpu()):
     return perplexity
 
 
-def test_npmi(tr_file):
-    bigram_reader = BigramReader(tr_file)
-    pmi = PMI(bigram_reader.unigrams, bigram_reader.bigrams)
-    return pmi
-    
 
 if __name__ == "__main__":
     parser = setup_parser()
@@ -95,14 +91,16 @@ if __name__ == "__main__":
     #unigram_reader = UnigramReader(args.vocab_file)
     bigram_reader = BigramReader(args.train_file)
 
-    pmi = PMI(bigram_reader.unigrams, bigram_reader.bigrams)
+    #pmi = PMI(bigram_reader.unigrams, bigram_reader.bigrams, bigram_reader.n_docs)
+    npmi = NPMI(bigram_reader.unigrams, bigram_reader.bigrams, bigram_reader.n_docs)
 
     total_npmi = 0
     for i, words_per_topic in enumerate(top_k_words_per_topic):
         total_topic_npmi = 0
         N = len(words_per_topic)
         for (w1, w2) in combinations(sorted(words_per_topic), 2):
-            wp_npmi = pmi.npmi(w1, w2)
+            #wp_npmi = pmi.npmi(w1, w2)
+            wp_npmi = npmi.wd_id_pair_npmi(w1, w2)
             if verbose:
                 print("NPMI({}, {}) = {}".format(
                     inference_model.vocab.idx_to_token[w1],

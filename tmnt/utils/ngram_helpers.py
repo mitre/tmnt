@@ -15,8 +15,10 @@ class BigramReader(object):
     def __init__(self, training_file):
         self.bigrams = Counter()
         self.unigrams = Counter()
+        self.n_docs = 0
         with open(training_file) as f:
             for line in f:
+                self.n_docs += 1
                 label, *word_occurrences = line.strip().split()
                 counts = sorted(map(lambda s: int(s.split(":")[0]), word_occurrences))
                 for w in counts:
