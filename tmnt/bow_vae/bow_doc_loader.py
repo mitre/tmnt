@@ -13,20 +13,27 @@ import gluonnlp as nlp
 import mxnet as mx
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 
+from tmnt.preprocess.tokenizer import BasicTokenizer
+
 
 __all__ = ['DataIterLoader', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix']
 
 def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
+
     if pre_vocab:
         vocab = pre_vocab
     else:
-        counter = None
+        counter = None        
         for data in iter(stream):
             counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter = counter)
-            vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
+        vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                               bos_token=None, eos_token=None, min_freq=min_freq,
                               max_size=max_vocab_size)
-
+        orig_vocab_size = len(counter)
+        vocab_size = len(vocab)
+        print("Vocab size {}, reduced to {}".format(orig_vocab_size, vocab_size))
+    
+    
     def code(doc):
         """
         Parameters
@@ -37,7 +44,6 @@ def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_si
         -------
         Token ids with associated frequencies (sparse vector)
         """
-        ## just drop out of vocab items
         doc_tok_ids = [vocab[token] for token in doc if token in vocab]
         doc_counter = nlp.data.count_tokens(doc_tok_ids)        
         return sorted(doc_counter.items())
@@ -45,7 +51,7 @@ def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_si
     def code_corpus(corpus):
         return corpus.transform(code)
 
-    stream = stream.transform(code_corpus) 
+    stream = stream.transform(code_corpus)
     return stream, vocab
 
 
@@ -62,15 +68,19 @@ def collect_stream_as_sparse_matrix(stream, pre_vocab=None, min_freq=3, max_voca
     ndocs = 0
     total_num_words = 0
     for i,doc in enumerate(strm):
-        ndocs += 1
-        doc_toks = list(doc)[0]  # each document is a single sample        
-        inds, vs = zip(*doc_toks)
-        ln = len(doc_toks)
-        cumulative += ln
-        total_num_words += sum(vs)
-        indptrs.append(cumulative)
-        values.extend(vs)
-        indices.extend(inds)
+        doc_li = list(doc)
+        if len(doc_li) > 0:
+            doc_toks = doc_li[0]  # each document is a single sample
+            if len(doc_toks) < 2:
+                continue
+            ndocs += 1            
+            inds, vs = zip(*doc_toks)
+            ln = len(doc_toks)
+            cumulative += ln
+            total_num_words += sum(vs)
+            indptrs.append(cumulative)
+            values.extend(vs)
+            indices.extend(inds)
     csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
     return csr_mat, vocab, total_num_words
 
@@ -116,6 +126,7 @@ class BowDataSet(SimpleDatasetStream):
             dataset=CorpusDataset,
             file_pattern = self._file_pattern,
             file_sampler=sampler,
+            tokenizer=BasicTokenizer(),
             sample_splitter=NullSplitter())
         
 

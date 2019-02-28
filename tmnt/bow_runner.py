@@ -17,14 +17,15 @@ from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.utils.log_utils import logging_config
 
 
-def get_wd_freqs(data_csr, max_sample_size=10000000):
-    data = data_csr[:max_sample_size].asnumpy() # only take first 10000 to estimate frequencies
+def get_wd_freqs(data_csr, max_sample_size=10000):
+    sample_size = min(max_sample_size, data_csr.shape[0])
+    data = data_csr[:sample_size].asnumpy() # only take first 10000 to estimate frequencies - but should select at RANDOM
     sums = np.sum(data, axis=0)
     return list(sums)
 
 
 def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, train_labels=None, test_labels=None, ctx=mx.cpu()):
-    wd_freqs = get_wd_freqs(data_train_csr, len(vocabulary))
+    wd_freqs = get_wd_freqs(data_train_csr)
     emb_size = vocabulary.embedding.idx_to_vec[0].size if vocabulary.embedding else args.embedding_size
     if args.use_labels_as_covars and train_labels is not None:
         n_covars = mx.nd.max(train_labels).asscalar() + 1
@@ -115,9 +116,12 @@ def train_bow_vae(args):
             collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file)
     else:
         tr_dataset = BowDataSet(args.train_dir, args.file_pat)    
-        tr_csr_mat, vocab, total_tr_words = collect_stream_as_sparse_matrix(tr_dataset, max_vocab_size=2000)
-        tst_dataset = BowDataSet(args.test_dir, args.file_pat)
-        tst_csr_mat, _, _, total_tst_words = collect_stream_as_sparse_matrix(tst_dataset, pre_vocab=vocab)
+        tr_csr_mat, vocab, total_tr_words = collect_stream_as_sparse_matrix(tr_dataset, max_vocab_size=args.max_vocab_size)
+        tr_labels = None
+        tst_labels = None
+        if args.test_dir:
+            tst_dataset = BowDataSet(args.test_dir, args.file_pat)
+            tst_csr_mat, _, total_tst_words = collect_stream_as_sparse_matrix(tst_dataset, pre_vocab=vocab)
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
     if args.embedding_source:
         glove_twitter = nlp.embedding.create('glove', source=args.embedding_source)
