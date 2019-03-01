@@ -232,6 +232,7 @@ default_stop_words = \
         'described',
         'despite',
         'did',
+        'didn',
         'different',
         'do',
         'does',

@@ -23,9 +23,14 @@ def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_si
     if pre_vocab:
         vocab = pre_vocab
     else:
-        counter = None        
+        counter = None
+        i = 0
         for data in iter(stream):
             counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter = counter)
+            i += 1
+            if i % 100 == 0:
+                print('.', end='', flush=True)
+        print("[ {} total documents processed .. ]".format(i))
         vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                               bos_token=None, eos_token=None, min_freq=min_freq,
                               max_size=max_vocab_size)
