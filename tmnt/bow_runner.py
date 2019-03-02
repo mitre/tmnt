@@ -15,6 +15,7 @@ import gluonnlp as nlp
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.utils.log_utils import logging_config
+from tmnt.coherence.npmi import EvaluateNPMI
 
 
 def get_wd_freqs(data_csr, max_sample_size=10000):
@@ -80,6 +81,8 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
             model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
         evaluate(model, test_dataloader, total_tst_words, args, ctx)
     log_top_k_words_per_topic(model, vocabulary, args.n_latent, 10)
+    coherence_file = args.tst_vec_file if args.tst_vec_file else args.tr_vec_file
+    log_coherence(model, vocabulary, args.n_latent, 10, coherence_file)
     return model
 
 
@@ -95,6 +98,16 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
     perplexity = math.exp(total_rec_loss / total_words)
     logging.info("TEST/VALIDATION Perplexity = {}".format(perplexity))
     return perplexity
+
+
+def log_coherence(model, vocab, num_topics, k, test_file):
+    w = model.decoder.collect_params().get('weight').data()
+    sorted_ids = w.argsort(axis=0, is_ascend=False)
+    num_topics = min(num_topics, sorted_ids.shape[-1])
+    top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
+    npmi_eval = EvaluateNPMI(top_k_words_per_topic)
+    npmi = npmi_eval.evaluate_sp_vec(test_file)
+    logging.info("Test Coherence: {}".format(npmi))
 
 
 def log_top_k_words_per_topic(model, vocab, num_topics, k):
