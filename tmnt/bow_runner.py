@@ -58,10 +58,10 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         tr_size = 0
         for i, (data, labels) in enumerate(train_dataloader):
             tr_size += data.shape[0]
-            data = data.as_in_context(ctx)
             if labels is None or labels.size == 0:
                 labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-            labels = labels.as_in_context(ctx)
+                labels = labels.as_in_context(ctx)
+            data = data.as_in_context(ctx)
             with autograd.record():
                 elbo, rec_loss, l1_pen, _ = model(data, labels) if args.use_labels_as_covars else model(data)
                 elbo_mean = elbo.mean()
@@ -79,7 +79,8 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
             l1_coef = l1_coef * math.pow(2.0, args.target_sparsity - ratio_small_weights)
             logging.info("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(l1_coef, ratio_small_weights))
             model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
-        evaluate(model, test_dataloader, total_tst_words, args, ctx)
+        if (epoch + 1) % args.eval_freq == 0:
+            evaluate(model, test_dataloader, total_tst_words, args, ctx)
     log_top_k_words_per_topic(model, vocabulary, args.n_latent, 10)
     coherence_file = args.tst_vec_file if args.tst_vec_file else args.tr_vec_file
     log_coherence(model, vocabulary, args.n_latent, 10, data_test_csr)
@@ -89,10 +90,10 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
 def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
     total_rec_loss = 0
     for i, (data,labels) in enumerate(data_loader):
-        data = data.as_in_context(ctx)
         if labels is None:            
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-        labels = labels.as_in_context(ctx)
+            labels = labels.as_in_context(ctx)
+        data = data.as_in_context(ctx)
         _, rec_loss, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         total_rec_loss += rec_loss.sum().asscalar()
     perplexity = math.exp(total_rec_loss / total_words)
