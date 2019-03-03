@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description='Train a bag-of-words representation topic model as Variational AutoEncoder')
 parser.add_argument('--train_dir', type=str, help='Directory containing files representing the input TRAINING data')
 parser.add_argument('--test_dir', type=str, help='Directory containing files representing the input TEST data')
-parser.add_argument('--file_pat', type=str, help='Regexp file pattern to match for documents (for TRAINING and TESTING data directories)')
+parser.add_argument('--file_pat', type=str, help='Regexp file pattern to match for documents (for TRAINING and TESTING data directories), [default = \'*\']', default='*')
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
 parser.add_argument('--eval_freq', type=int, default=1, help='Evaluation frequency (against test data) during training')
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')

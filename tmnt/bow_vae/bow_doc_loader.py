@@ -8,6 +8,7 @@ for efficient neural variational model training.
 import io
 import itertools
 import os
+import logging
 
 import gluonnlp as nlp
 import mxnet as mx
@@ -19,7 +20,6 @@ from tmnt.preprocess.tokenizer import BasicTokenizer
 __all__ = ['DataIterLoader', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix']
 
 def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
-
     if pre_vocab:
         vocab = pre_vocab
     else:
@@ -29,14 +29,14 @@ def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_si
             counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter = counter)
             i += 1
             if i % 100 == 0:
-                print('.', end='', flush=True)
-        print("[ {} total documents processed .. ]".format(i))
+                logging.info("[ Pre-processed {} documents from training collection ]".format(i))
+        logging.info("[ {} total documents processed .. ]".format(i))
         vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                               bos_token=None, eos_token=None, min_freq=min_freq,
                               max_size=max_vocab_size)
         orig_vocab_size = len(counter)
         vocab_size = len(vocab)
-        print("Vocab size {}, reduced to {}".format(orig_vocab_size, vocab_size))
+        logging.info("[ Original vocab size {}, reduced to {} ]".format(orig_vocab_size, vocab_size))
     
     
     def code(doc):
@@ -171,7 +171,7 @@ def file_to_sp_vec(sp_file, voc_size):
             els = line.split(' ')
             labels.append(int(els[0]))
             els_sp = list(map(lambda e: e.split(':'), els))
-            pairs = sorted( [ (int(el[0]), int(el[1]) ) for el in els_sp[1:] ] )
+            pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp[1:] ] )
             inds, vs = zip(*pairs)
             cumulative += len(pairs)
             total_num_words += sum(vs)

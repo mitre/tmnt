@@ -11,10 +11,12 @@ import numpy as np
 from mxnet import autograd
 from mxnet import gluon
 import gluonnlp as nlp
+from pathlib import Path
 
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.utils.log_utils import logging_config
+from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
 from tmnt.coherence.npmi import EvaluateNPMI
 
 
@@ -125,18 +127,31 @@ def train_bow_vae(args):
     i_dt = datetime.datetime.now()
     train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
     logging_config(folder=train_out_dir, name='bow_ntm', level=logging.INFO)
-    tr_file = args.train_dir
+    sp_vec_data = False
+    ## if the vocab file and training files are available, use those
     if args.vocab_file and args.tr_vec_file:
+        vpath = Path(args.vocab_file)
+        tpath = Path(args.tr_vec_file)
+        if vpath.is_file() and tpath.is_file():
+            sp_vec_data = True
+    if sp_vec_data:
+        logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
         vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels = \
             collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file)
     else:
+        logging.info("Loading and pre-processing text data found in {}".format(args.train_dir))
         tr_dataset = BowDataSet(args.train_dir, args.file_pat)    
         tr_csr_mat, vocab, total_tr_words = collect_stream_as_sparse_matrix(tr_dataset, max_vocab_size=args.max_vocab_size)
         tr_labels = None
         tst_labels = None
+        if args.vocab_file and args.tr_vec_file:
+            export_sparse_matrix(tr_csr_mat, args.tr_vec_file)
+            export_vocab(vocab, args.vocab_file)
         if args.test_dir:
             tst_dataset = BowDataSet(args.test_dir, args.file_pat)
             tst_csr_mat, _, total_tst_words = collect_stream_as_sparse_matrix(tst_dataset, pre_vocab=vocab)
+            if args.vocab_file and args.tst_vec_file:
+                export_sparse_matrix(tst_csr_mat, args.tst_vec_file)
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
     if args.embedding_source:
         glove_twitter = nlp.embedding.create('glove', source=args.embedding_source)
