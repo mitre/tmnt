@@ -362,6 +362,7 @@ default_stop_words = \
         'liked',
         'likely',
         'little',
+        'lol',
         'look',
         'looking',
         'looks',
