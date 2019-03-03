@@ -127,6 +127,7 @@ def train_bow_vae(args):
     i_dt = datetime.datetime.now()
     train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
     logging_config(folder=train_out_dir, name='bow_ntm', level=logging.INFO)
+    logging.info(args)
     sp_vec_data = False
     ## if the vocab file and training files are available, use those
     if args.vocab_file and args.tr_vec_file:
