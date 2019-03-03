@@ -82,7 +82,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         evaluate(model, test_dataloader, total_tst_words, args, ctx)
     log_top_k_words_per_topic(model, vocabulary, args.n_latent, 10)
     coherence_file = args.tst_vec_file if args.tst_vec_file else args.tr_vec_file
-    log_coherence(model, vocabulary, args.n_latent, 10, coherence_file)
+    log_coherence(model, vocabulary, args.n_latent, 10, data_test_csr)
     return model
 
 
@@ -100,13 +100,14 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
     return perplexity
 
 
-def log_coherence(model, vocab, num_topics, k, test_file):
+def log_coherence(model, vocab, num_topics, k, test_data):
     w = model.decoder.collect_params().get('weight').data()
     sorted_ids = w.argsort(axis=0, is_ascend=False)
     num_topics = min(num_topics, sorted_ids.shape[-1])
     top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
     npmi_eval = EvaluateNPMI(top_k_words_per_topic)
-    npmi = npmi_eval.evaluate_sp_vec(test_file)
+    #npmi = npmi_eval.evaluate_sp_vec(test_file)
+    npmi = npmi_eval.evaluate_csr_mat(test_data)
     logging.info("Test Coherence: {}".format(npmi))
 
 
