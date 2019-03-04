@@ -52,7 +52,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
     if (args.hybridize):
         model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
-    l1_coef = args.init_sparsity_pen
+    l1_coef = args.init_sparsity_pen    
     for epoch in range(args.epochs):
         epoch_loss = 0
         total_rec_loss = 0
@@ -74,18 +74,24 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
             epoch_loss += elbo_mean.asscalar()            
         perplexity = math.exp(total_rec_loss / total_tr_words)
         logging.info("Epoch {}: Loss = {}, Training perplexity = {} [ L1 Pen = {} ] [ Rec loss = {}]".
-                     format(epoch, epoch_loss / tr_size, perplexity, total_l1_pen/tr_size, total_rec_loss/tr_size))
+                     format(epoch, epoch_loss / tr_size, perplexity, total_l1_pen/tr_size, total_rec_loss/tr_size))        
         if args.target_sparsity > 0.0:            
             dec_weights = model.decoder.collect_params().get('weight').data().abs()
             ratio_small_weights = (dec_weights < args.sparsity_threshold).sum().asscalar() / dec_weights.size
             l1_coef = l1_coef * math.pow(2.0, args.target_sparsity - ratio_small_weights)
             logging.info("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(l1_coef, ratio_small_weights))
             model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
-        if (epoch + 1) % args.eval_freq == 0:
-            evaluate(model, test_dataloader, total_tst_words, args, ctx)
+        if data_test_csr is not None and (epoch + 1) % args.eval_freq == 0:
+            perplexity = evaluate(model, test_dataloader, total_tst_words, args, ctx)
+            if args.trace_file:
+                otype = 'a+' if epoch >= args.eval_freq else 'w+'
+                with io.open(args.trace_file, otype) as fp:
+                    if otype == 'w+':
+                        fp.write("Epoch,PPL,NPMI\n")
+                    npmi = compute_coherence(model, vocabulary, args.n_latent, 10, data_test_csr)
+                    fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
     log_top_k_words_per_topic(model, vocabulary, args.n_latent, 10)
-    coherence_file = args.tst_vec_file if args.tst_vec_file else args.tr_vec_file
-    log_coherence(model, vocabulary, args.n_latent, 10, data_test_csr)
+    compute_coherence(model, vocabulary, args.n_latent, 10, data_test_csr)
     return model
 
 
@@ -103,7 +109,7 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
     return perplexity
 
 
-def log_coherence(model, vocab, num_topics, k, test_data):
+def compute_coherence(model, vocab, num_topics, k, test_data):
     w = model.decoder.collect_params().get('weight').data()
     sorted_ids = w.argsort(axis=0, is_ascend=False)
     num_topics = min(num_topics, sorted_ids.shape[-1])
@@ -112,6 +118,7 @@ def log_coherence(model, vocab, num_topics, k, test_data):
     #npmi = npmi_eval.evaluate_sp_vec(test_file)
     npmi = npmi_eval.evaluate_csr_mat(test_data)
     logging.info("Test Coherence: {}".format(npmi))
+    return npmi
 
 
 def log_top_k_words_per_topic(model, vocab, num_topics, k):

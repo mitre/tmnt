@@ -29,6 +29,7 @@ parser.add_argument('--sparsity_threshold', type=float, default=1e-3,
 parser.add_argument('--init_sparsity_pen', type=float, default = 0.0)
 parser.add_argument('--hidden_dim', type=int, help='Dimension of hidden layers in encoder and network (default 200)', default=200)
 parser.add_argument('--save_dir', type=str, default='_experiments')
+parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch, perplexity, NPMI) into a separate file for producing training curves')
 parser.add_argument('--model_dir', type=str, default=None, help='Save final model and associated meta-data to this directory (default None)')
 parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
 parser.add_argument('--coherence_regularizer_penalty', type=float, help='Use word-embedding coherence regularization', default=0.0)
