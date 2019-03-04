@@ -14,14 +14,20 @@ class GaussianLatentDistribution(LatentDistribution):
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
             self.lv_encoder = gluon.nn.Dense(units = n_latent, activation=None)
+            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
+            self.lv_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
+        self.mu_bn.collect_params().setattr('grad_req', 'null')
+        self.lv_bn.collect_params().setattr('grad_req', 'null')        
 
     def _get_kl_term(self, F, mu, lv):
         return -0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
 
     def hybrid_forward(self, F, data, batch_size):
         mu = self.mu_encoder(data)
+        mu_bn = self.mu_bn(mu)
         lv = self.lv_encoder(data)
-        z = self._get_gaussian_sample(F, mu, lv, batch_size)
-        KL = self._get_kl_term(F, mu, lv)
+        lv_bn = self.lv_bn(lv)
+        z = self._get_gaussian_sample(F, mu_bn, lv_bn, batch_size)
+        KL = self._get_kl_term(F, mu_bn, lv_bn)
         return z, KL
 

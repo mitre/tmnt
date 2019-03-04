@@ -165,9 +165,13 @@ def train_bow_vae(args):
         glove_twitter = nlp.embedding.create('glove', source=args.embedding_source)
         vocab.set_embedding(glove_twitter)
         emb_size = len(vocab.embedding.idx_to_vec[0])
+        num_oov = 0
         for word in vocab.embedding._idx_to_token:
             if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                vocab.embedding[word] = mx.nd.random.normal(-1.0, 1.0, emb_size)
+                logging.info("Term {} is OOV".format(word))
+                num_oov += 1
+                vocab.embedding[word] = mx.nd.random.normal(0, 1.0, emb_size)
+        logging.info(">> {} Words did not appear in embedding source {}".format(num_oov, args.embedding_source))
         
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx)

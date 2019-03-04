@@ -120,12 +120,12 @@ class BowNTM(HybridBlock):
 
 class MetaDataBowNTM(BowNTM):
 
-    def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size, latent_distrib='logistic_gaussian',
+    def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
-        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, latent_distrib, init_l1, coherence_reg_penalty, batch_size, wd_freqs, ctx)
+        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1, coherence_reg_penalty, batch_size, wd_freqs, ctx)
         self.n_covars = n_covars
         with self.name_scope():
-            self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=False)
+            self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=True)
 
     def hybrid_forward(self, F, data, labels, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size

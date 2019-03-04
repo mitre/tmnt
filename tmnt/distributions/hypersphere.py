@@ -18,17 +18,19 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         #self.kld = mx.nd.broadcast_to(self.kld_v, shape=(batch_size,), ctx=ctx)
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
-
+            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
+        self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     def hybrid_forward(self, F, data, batch_size):
         mu = self.mu_encoder(data)
         #print("Shape mu = {}".format(mu.shape))        
-        norm = F.norm(mu, axis=1, keepdims=True)
+        #norm = F.norm(mu, axis=1, keepdims=True)
         #print("Shape norm = {}".format(norm.shape))                
-        mu = F.broadcast_div(mu, norm)
+        #mu = F.broadcast_div(mu, norm)
+        mu_bn = self.mu_bn(mu)
         #kld = self.kld
         kld = F.broadcast_to(self.kld_v, shape=(batch_size,))
-        vec = self._get_hypersphere_sample(F, mu, batch_size)
+        vec = self._get_hypersphere_sample(F, mu_bn, batch_size)
         return vec, kld
     
         
