@@ -29,6 +29,7 @@ def setup_parser():
     parser.add_argument('--vocab_file', type=str, required=True, help='Vocabulary file associated with sparse vector data')
     parser.add_argument('--model_dir', required=True, type=Path,
                         help='The directory where the params, specs, and vocab should be found.')
+    parser.add_argument('--num_topics', type=int, required=True, help='The number of topics')
     return parser
 
 def read_vector_file(file):
@@ -75,7 +76,7 @@ if __name__ == "__main__":
     inference_model = BowNTMInference(param_file, specs_file, vocab_file,
                                       ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
 
-    top_k_words_per_topic = get_top_k_word_idx_per_topic(inference_model, 100, 10)
+    top_k_words_per_topic = get_top_k_word_idx_per_topic(inference_model, 100, args.num_topics)
 
     encoded, labels = inference_model.encode_vec_file(args.eval_file)
     encodings = np.array([doc.asnumpy() for doc in encoded])
