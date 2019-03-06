@@ -52,11 +52,8 @@ class BowNTM(HybridBlock):
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         if vocabulary.embedding:            
             emb = vocabulary.embedding.idx_to_vec.transpose()
-            #g_noise = mx.nd.random.normal(loc=0.0, scale=0.1, shape=emb_1.shape)
-            #emb = emb_1 + g_noise
             emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
             emb_norm = emb / emb_norm_val
-            #print("Emb norm = {} with sum = {}".format(emb_norm, emb_norm.sum()))
             self.embedding.weight.set_data(emb_norm)
             if fixed_embedding:
                 self.embedding.collect_params().setattr('grad_req', 'null')
@@ -99,7 +96,7 @@ class BowNTM(HybridBlock):
         y = F.softmax(dec_out, axis=1)
 
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
-        recon_loss = -F.sparse.sum( data * F.log(y+1e-12))
+        recon_loss = -F.sparse.sum( data * F.log(y+1e-12), axis=0, exclude=True )
 
         i_loss = recon_loss + l1_pen + KL
         
@@ -115,7 +112,7 @@ class BowNTM(HybridBlock):
             final_loss = i_loss + c
         else:
             final_loss = i_loss
-        return final_loss, recon_loss, l1_pen, y
+        return final_loss, KL, recon_loss, l1_pen, y
 
 
 class MetaDataBowNTM(BowNTM):
@@ -141,7 +138,7 @@ class MetaDataBowNTM(BowNTM):
 
         ###  Lots of cut and pasting ... refactor this!!
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
-        recon_loss = -F.sparse.sum( data * F.log(y+1e-12))
+        recon_loss = -F.sparse.sum( data * F.log(y+1e-12), axis=0, exclude=True)
         i_loss = recon_loss + l1_pen + KL
         
         ## coherence-focused regularization term
@@ -156,7 +153,7 @@ class MetaDataBowNTM(BowNTM):
             final_loss = i_loss + c
         else:
             final_loss = i_loss
-        return final_loss, recon_loss, l1_pen, y
+        return final_loss, KL, recon_loss, l1_pen, y
     
         
 class CovariateModel(HybridBlock):

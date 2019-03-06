@@ -37,13 +37,14 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         model = \
             MetaDataBowNTM(n_covars,vocabulary, args.hidden_dim, args.n_latent, emb_size,
                            fixed_embedding=args.fixed_embedding, latent_distrib=args.latent_distribution,
-                           coherence_reg_penalty=args.coherence_regularizer_penalty,
+                           init_l1=args.init_sparsity_pen, coherence_reg_penalty=args.coherence_regularizer_penalty,
                            batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
     else:
         model = \
             BowNTM(vocabulary, args.hidden_dim, args.n_latent, emb_size, fixed_embedding=args.fixed_embedding, latent_distrib=args.latent_distribution,
-                   coherence_reg_penalty=args.coherence_regularizer_penalty,
+                   init_l1=args.init_sparsity_pen, coherence_reg_penalty=args.coherence_regularizer_penalty,
                    batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
+
     train_iter = mx.io.NDArrayIter(data_train_csr, train_labels, args.batch_size, last_batch_handle='discard', shuffle=True)
     train_dataloader = DataIterLoader(train_iter)    
     if data_test_csr is not None:
@@ -57,6 +58,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         epoch_loss = 0
         total_rec_loss = 0
         total_l1_pen = 0
+        total_kl_loss = 0
         tr_size = 0
         for i, (data, labels) in enumerate(train_dataloader):
             tr_size += data.shape[0]
@@ -65,16 +67,24 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
                 labels = labels.as_in_context(ctx)
             data = data.as_in_context(ctx)
             with autograd.record():
-                elbo, rec_loss, l1_pen, _ = model(data, labels) if args.use_labels_as_covars else model(data)
+                elbo, kl_loss, rec_loss, l1_pen, _ = model(data, labels) if args.use_labels_as_covars else model(data)
                 elbo_mean = elbo.mean()
             elbo_mean.backward()
             trainer.step(data.shape[0]) ## step based on batch size
+            total_kl_loss += kl_loss.sum().asscalar()
             total_l1_pen += l1_pen.sum().asscalar()
             total_rec_loss += rec_loss.sum().asscalar()
-            epoch_loss += elbo_mean.asscalar()            
+            epoch_loss += elbo.sum().asscalar()
+            #epoch_loss += elbo_mean.asscalar()            
         perplexity = math.exp(total_rec_loss / total_tr_words)
-        logging.info("Epoch {}: Loss = {}, Training perplexity = {} [ L1 Pen = {} ] [ Rec loss = {}]".
-                     format(epoch, epoch_loss / tr_size, perplexity, total_l1_pen/tr_size, total_rec_loss/tr_size))        
+        logging.info("Epoch {}: Loss = {}, Training perplexity = {:6.2f} [ KL loss = {:8.4f} ] [ L1 loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Coherence loss = {:8.4f} ]".
+                     format(epoch,
+                            epoch_loss / tr_size,
+                            perplexity,
+                            total_kl_loss / tr_size,
+                            total_l1_pen / tr_size,
+                            total_rec_loss / tr_size,
+                            ((epoch_loss - total_kl_loss - total_rec_loss - total_l1_pen) / tr_size)))
         if args.target_sparsity > 0.0:            
             dec_weights = model.decoder.collect_params().get('weight').data().abs()
             ratio_small_weights = (dec_weights < args.sparsity_threshold).sum().asscalar() / dec_weights.size
@@ -102,7 +112,7 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
             labels = labels.as_in_context(ctx)
         data = data.as_in_context(ctx)
-        _, rec_loss, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
+        _, kl_loss, rec_loss, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         total_rec_loss += rec_loss.sum().asscalar()
     perplexity = math.exp(total_rec_loss / total_words)
     logging.info("TEST/VALIDATION Perplexity = {}".format(perplexity))
@@ -115,7 +125,6 @@ def compute_coherence(model, vocab, num_topics, k, test_data):
     num_topics = min(num_topics, sorted_ids.shape[-1])
     top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
     npmi_eval = EvaluateNPMI(top_k_words_per_topic)
-    #npmi = npmi_eval.evaluate_sp_vec(test_file)
     npmi = npmi_eval.evaluate_csr_mat(test_data)
     logging.info("Test Coherence: {}".format(npmi))
     return npmi

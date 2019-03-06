@@ -13,8 +13,8 @@ parser.add_argument('--eval_freq', type=int, default=1, help='Evaluation frequen
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
 parser.add_argument('--lr',type=float, help='Learning rate', default=0.0001)
 parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
-parser.add_argument('--batch_size',type=int, help='Training batch size', default=32)
-parser.add_argument('--n_latent', type=int, help='Number of latent dimensions (topics)', default=32)
+parser.add_argument('--batch_size',type=int, help='Training batch size', default=200)
+parser.add_argument('--n_latent', type=int, help='Number of latent dimensions (topics)', default=20)
 parser.add_argument('--latent_distribution', type=str, help='Latent distribution (logistic_gaussian|vmf|gaussian)',
                     default='logistic_gaussian')
 parser.add_argument('--kappa', type=float, default=100.0, help='Kappa value for vMF latent distribution')
@@ -37,6 +37,7 @@ parser.add_argument('--embedding_source', type=str, help='Use pre-trained embedd
 parser.add_argument('--embedding_size', type=int, help='Embedding size when no pre-trained embedding is used (default 300)', default=300)
 parser.add_argument('--fixed_embedding', action='store_true', help='Keep embedding layer fixed during training', default=False)
 parser.add_argument('--use_labels_as_covars', action='store_true', help='If labels/meta-data are provided, use as covariates in model', default=False)
+parser.add_argument('--topic_seed_file', type=str, default=None, help='Seed topic terms')
 
 args = parser.parse_args()
 
