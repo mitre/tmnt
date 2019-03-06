@@ -38,6 +38,9 @@ class BowNTM(HybridBlock):
                                       shape=(1,),
                                       init=mx.init.Constant([init_l1]), 
                                       differentiable=False)
+            ## Add in topic seed constraints
+            ## self.seed_matrix = ....
+            ## dimensions are t' x s' (where t' is the number of seed topics provided and s' the number of seed words for each topic)            
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
             self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
