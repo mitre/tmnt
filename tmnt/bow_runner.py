@@ -30,6 +30,7 @@ def get_wd_freqs(data_csr, max_sample_size=10000):
 def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, total_tst_words=0, train_labels=None, test_labels=None, ctx=mx.cpu()):
     wd_freqs = get_wd_freqs(data_train_csr)
     emb_size = vocabulary.embedding.idx_to_vec[0].size if vocabulary.embedding else args.embedding_size
+    l1_coef = args.init_sparsity_pen if args.target_sparsity > 0.0 else 0.0
     if args.use_labels_as_covars and train_labels is not None:
         n_covars = mx.nd.max(train_labels).asscalar() + 1
         train_labels = mx.nd.one_hot(train_labels, n_covars)
@@ -37,12 +38,12 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         model = \
             MetaDataBowNTM(n_covars,vocabulary, args.hidden_dim, args.n_latent, emb_size,
                            fixed_embedding=args.fixed_embedding, latent_distrib=args.latent_distribution,
-                           init_l1=args.init_sparsity_pen, coherence_reg_penalty=args.coherence_regularizer_penalty,
+                           init_l1=l1_coef, coherence_reg_penalty=args.coherence_regularizer_penalty,
                            batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
     else:
         model = \
             BowNTM(vocabulary, args.hidden_dim, args.n_latent, emb_size, fixed_embedding=args.fixed_embedding, latent_distrib=args.latent_distribution,
-                   init_l1=args.init_sparsity_pen, coherence_reg_penalty=args.coherence_regularizer_penalty,
+                   init_l1=l1_coef, coherence_reg_penalty=args.coherence_regularizer_penalty,
                    batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
 
     train_iter = mx.io.NDArrayIter(data_train_csr, train_labels, args.batch_size, last_batch_handle='discard', shuffle=True)
@@ -53,7 +54,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
     if (args.hybridize):
         model.hybridize(static_alloc=True)
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
-    l1_coef = args.init_sparsity_pen    
+    
     for epoch in range(args.epochs):
         epoch_loss = 0
         total_rec_loss = 0
