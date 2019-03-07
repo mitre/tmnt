@@ -15,6 +15,7 @@ from pathlib import Path
 
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
+from tmnt.bow_vae.topic_seeds import get_seed_matrix_from_file
 from tmnt.utils.log_utils import logging_config
 from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
 from tmnt.coherence.npmi import EvaluateNPMI
@@ -31,6 +32,9 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
     wd_freqs = get_wd_freqs(data_train_csr)
     emb_size = vocabulary.embedding.idx_to_vec[0].size if vocabulary.embedding else args.embedding_size
     l1_coef = args.init_sparsity_pen if args.target_sparsity > 0.0 else 0.0
+    seed_matrix = None
+    if args.topic_seed_file:
+        seed_matrix = get_seed_matrix_from_file(args.topic_seed_file, vocabulary)
     if args.use_labels_as_covars and train_labels is not None:
         n_covars = mx.nd.max(train_labels).asscalar() + 1
         train_labels = mx.nd.one_hot(train_labels, n_covars)
@@ -44,7 +48,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         model = \
             BowNTM(vocabulary, args.hidden_dim, args.n_latent, emb_size, fixed_embedding=args.fixed_embedding, latent_distrib=args.latent_distribution,
                    init_l1=l1_coef, coherence_reg_penalty=args.coherence_regularizer_penalty,
-                   batch_size=args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
+                   batch_size=args.batch_size, wd_freqs=wd_freqs, seed_mat=seed_matrix, ctx=ctx)
 
     train_iter = mx.io.NDArrayIter(data_train_csr, train_labels, args.batch_size, last_batch_handle='discard', shuffle=True)
     train_dataloader = DataIterLoader(train_iter)    
@@ -60,6 +64,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
         total_rec_loss = 0
         total_l1_pen = 0
         total_kl_loss = 0
+        total_entropies_loss = 0
         tr_size = 0
         for i, (data, labels) in enumerate(train_dataloader):
             tr_size += data.shape[0]
@@ -68,24 +73,27 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
                 labels = labels.as_in_context(ctx)
             data = data.as_in_context(ctx)
             with autograd.record():
-                elbo, kl_loss, rec_loss, l1_pen, _ = model(data, labels) if args.use_labels_as_covars else model(data)
+                elbo, kl_loss, rec_loss, l1_pen, entropies, _ = model(data, labels) if args.use_labels_as_covars else model(data)
                 elbo_mean = elbo.mean()
             elbo_mean.backward()
             trainer.step(data.shape[0]) ## step based on batch size
             total_kl_loss += kl_loss.sum().asscalar()
             total_l1_pen += l1_pen.sum().asscalar()
             total_rec_loss += rec_loss.sum().asscalar()
+            if entropies is not None:
+                total_entropies_loss += entropies.sum().asscalar()
             epoch_loss += elbo.sum().asscalar()
             #epoch_loss += elbo_mean.asscalar()            
-        perplexity = math.exp(total_rec_loss / total_tr_words)
-        logging.info("Epoch {}: Loss = {}, Training perplexity = {:6.2f} [ KL loss = {:8.4f} ] [ L1 loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Coherence loss = {:8.4f} ]".
+        #perplexity = math.exp(total_rec_loss / total_tr_words)
+        logging.info("Epoch {}: Loss = {}, [ KL loss = {:8.4f} ] [ L1 loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Coherence loss = {:8.4f} ] [ Entropy losss = {:8.4f} ]".
                      format(epoch,
                             epoch_loss / tr_size,
-                            perplexity,
+                            #perplexity,
                             total_kl_loss / tr_size,
                             total_l1_pen / tr_size,
                             total_rec_loss / tr_size,
-                            ((epoch_loss - total_kl_loss - total_rec_loss - total_l1_pen) / tr_size)))
+                            total_entropies_loss / tr_size,
+                            ((epoch_loss - total_kl_loss - total_rec_loss - total_l1_pen - total_entropies_loss) / tr_size)))
         if args.target_sparsity > 0.0:            
             dec_weights = model.decoder.collect_params().get('weight').data().abs()
             ratio_small_weights = (dec_weights < args.sparsity_threshold).sum().asscalar() / dec_weights.size
@@ -103,6 +111,7 @@ def train(args, vocabulary, data_train_csr, total_tr_words, data_test_csr=None, 
                     fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
     log_top_k_words_per_topic(model, vocabulary, args.n_latent, 10)
     compute_coherence(model, vocabulary, args.n_latent, 10, data_test_csr)
+    analyze_seed_matrix(model, seed_matrix)
     return model
 
 
@@ -113,7 +122,7 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
             labels = labels.as_in_context(ctx)
         data = data.as_in_context(ctx)
-        _, kl_loss, rec_loss, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
+        _, kl_loss, rec_loss, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         total_rec_loss += rec_loss.sum().asscalar()
     perplexity = math.exp(total_rec_loss / total_words)
     logging.info("TEST/VALIDATION Perplexity = {}".format(perplexity))
@@ -129,6 +138,24 @@ def compute_coherence(model, vocab, num_topics, k, test_data):
     npmi = npmi_eval.evaluate_csr_mat(test_data)
     logging.info("Test Coherence: {}".format(npmi))
     return npmi
+
+
+def analyze_seed_matrix(model, seed_matrix):
+    w = model.decoder.collect_params().get('weight').data()
+    ts = mx.nd.take(w, seed_matrix)   ## should have shape (T', S', T)
+    ts_sums = mx.nd.sum(ts, axis=1)
+    ts_probs = mx.nd.softmax(ts_sums)
+    print("ts_prob = {}".format(ts_probs))
+    entropies = -mx.nd.sum(ts_probs * mx.nd.log(ts_probs), axis=1)
+    print("entropies = {}".format(entropies))
+    seed_means = mx.nd.mean(ts, axis=1)  # (G,K)
+    seed_pr = mx.nd.softmax(seed_means)
+    per_topic_entropy_1 = -mx.nd.sum(seed_pr * mx.nd.log(seed_pr), axis=0)
+    print("per_topic_entropy = {}".format(per_topic_entropy_1))
+    total_topic_sum_means = mx.nd.sum(seed_means, axis=0)
+    print("sum means = {}".format(total_topic_sum_means))    
+    per_topic_entropy = mx.nd.sum(per_topic_entropy_1 * total_topic_sum_means)
+    
 
 
 def log_top_k_words_per_topic(model, vocab, num_topics, k):
@@ -182,7 +209,6 @@ def train_bow_vae(args):
                 num_oov += 1
                 vocab.embedding[word] = mx.nd.random.normal(0, 1.0, emb_size)
         logging.info(">> {} Words did not appear in embedding source {}".format(num_oov, args.embedding_source))
-        
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx)
     if args.model_dir:

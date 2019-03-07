@@ -11,7 +11,7 @@ parser.add_argument('--file_pat', type=str, help='Regexp file pattern to match f
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
 parser.add_argument('--eval_freq', type=int, default=1, help='Evaluation frequency (against test data) during training')
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
-parser.add_argument('--lr',type=float, help='Learning rate', default=0.0001)
+parser.add_argument('--lr',type=float, help='Learning rate', default=0.005)
 parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=200)
 parser.add_argument('--n_latent', type=int, help='Number of latent dimensions (topics)', default=20)

@@ -23,7 +23,7 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self.n_latent = n_latent
@@ -39,14 +39,13 @@ class BowNTM(HybridBlock):
                                       init=mx.init.Constant([init_l1]), 
                                       differentiable=False)
             ## Add in topic seed constraints
-            ## self.seed_matrix = ....
-            ## dimensions are t' x s' (where t' is the number of seed topics provided and s' the number of seed words for each topic)            
+            self.seed_matrix = seed_mat
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
             self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
             elif latent_distrib == 'vmf':
-                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=100.0, ctx=self.model_ctx)
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
                 self.latent_dist = GaussianLatentDistribution(n_latent, ctx)                
             self.post_sample_dr_o = gluon.nn.Dropout(0.2)
@@ -115,14 +114,44 @@ class BowNTM(HybridBlock):
             final_loss = i_loss + c
         else:
             final_loss = i_loss
-        return final_loss, KL, recon_loss, l1_pen, y
+        if self.seed_matrix is not None:
+            # G - number of seeded topics
+            # S - number of seeds per topic
+            # K - number of topics
+            if F is mx.ndarray:
+                w = self.decoder.params.get('weight').data()
+            else:
+                w = self.decoder.params.get('weight').var()
+            ts = F.take(w, self.seed_matrix)   ## should have shape (G, S, K)
+            ts_sums = F.sum(ts, axis=1) # now (G, K)
+            ts_probs = F.softmax(ts_sums)
+            entropies = -F.sum(ts_probs * F.log(ts_probs))
+            ## Ensure seed terms have higher weights
+            seed_means = F.mean(ts, axis=1)  # (G,K)
+            total_means = F.mean(w, axis=0)  # (K,)
+            
+            pref_loss = F.relu(total_means - seed_means) # penalty if mean weight for topic is greater than seed means
+
+            # minimize weighted entropy over the seed means
+            seed_pr = F.softmax(seed_means)
+            per_topic_entropy = -F.sum(seed_pr * F.log(seed_pr), axis=0)
+            seed_means_pr = F.sum(F.softmax(seed_means), axis=0)
+            per_topic_entropy = F.sum(seed_means_pr * per_topic_entropy)
+            
+            entropies = F.add(entropies, F.sum(pref_loss))
+            entropies = F.add(entropies, per_topic_entropy)
+            final_loss = F.add(final_loss, entropies)
+        else:
+            entropies = None
+        return final_loss, KL, recon_loss, l1_pen, entropies, y
 
 
 class MetaDataBowNTM(BowNTM):
 
     def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
-        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1, coherence_reg_penalty, batch_size, wd_freqs, ctx)
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
+        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
+                                             coherence_reg_penalty, kappa, batch_size, wd_freqs, ctx)
         self.n_covars = n_covars
         with self.name_scope():
             self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=True)
