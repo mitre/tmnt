@@ -83,26 +83,8 @@ class BowNTM(HybridBlock):
         else:
             dec_weights = self.decoder.params.get('weight').var()
         return l1_pen_const * F.sum(F.abs(dec_weights))
-        
 
-    def hybrid_forward(self, F, data, l1_pen_const=None):
-        batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
-        emb_out = self.embedding(data)
-        enc_out = self.encoder(emb_out)
-        z, KL = self.latent_dist(enc_out, batch_size)
-        z_do = self.post_sample_dr_o(z)
-        
-        res = F.softmax(z_do)
-        dec_out = self.decoder(res)
-        
-        y = F.softmax(dec_out, axis=1)
-
-        l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
-        recon_loss = -F.sparse.sum( data * F.log(y+1e-12), axis=0, exclude=True )
-
-        i_loss = recon_loss + l1_pen + KL
-        
-        ## coherence-focused regularization term
+    def add_coherence_reg_penalty(self, F, cur_loss):
         if self.coherence_reg_penalty > 0.0:
             if F is mx.ndarray:
                 w = self.decoder.params.get('weight').data()
@@ -110,14 +92,16 @@ class BowNTM(HybridBlock):
             else:
                 w = self.decoder.params.get('weight').var()
                 emb = self.embedding.params.get('weight').var()
-            c = self.coherence_regularization(w, emb) * self.coherence_reg_penalty
-            final_loss = i_loss + c
+            c = (self.coherence_regularization(w, emb) * self.coherence_reg_penalty)
+            return (cur_loss + c), c
         else:
-            final_loss = i_loss
+            return (cur_loss, None)
+
+    def add_seed_constraint_loss(self, F, cur_loss):
+        # G - number of seeded topics
+        # S - number of seeds per topic
+        # K - number of topics
         if self.seed_matrix is not None:
-            # G - number of seeded topics
-            # S - number of seeds per topic
-            # K - number of topics
             if F is mx.ndarray:
                 w = self.decoder.params.get('weight').data()
             else:
@@ -129,64 +113,62 @@ class BowNTM(HybridBlock):
             ## Ensure seed terms have higher weights
             seed_means = F.mean(ts, axis=1)  # (G,K)
             total_means = F.mean(w, axis=0)  # (K,)
-            
             pref_loss = F.relu(total_means - seed_means) # penalty if mean weight for topic is greater than seed means
-
             # minimize weighted entropy over the seed means
             seed_pr = F.softmax(seed_means)
             per_topic_entropy = -F.sum(seed_pr * F.log(seed_pr), axis=0)
-            seed_means_pr = F.sum(F.softmax(seed_means), axis=0)
+            seed_means_pr = F.sum(seed_pr, axis=0)
             per_topic_entropy = F.sum(seed_means_pr * per_topic_entropy)
-            
             entropies = F.add(entropies, F.sum(pref_loss))
             entropies = F.add(entropies, per_topic_entropy)
-            final_loss = F.add(final_loss, entropies)
+            return (F.add(cur_loss, entropies), entropies)
         else:
-            entropies = None
-        return final_loss, KL, recon_loss, l1_pen, entropies, y
+            return (cur_loss, None)
+
+    def run_encode(self, F, in_data, batch_size):
+        enc_out = self.encoder(in_data)
+        z, KL = self.latent_dist(enc_out, batch_size)
+        z_do = self.post_sample_dr_o(z)
+        return F.softmax(z_do), KL
+
+    def get_loss_terms(self, F, data, y, KL, l1_pen_const, batch_size):
+        l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
+        recon_loss = -F.sparse.sum( data * F.log(y+1e-12), axis=0, exclude=True )
+        i_loss = recon_loss + l1_pen + KL
+        ii_loss, coherence_loss = self.add_coherence_reg_penalty(F, i_loss)
+        iii_loss, entropies = self.add_seed_constraint_loss(F, ii_loss)
+        return iii_loss, recon_loss, l1_pen, entropies, coherence_loss
+
+    def hybrid_forward(self, F, data, l1_pen_const=None):
+        batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
+        emb_out = self.embedding(data)
+        z, KL = self.run_encode(F, emb_out, batch_size)
+        dec_out = self.decoder(z)
+        y = F.softmax(dec_out, axis=1)
+        iii_loss, recon_loss, l1_pen, entropies, coherence_loss = self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
+        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, y
 
 
 class MetaDataBowNTM(BowNTM):
 
     def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
-                                             coherence_reg_penalty, kappa, batch_size, wd_freqs, ctx)
+                                             coherence_reg_penalty, kappa, batch_size, wd_freqs, seed_mat, ctx)
         self.n_covars = n_covars
         with self.name_scope():
-            self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=True)
+            self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=False)
 
     def hybrid_forward(self, F, data, labels, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
-        enc_out = self.encoder(F.concat(emb_out, labels))
-
-        z, KL = self.latent_dist(enc_out, batch_size)
-        z_do = self.post_sample_dr_o(z)
-        res = F.softmax(z_do)
-        dec_out = self.decoder(res)
-        cov_dec_out = self.cov_decoder(res, labels)
+        z, KL = self.run_encode(F, F.concat(emb_out, labels), batch_size)
+        dec_out = self.decoder(z)
+        cov_dec_out = self.cov_decoder(z, labels)
         y = F.softmax(dec_out + cov_dec_out, axis=1)
+        iii_loss, recon_loss, l1_pen, entropies, coherence_loss = self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
+        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, y
 
-        ###  Lots of cut and pasting ... refactor this!!
-        l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
-        recon_loss = -F.sparse.sum( data * F.log(y+1e-12), axis=0, exclude=True)
-        i_loss = recon_loss + l1_pen + KL
-        
-        ## coherence-focused regularization term
-        if self.coherence_reg_penalty > 0.0:
-            if F is mx.ndarray:
-                w = self.decoder.params.get('weight').data()
-                emb = self.embedding.params.get('weight').data()
-            else:
-                w = self.decoder.params.get('weight').var()
-                emb = self.embedding.params.get('weight').var()
-            c = self.coherence_regularization(w, emb) * self.coherence_reg_penalty
-            final_loss = i_loss + c
-        else:
-            final_loss = i_loss
-        return final_loss, KL, recon_loss, l1_pen, y
-    
         
 class CovariateModel(HybridBlock):
 
