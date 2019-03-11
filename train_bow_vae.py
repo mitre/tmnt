@@ -9,6 +9,7 @@ parser.add_argument('--train_dir', type=str, help='Directory containing files re
 parser.add_argument('--test_dir', type=str, help='Directory containing files representing the input TEST data')
 parser.add_argument('--file_pat', type=str, help='Regexp file pattern to match for documents (for TRAINING and TESTING data directories), [default = \'*\']', default='*')
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
+parser.add_argument('--seed', type=int, default=1234, help='The random seed to use for RNG')
 parser.add_argument('--eval_freq', type=int, default=1, help='Evaluation frequency (against test data) during training')
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
 parser.add_argument('--lr',type=float, help='Learning rate', default=0.005)
