@@ -48,7 +48,7 @@ class BowNTM(HybridBlock):
                 self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
                 self.latent_dist = GaussianLatentDistribution(n_latent, ctx)                
-            self.post_sample_dr_o = gluon.nn.Dropout(0.2)
+            #self.post_sample_dr_o = gluon.nn.Dropout(0.2)
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
             self.coherence_regularization = CoherenceRegularizer(coherence_reg_penalty)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
@@ -108,8 +108,8 @@ class BowNTM(HybridBlock):
                 w = self.decoder.params.get('weight').var()
             ts = F.take(w, self.seed_matrix)   ## should have shape (G, S, K)
             ts_sums = F.sum(ts, axis=1) # now (G, K)
-            ts_probs = F.softmax(ts_sums)
-            entropies = -F.sum(ts_probs * F.log(ts_probs))
+            ts_probs = F.softmax(ts_sums, axis=1)
+            entropies = -F.sum(ts_probs * F.log(ts_probs)) ## want to minimize the entropy here
             ## Ensure seed terms have higher weights
             seed_means = F.mean(ts, axis=1)  # (G,K)
             total_means = F.mean(w, axis=0)  # (K,)
@@ -127,9 +127,8 @@ class BowNTM(HybridBlock):
 
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
-        z, KL = self.latent_dist(enc_out, batch_size)
-        z_do = self.post_sample_dr_o(z)
-        return F.softmax(z_do), KL
+        #z_do = self.post_sample_dr_o(z)
+        return self.latent_dist(enc_out, batch_size)
 
     def get_loss_terms(self, F, data, y, KL, l1_pen_const, batch_size):
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)

@@ -1,5 +1,5 @@
 \documentclass[tikz,border=3.14pt]{standalone}
-\usetikzlibrary{3d,decorations.text,shapes.arrows,positioning,fit,backgrounds}
+\usetikzlibrary{3d,decorations.text,shapes.arrows,positioning,fit,backgrounds,arrows}
 \tikzset{pics/fake box/.style args={% #1=color, #2=x dimension, #3=y dimension, #4=z dimension
 #1 with dimensions #2 and #3 and #4}{
 code={
@@ -42,20 +42,30 @@ font=\sffamily\small,scale=2]
 {\draw[gray!60,thick] (1-\X) -- (2-\X);}
 %
 \node[draw,single arrow, orange,fill=orange!30] at (8,0.5,0) {GAP};
+
 \node[circle,draw,blue,fill=blue!30] (A1) at (9,1,0) {~~~};
 \node[circle,draw,red,fill=red!30,below=4pt of A1] (A2) {~~~};
 \node[circle,draw,green,fill=green!30,below=18pt of A2] (A3) {~~~};
 \draw[circle dotted, line width=2pt,shorten <=3pt] (A2) -- (A3);
-\node[circle,draw,gray,fill=gray!20] (B1) at (10,1,0) {~~~};
+
+\node[circle,draw,gray,fill=gray!20] (B1) at (10,2,0) {~~~};
 \node[circle,draw,fill=gray!60,below=4pt of B1] (B2) {~~~};
 \node[circle,draw,gray,fill=gray!20,below=18pt of B2] (B3) {~~~};
 \draw[circle dotted, line width=2pt,shorten <=3pt] (B2) -- (B3);
+
+\node[circle,draw,gray,fill=gray!20] (C1) at (10,0,0) {~~~};
+\node[circle,draw,fill=gray!60,below=4pt of C1] (C2) {~~~};
+\node[circle,draw,gray,fill=gray!20,below=18pt of C2] (C3) {~~~};
+\draw[circle dotted, line width=2pt,shorten <=3pt] (C2) -- (C3);
+
 \begin{scope}[on background layer]
-\node[orange,thick,rounded corners,fill=orange!30,fit=(A1) (A3)]{};
-\node[gray,thick,rounded corners,fill=gray!10,fit=(B1) (B3)]{};
+\node[orange,thick,rounded corners,fill=orange!30,fit=(A1) (A3)] (AA1) {};
+\node[gray,thick,rounded corners,fill=gray!10,fit=(B1) (B3)] (BB1) {};
+\node[gray,thick,rounded corners,fill=gray!10,fit=(C1) (C3)] (CC1) {};
 \end{scope}
-\foreach \X in {1,2,3}
-{\draw[-latex] (A\X) -- (B2);}
+%\foreach \X in {1,2,3}
+%{\draw[-latex] (A\X) -- (B2);}
+{\draw[thick,->] (AA1) -- (BB1) node[midway,above] {foo};}
 \end{tikzpicture}
 
 

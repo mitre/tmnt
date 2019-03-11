@@ -11,29 +11,24 @@ __all__ = ['HyperSphericalLatentDistribution']
 
 class HyperSphericalLatentDistribution(LatentDistribution):
 
-    def __init__(self, n_latent, kappa=100.0, ctx=mx.cpu()):
+    def __init__(self, n_latent, kappa=100.0, dr=0.2, ctx=mx.cpu()):
         super(HyperSphericalLatentDistribution, self).__init__(n_latent, ctx)
         self.kappa = kappa
         self.kld_v = mx.nd.array(HyperSphericalLatentDistribution._vmf_kld(self.kappa, self.n_latent), ctx=ctx)
-        #self.kld = mx.nd.broadcast_to(self.kld_v, shape=(batch_size,), ctx=ctx)
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
+            self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     def hybrid_forward(self, F, data, batch_size):
         mu = self.mu_encoder(data)
-        #print("Shape mu = {}".format(mu.shape))        
-        #norm = F.norm(mu, axis=1, keepdims=True)
-        #print("Shape norm = {}".format(norm.shape))                
-        #mu = F.broadcast_div(mu, norm)
         mu_bn = self.mu_bn(mu)
-        #kld = self.kld
         kld = F.broadcast_to(self.kld_v, shape=(batch_size,))
-        vec = self._get_hypersphere_sample(F, mu_bn, batch_size)
-        return vec, kld
+        z_p = self._get_hypersphere_sample(F, mu_bn, batch_size)
+        z = self.post_sample_dr_o(z_p)
+        return F.softmax(z), kld
     
-        
     def _get_hypersphere_sample(self, F, mu, batch_size):
         mu = mu # F.norm(...)  - already normalized
         sw = self._get_weight_batch(F, batch_size)

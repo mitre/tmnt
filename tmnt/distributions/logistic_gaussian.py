@@ -10,7 +10,7 @@ __all__ = ['LogisticGaussianLatentDistribution']
 
 class LogisticGaussianLatentDistribution(LatentDistribution):
 
-    def __init__(self, n_latent, ctx):
+    def __init__(self, n_latent, ctx, dr=0.2):
         super(LogisticGaussianLatentDistribution, self).__init__(n_latent, ctx)
         self.alpha = 1.0
 
@@ -23,6 +23,7 @@ class LogisticGaussianLatentDistribution(LatentDistribution):
             self.lv_encoder = gluon.nn.Dense(units = n_latent, activation=None)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.lv_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
+            self.post_sample_dr_o = gluon.nn.Dropout(dr)
         self.mu_bn.collect_params().setattr('grad_req', 'null')
         self.lv_bn.collect_params().setattr('grad_req', 'null')        
             
@@ -40,6 +41,7 @@ class LogisticGaussianLatentDistribution(LatentDistribution):
         mu_bn = self.mu_bn(mu)        
         lv = self.lv_encoder(data)
         lv_bn = self.lv_bn(lv)
-        z = self._get_gaussian_sample(F, mu_bn, lv_bn, batch_size)
+        z_p = self._get_gaussian_sample(F, mu_bn, lv_bn, batch_size)
         KL = self._get_kl_term(F, mu, lv)
-        return z, KL
+        z = self.post_sample_dr_o(z_p)
+        return F.softmax(z), KL
