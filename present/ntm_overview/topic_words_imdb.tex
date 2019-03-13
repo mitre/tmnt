@@ -1,0 +1,44 @@
+\documentclass[tikz,border=3.14pt]{standalone}
+\usepackage{amsmath}
+\usetikzlibrary{3d,decorations.text,shapes.arrows,positioning,fit,backgrounds,arrows}
+\usepackage{caption}
+
+\captionsetup[table]{labelformat=empty}
+
+\begin{document}
+
+\begin{tikzpicture}[font=\sffamily\small,scale=2]
+
+\node[text width=16cm] at (0,0) {
+  \begin{table}[]
+    \begin{tabular}{l|l}
+      \multicolumn{2}{c}{Gaussian} \\
+      \hline
+      \hline
+      Topic 1 & solo india moore june empire royal britain ted spielberg heaven  \\
+      Topic 2 & joseph california afford canadian sport kennedy media linda football northern \\
+      Topic 3 & darker freddy explores bugs fears nightmares terrifying nightmare journey draws \\
+      Topic 4 & hitchcocks versus russell sword graphics chilling masters matches kurt stylish \\
+      \hline
+      \multicolumn{2}{c}{Logistic Normal} \\
+      \hline
+      \hline
+      Topic 1 & jackie chan hong pitt kong kung castle superbly eerie gothic \\
+      Topic 2 & jackie chan stunts nicole pitt underrated sutherland sidney flynn bruce \\
+      Topic 3 & nazis hitler freedom religion jews germans nazi germany propaganda victory \\
+      Topic 4 & noir explores motivations loneliness philosophical meaningful intrigue complexity inconsistent subplots \\
+      \hline
+      \multicolumn{2}{c}{von Mises Fisher} \\
+      \hline
+      \hline
+      Topic 1 & zombies zombie vampires alien werewolf scientist creature monster shark flesh \\
+      Topic 2 & garbage crap directing waste planet money horrible utter ashamed lighting \\
+      Topic 3 & jackie chan martial hong kung arts stunts kong seagal dancing \\
+      Topic 4 &  vietnam colonel soldier stewart soldiers troops president army war navy      
+    \end{tabular}
+    \caption*{Four example topics (out of 20) from IMDB for different model types.}
+  \end{table} };
+
+\end{tikzpicture}
+\end{document}
+  

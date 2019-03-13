@@ -1,0 +1,44 @@
+\documentclass[tikz,border=3.14pt]{standalone}
+\usepackage{amsmath}
+\usetikzlibrary{3d,decorations.text,shapes.arrows,positioning,fit,backgrounds,arrows}
+\usepackage{caption}
+
+\captionsetup[table]{labelformat=empty}
+
+\begin{document}
+
+\begin{tikzpicture}[font=\sffamily\small,scale=2]
+
+\node[text width=16cm] at (0,0) {
+  \begin{table}[]
+    \begin{tabular}{l|l}
+      \multicolumn{2}{c}{Gaussian} \\
+      \hline
+      \hline
+      Topic 1 &  \\
+      Topic 2 &  \\
+      Topic 3 &  \\
+      Topic 4 &  \\
+      \hline
+      \multicolumn{2}{c}{Logistic Normal} \\
+      \hline
+      \hline
+      Topic 1 &  \\
+      Topic 2 &  \\
+      Topic 3 &  \\
+      Topic 4 &  \\
+      \hline
+      \multicolumn{2}{c}{von Mises Fisher} \\
+      \hline
+      \hline
+      Topic 1 &  \\
+      Topic 2 &  \\
+      Topic 3 &  \\
+      Topic 4 &      
+    \end{tabular}
+    \caption*{Four example topics (out of 20) from IMDB for different model types.}
+  \end{table} };
+
+\end{tikzpicture}
+\end{document}
+  

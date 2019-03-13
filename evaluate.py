@@ -30,6 +30,7 @@ def setup_parser():
     parser.add_argument('--model_dir', required=True, type=Path,
                         help='The directory where the params, specs, and vocab should be found.')
     parser.add_argument('--num_topics', type=int, required=True, help='The number of topics')
+    parser.add_argument('--plot_file', type=str, help='Output plot')
     return parser
 
 def read_vector_file(file):
@@ -83,16 +84,16 @@ if __name__ == "__main__":
 
     print("There are {0} labels and {1} encodings".format(len(labels), len(encodings)))
 
-    if False: # get UMAP embedding visualization
+    if args.plot_file: # get UMAP embedding visualization
         umap_model = umap.UMAP(n_neighbors=5, min_dist=0.1, metric='euclidean')
         embeddings = umap_model.fit_transform(encodings)
-        plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.9, cmap='Spectral')
-        plt.savefig("something.png", dpi=1000)
+        plt.ylim(top=8,bottom=-8)
+        plt.xlim(left=-6,right=7)
+        plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.7, cmap='coolwarm')
+        plt.savefig(args.plot_file, dpi=1000)
 
-    #unigram_reader = UnigramReader(args.vocab_file)
     bigram_reader = BigramReader(args.train_file)
 
-    #pmi = PMI(bigram_reader.unigrams, bigram_reader.bigrams, bigram_reader.n_docs)
     npmi = NPMI(bigram_reader.unigrams, bigram_reader.bigrams, bigram_reader.n_docs)
 
     total_npmi = 0

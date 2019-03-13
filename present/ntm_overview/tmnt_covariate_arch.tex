@@ -20,6 +20,9 @@ font=\sffamily\small,scale=2]
 \node[circle,draw,gray,fill=blue!80,below=18pt of E2] (E3) {~~~};
 \draw[circle dotted, line width=2pt,shorten <=3pt] (E2) -- (E3);
 
+%% Conditional meta-data
+\node[circle,draw,gray,fill=green!60,below=20pt of A5] (Q1) {~~~};
+
 \node[circle,draw,gray,fill=blue!80,right=80pt] (B1) at (0.5,0.25) {~~~};
 \node[circle,draw,gray,fill=blue!80,below=18pt of B1] (B2) {~~~};
 \draw[circle dotted, line width=2pt,shorten <=3pt] (B1) -- (B2);
@@ -46,6 +49,8 @@ font=\sffamily\small,scale=2]
 \node[circle,draw,gray,fill=purple!60, below=18pt of C4] (C5) {~~~};
 \draw[circle dotted, line width=2pt,shorten <=3pt] (C4) -- (C5);
 
+\node[circle,draw,gray,fill=green!60,below=20pt of Z3] (R1) {~~~};
+
 
 \begin{scope}[on background layer]
 \node[label={[xshift=.2cm]${\bf X}$},gray,thick,rounded corners,fill=gray!10,fit=(A1) (A5)] (AA1) {};
@@ -55,10 +60,12 @@ font=\sffamily\small,scale=2]
 \node[label={emb$({\bf X})$},gray,thick,rounded corners,fill=gray!10,fit=(E1) (E3)] (EE1) {};
 \node[label={${\bf z'}$},gray,thick,rounded corners,fill=gray!10,fit=(Z'1) (Z'3)] (ZZ'1) {};
 \node[label={${\bf z}$},gray,thick,rounded corners,fill=gray!10,fit=(Z1) (Z3)] (ZZ1) {};
+\node[label={${\bf c}$},gray,thick,rounded corners,fill=gray!10,fit=(Q1)] (QQ1) {};
+\node[label={${\bf c}$},gray,thick,rounded corners,fill=gray!10,fit=(R1)] (RR1) {};
 \end{scope}
 
 \node[circle,draw,black,right=40pt of D1] (P1) {${\bf *}$};
-\node[rectangle, draw, red, right=60pt of D2] (EPS) {$\epsilon \in \mathcal{N}(0,1)$};
+\node[rectangle, draw, red, below=60pt of Z3] (EPS) {$\epsilon \sim \mathcal{N}(0,1)$};
 \node[circle,draw,black,above=23pt of P1] (P2) {${\bf +}$};
 
 \node[rectangle,draw,blue,above=50pt of Z'1] (L2) {$KL(\mathcal{N}(\mu(X),\sigma^2{X}),\mathcal{N}(0,1))$};
@@ -82,12 +89,15 @@ font=\sffamily\small,scale=2]
 \draw[->] (DD1.north) -- (L2) {};
 \draw[->] (CC1.north) -- (L1) {};
 
+\draw[->] (QQ1) -- (EE1) {};
+\draw[->] (RR1) -- (CC1) node[midway,above] {${\bf B}$};
+
 \node[text width=10cm] at (3.6,-3) 
-    {(Gaussian) $f({\bf z'}) = {\bf z'}$  \\ (Logistic Normal) $f({\bf z'}) = softMax({\bf z'})$};
+     {(Gaussian) $f({\bf z'}) = {\bf z'}$  \\ (Logistic Normal) $f({\bf z'}) = softMax({\bf z'})$};
 
 \node[text width=6cm] at (7.0,-2.1) 
-    {${\bf \hat{X}} = softMax({\bf W}z)$};
-    
+    {${\bf \hat{X}} = softMax({\bf W}z + {\bf B}c + {\bf B}^{int}(c \otimes z))$};
+  
 \end{tikzpicture}
 
 
