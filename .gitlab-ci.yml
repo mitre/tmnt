@@ -1,0 +1,10 @@
+pages:
+  script:
+  - pip install sphinx
+  - make html
+  - mv build/html/ public/
+  artifacts:
+    paths:
+    - public
+  only:
+  - master
