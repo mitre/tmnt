@@ -87,8 +87,8 @@ if __name__ == "__main__":
     if args.plot_file: # get UMAP embedding visualization
         umap_model = umap.UMAP(n_neighbors=5, min_dist=0.1, metric='euclidean')
         embeddings = umap_model.fit_transform(encodings)
-        plt.ylim(top=8,bottom=-8)
-        plt.xlim(left=-6,right=7)
+        #plt.ylim(top=8,bottom=-8)
+        #plt.xlim(left=-6,right=7)
         plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.7, cmap='coolwarm')
         plt.savefig(args.plot_file, dpi=1000)
 
