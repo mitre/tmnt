@@ -18,7 +18,7 @@ It's possible to train a topic model on the data as follows:
 
 ```
 mkdir _model_dir
-python3 bin/train_bow_vae.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --n_latent 20 --lr 0.001 --batch_size 200 --epochs 40 --model_dir ./_model_dir 
+python bin/train_bow_vae.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --n_latent 20 --lr 0.001 --batch_size 200 --epochs 40 --model_dir ./_model_dir 
 ```
 
 The resulting model will be placed in the `_model_dir` directory.
@@ -28,7 +28,7 @@ The resulting model will be placed in the `_model_dir` directory.
 To load a saved model via the API, do:
 
 ```
-python3 -i tmnt/bow_vae/runtime.py
+python -i tmnt/bow_vae/runtime.py
 infer = BowNTMInference('_model_dir/model.params','_model_dir/model.specs', '_model_dir/vocab.json')
 top_k_terms = infer.get_top_k_words_per_topic(10) # top 10 words per topic
 encodings = infer._test_inference_on_directory('<some directory of .txt files>', '*.txt') ## encode documents
@@ -54,7 +54,7 @@ Run this via something like the following where the argument to `train_dir` is a
 single document in each file.
 
 ```
-python3 train_bow_vae.py --train_dir ./input-data --file_pat '*.txt' --epochs 120 --n_latent 20 --batch_size 200 --lr 0.001 --latent_distribution vmf
+python bin/train_bow_vae.py --train_dir ./input-data --file_pat '*.txt' --epochs 120 --n_latent 20 --batch_size 200 --lr 0.001 --latent_distribution vmf
 ```
 
 
