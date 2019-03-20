@@ -12,6 +12,8 @@ Welcome to TMNT's documentation!
 
    quickstart.rst
    examples.rst
+   inference.rst
+   guided.rst
 
 
 Indices and tables

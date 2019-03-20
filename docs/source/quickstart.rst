@@ -1,5 +1,3 @@
-
-
 Quickstart Guide
 ================
 
@@ -33,7 +31,14 @@ format for faster processing.
 1. Cached Vector Mode
 +++++++++++++++++++++
 
-Cached vector mode requires the command arguments: ``--tr_vec_file``, ``tst_vec_file`` and ``--vocab_file``.
+Cached Vector Mode requires the command arguments: ``--tr_vec_file``, ``tst_vec_file`` and ``--vocab_file``
+which should refer to a training sparse vector file, test/validation sparse vector file and a
+vocabulary file (with a single vocabularly item on each line). The sparse vector files follow the
+libSVM format where each line represents a document.  The first element on each line should be
+an integer coding for the *label* of the document, if one exists. If labels are not available, this value
+should be -1. The remaining elements on each line should be space-separated and have the form ``<index>:<count>``
+where both ``index`` and ``count`` are integers and denote the vocabulary id and its frequency/count
+in the document, respectively.
 
 
 2. Raw Text Mode
@@ -46,7 +51,7 @@ each file represents a document or other natural unit of text for the target dom
 should be provided to select files that match a specified regular expression.  Finally, the vocabulary
 size ``--vocab_size`` will indicate the total number of word types that will be used in the model.
 
-TMNT does it's own pre-processing of the text and includes a built-in stop-word list for English
+In Raw Text Mode, TMNT does it's own pre-processing of the text and includes a built-in stop-word list for English
 to remove certain common terms that tend to act as distractors for the purposes of generating coherent topics.
 This pre-processing is implemented in Python and relatively unoptimized.  Fortunately, the pre-processing need only
 be done once, up front, in order to experiment with a wide variety of topic model variations. By including

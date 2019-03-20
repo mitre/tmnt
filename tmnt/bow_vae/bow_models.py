@@ -52,7 +52,6 @@ class BowNTM(HybridBlock):
                 self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
-            #self.post_sample_dr_o = gluon.nn.Dropout(0.2)
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
             self.coherence_regularization = CoherenceRegularizer(coherence_reg_penalty)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
@@ -78,8 +77,8 @@ class BowNTM(HybridBlock):
         Encode data to the mean of the latent distribution defined by the input `data`
         """
         mu = self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
-        norm = mx.nd.norm(mu, axis=1, keepdims=True)
-        return mu / norm
+        #norm = mx.nd.norm(mu, axis=1, keepdims=True)
+        return mu # / norm
     
     def get_l1_penalty_term(self, F, l1_pen_const, batch_size):
         if F is mx.ndarray:
