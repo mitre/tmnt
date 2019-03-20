@@ -2,8 +2,6 @@
 
 Topic modeling with Neural Variational Models
 
-Project layout using ./tmnt for general source code and ./bin for command-line executable scripts.
-
 Run this via something like the following where the argument to `train_dir` is a directory containing a
 single document in each file.
 

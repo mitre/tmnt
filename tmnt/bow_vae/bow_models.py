@@ -3,7 +3,7 @@
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import HybridBlock
-from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
+from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution, GaussianUnitVarLatentDistribution
 import numpy as np
 import math
 
@@ -47,7 +47,11 @@ class BowNTM(HybridBlock):
             elif latent_distrib == 'vmf':
                 self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
-                self.latent_dist = GaussianLatentDistribution(n_latent, ctx)                
+                self.latent_dist = GaussianLatentDistribution(n_latent, ctx)
+            elif latent_distrib == 'gaussian_unitvar':
+                self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
+            else:
+                raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             #self.post_sample_dr_o = gluon.nn.Dropout(0.2)
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
             self.coherence_regularization = CoherenceRegularizer(coherence_reg_penalty)

@@ -16,8 +16,8 @@ parser.add_argument('--lr',type=float, help='Learning rate', default=0.005)
 parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=200)
 parser.add_argument('--n_latent', type=int, help='Number of latent dimensions (topics)', default=20)
-parser.add_argument('--latent_distribution', type=str, help='Latent distribution (logistic_gaussian|vmf|gaussian)',
-                    default='logistic_gaussian')
+parser.add_argument('--latent_distribution', type=str, help='Latent distribution (logistic_gaussian|vmf|gaussian|gaussian_unitvar)',
+                    default='vmf')
 parser.add_argument('--kappa', type=float, default=100.0, help='Kappa value for vMF latent distribution')
 parser.add_argument('--tr_vec_file', type=str, help='Training file in sparse vector format')
 parser.add_argument('--tst_vec_file', type=str, help='Test/validation file in sparse vector format')
