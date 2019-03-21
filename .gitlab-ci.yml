@@ -1,4 +1,6 @@
 pages:
+  tags:
+    - pages
   script:
   - pip install sphinx
   - make html
