@@ -4,7 +4,6 @@ Babel==2.6.0
 certifi==2019.3.9
 cffi==1.11.5
 chardet==3.0.4
-conda==4.6.8
 cryptography==2.4.2
 cycler==0.10.0
 docutils==0.14
@@ -12,7 +11,6 @@ gluonnlp==0.6.0
 graphviz==0.8.4
 idna==2.8
 imagesize==1.1.0
-Jinja2==2.10
 kiwisolver==1.0.1
 llvmlite==0.28.0
 MarkupSafe==1.1.1
@@ -37,10 +35,5 @@ scipy==1.2.1
 seaborn==0.9.0
 six==1.12.0
 snowballstemmer==1.2.1
-Sphinx==1.8.5
-sphinx-gallery==0.2.0
-sphinx-rtd-theme==0.4.3
-sphinxcontrib-websupport==1.1.0
--e git+https://gitlab.mitre.org/milu/tmnt.git@a26bbec83bd04ffb8d2c5a33909d827530553897#egg=tmnt
 umap-learn==0.3.7
 urllib3==1.24.1
