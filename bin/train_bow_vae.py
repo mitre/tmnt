@@ -11,6 +11,7 @@ parser.add_argument('--file_pat', type=str, help='Regexp file pattern to match f
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
 parser.add_argument('--seed', type=int, default=1234, help='The random seed to use for RNG')
 parser.add_argument('--eval_freq', type=int, default=1, help='Evaluation frequency (against test data) during training')
+parser.add_argument('--model_select', action='store_true', help='Use model selection (Experimental)')
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
 parser.add_argument('--lr',type=float, help='Learning rate', default=0.005)
 parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
