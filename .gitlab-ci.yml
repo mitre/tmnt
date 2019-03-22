@@ -7,7 +7,7 @@ pages:
   - cd docs
   - pip install -r requirements-docs.txt
   - make html
-  - mv build/html/ public/
+  - mv build/html/ ../public/
   artifacts:
     paths:
     - public
