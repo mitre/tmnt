@@ -22,6 +22,7 @@ from tmnt.utils.log_utils import logging_config
 from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
 from tmnt.utils.random import seed_rng
 from tmnt.coherence.npmi import EvaluateNPMI
+from tmnt.modsel.configuration import TMNTConfig
 
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
@@ -180,7 +181,7 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
 
 class BowVAEWorker(Worker):
     def __init__(self, c_args, vocabulary, data_train_csr, total_tr_words,
-                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, ctx=mx.cpu(), **kwargs):
+                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, ctx=mx.cpu(), max_budget=32, **kwargs):
         super().__init__(**kwargs)
         self.c_args = c_args
         self.total_tr_words = total_tr_words
@@ -188,6 +189,7 @@ class BowVAEWorker(Worker):
         self.vocabulary = vocabulary
         self.ctx = ctx
         self.data_test_csr = data_test_csr
+        self.max_budget = max_budget
         
         self.wd_freqs = get_wd_freqs(data_train_csr)
         self.emb_size = vocabulary.embedding.idx_to_vec[0].size if vocabulary.embedding else c_args.embedding_size
@@ -199,23 +201,40 @@ class BowVAEWorker(Worker):
         self.train_dataloader = DataIterLoader(train_iter)    
         test_iter = mx.io.NDArrayIter(data_test_csr, test_labels, c_args.batch_size, last_batch_handle='discard', shuffle=False)
         self.test_dataloader = DataIterLoader(test_iter)        
-    
 
     def compute(self, config, budget, working_directory, *args, **kwargs):
 
         lr = config['lr']
         latent_distrib = config['latent_distribution']
+        optimizer = config['optimizer']
+        n_latent = int(config['n_latent'])
+        enc_hidden_dim = int(config['enc_hidden_dim'])
         
-        model = \
-            BowNTM(self.vocabulary, self.c_args.hidden_dim, self.c_args.n_latent, self.emb_size,
+        if self.c_args.use_labels_as_covars and train_labels is not None:
+            n_covars = mx.nd.max(train_labels).asscalar() + 1
+            train_labels = mx.nd.one_hot(train_labels, n_covars)
+            test_labels = mx.nd.one_hot(test_labels, n_covars) if test_labels is not None else None
+            model = \
+                MetaDataBowNTM(n_covars, self.vocabulary, enc_hidden_dim, n_latent, self.emb_size,
+                               fixed_embedding=self.c_args.fixed_embedding, latent_distrib=self.c_args.latent_distribution,
+                               init_l1=l1_coef, coherence_reg_penalty=self.c_args.coherence_regularizer_penalty,
+                               batch_size=self.c_args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
+        else:
+            model = \
+                BowNTM(self.vocabulary, enc_hidden_dim, n_latent, self.emb_size,
                    fixed_embedding=self.c_args.fixed_embedding, latent_distrib=latent_distrib,
                    init_l1=self.l1_coef, coherence_reg_penalty=self.c_args.coherence_regularizer_penalty,
                    batch_size=self.c_args.batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
 
-        trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': lr})
+        trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
         logging.info("Executing model evaluation with lr = {}, latent_distrib = {} and budget = {}".format(lr, latent_distrib, budget))
         for epoch in range(int(budget)):
             epoch_loss = 0
+            total_rec_loss = 0
+            total_l1_pen = 0
+            total_kl_loss = 0
+            total_entropies_loss = 0
+            total_coherence_loss = 0
             tr_size = 0
             for i, (data, labels) in enumerate(self.train_dataloader):
                 tr_size += data.shape[0]
@@ -224,22 +243,36 @@ class BowVAEWorker(Worker):
                     labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
                 with autograd.record():
-                    elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, _ = model(data)
+                    elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, _ = model(data, labels) if self.c_args.use_labels_as_covars else model(data)
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
                 trainer.step(data.shape[0]) ## step based on batch size
+                total_kl_loss += kl_loss.sum().asscalar()
+                total_l1_pen += l1_pen.sum().asscalar()
+                total_rec_loss += rec_loss.sum().asscalar()
+                if coherence_loss is not None:
+                    total_coherence_loss += coherence_loss
+                if entropies is not None:
+                    total_entropies_loss += entropies.sum().asscalar()
                 epoch_loss += elbo.sum().asscalar()
-            #logging.info("Epoch {}: Loss = {}".format(epoch, epoch_loss / tr_size))
+            logging.info("Epoch {}: Loss = {}, [ KL loss = {:8.4f} ] [ L1 loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Coherence loss = {:8.4f} ] [ Entropy losss = {:8.4f} ]".
+                     format(epoch,
+                            epoch_loss / tr_size,
+                            total_kl_loss / tr_size,
+                            total_l1_pen / tr_size,
+                            total_rec_loss / tr_size,
+                            total_coherence_loss / tr_size,                             
+                            total_entropies_loss / tr_size))
         perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
-        npmi = compute_coherence(model, self.vocabulary, self.c_args.n_latent, 10, self.data_test_csr)
+        npmi = compute_coherence(model, self.vocabulary, n_latent, 10, self.data_test_csr)
         logging.info("NPMI = {}".format(npmi))
         return ({
-                'loss': 1.0 - npmi,
-                'info': {
-                    'test_perplexity': perplexity,
-                    'train_loss': (epoch_loss / tr_size)
-                    }
-                })
+            'loss': 1.0 - npmi,
+            'info': {
+                'test_perplexity': perplexity,
+                'train_loss': (epoch_loss / tr_size)
+            }
+        })
         
 
     @staticmethod
@@ -252,11 +285,11 @@ class BowVAEWorker(Worker):
         """
         cs = CS.ConfigurationSpace()
 
-        lr = CSH.UniformFloatHyperparameter('lr', lower=1e-6, upper=1e-2, default_value='1e-3', log=True)
+        #lr = CSH.UniformFloatHyperparameter('lr', lower=1e-6, upper=1e-2, default_value='1e-3', log=True)
 
-        latent_distribution = CSH.CategoricalHyperparameter('latent_distribution', ['vmf', 'logistic_gaussian', 'gaussian'])
+        #latent_distribution = CSH.CategoricalHyperparameter('latent_distribution', ['vmf', 'logistic_gaussian', 'gaussian'])
 
-        cs.add_hyperparameters([lr, latent_distribution])
+        #cs.add_hyperparameters([lr, latent_distribution])
 
         #kappa =  CSH.UniformIntegerHyperparameter('kappa', lower=1.0, upper=200.0, default_value=100.0)
         #cs.add_hyperparameters([kappa])
@@ -264,19 +297,20 @@ class BowVAEWorker(Worker):
         #kappa_cond = CS.EqualsCondition(kappa, latent_distribution, 'vmf')
         #cs.add_condition(kappa_cond)
 
-        dropout_rate = CSH.UniformFloatHyperparameter('dropout_rate', lower=0.0, upper=0.9, default_value=0.2, log=False)
+        #dropout_rate = CSH.UniformFloatHyperparameter('dropout_rate', lower=0.0, upper=0.9, default_value=0.2, log=False)
         
-        cs.add_hyperparameters([dropout_rate])
+        #cs.add_hyperparameters([dropout_rate])
         
         return cs
 
 
-def select_model(worker):
+def select_model(worker, tmnt_config_file):
+    tmnt_config = TMNTConfig(tmnt_config_file)
     worker.run(background=True)
-    cs = worker.get_configspace()
+    cs = tmnt_config.get_configspace()  ##worker.get_configspace()
     config = cs.sample_configuration().get_dictionary()
     print(config)
-    bohb = BOHB(  configspace = worker.get_configspace(),
+    bohb = BOHB(  configspace = cs,
               run_id = '0', nameserver='127.0.0.1',
               min_budget=2, max_budget=32
            )
@@ -331,10 +365,11 @@ def train_bow_vae(args):
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     if args.model_select:
         worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx,
+                              max_budget=args.epochs,
                               nameserver='127.0.0.1', run_id='0')
         NS = hpns.NameServer(run_id='0', host='127.0.0.1', port=None)
         NS.start()
-        res = select_model(worker)
+        res = select_model(worker, args.config_file)
         NS.shutdown()
         id2config = res.get_id2config_mapping()
         incumbent = res.get_incumbent_id()

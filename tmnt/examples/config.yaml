@@ -1,0 +1,11 @@
+## Fixed config options
+## include things that won't ever be able to vary here
+
+## Learnable hyper-parameters - but, these could be singletons that won't vary over ranges, too
+---
+  lr: {range: [1e-6, 1e-2]}
+  latent_distribution: [vmf, gaussian, logistic_gaussian]
+  optimizer: [adam, ftml]
+  n_latent: {i_range: [20, 40], step: 5}
+  enc_hidden_dim: {i_range: [50, 400], step: 50}
+  
