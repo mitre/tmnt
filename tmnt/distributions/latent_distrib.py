@@ -1,7 +1,5 @@
 #coding: utf-8
 
-import math
-import mxnet as mx
 from mxnet import gluon as nn
 
 __all__ = ['LatentDistribution']
