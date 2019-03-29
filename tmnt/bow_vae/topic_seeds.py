@@ -2,7 +2,6 @@
 
 import json
 import mxnet as mx
-from mxnet import gluon
 import io
 
 __all__ = ['get_seed_matrix_from_file']

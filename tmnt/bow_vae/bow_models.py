@@ -4,8 +4,6 @@ import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import HybridBlock
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution, GaussianUnitVarLatentDistribution
-import numpy as np
-import math
 
 __all__ = ['BowNTM', 'MetaDataBowNTM']
 
