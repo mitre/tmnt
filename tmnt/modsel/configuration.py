@@ -29,7 +29,11 @@ class TMNTConfig(object):
         low = int(p['i_range'][0])
         upp = int(p['i_range'][1])
         default_val = p.get('default')
-        q_val = int(p.get('step') | 1)
+        q_val_s = p.get('step')
+        if q_val_s:
+            q_val = int(q_val_s)
+        else:
+            q_val = 1
         if default_val:
             default = float(default_val)
         else:

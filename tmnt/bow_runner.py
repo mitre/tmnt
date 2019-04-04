@@ -200,10 +200,11 @@ class BowVAEWorker(Worker):
         train_iter = mx.io.NDArrayIter(data_train_csr, train_labels, c_args.batch_size, last_batch_handle='discard', shuffle=True)
         self.train_dataloader = DataIterLoader(train_iter)    
         test_iter = mx.io.NDArrayIter(data_test_csr, test_labels, c_args.batch_size, last_batch_handle='discard', shuffle=False)
-        self.test_dataloader = DataIterLoader(test_iter)        
+        self.test_dataloader = DataIterLoader(test_iter)
 
-    def compute(self, config, budget, working_directory, *args, **kwargs):
 
+    def _train_model(self, config, budget):
+        print("Evaluating with budget {} against config: {}".format(budget, config))
         lr = config['lr']
         latent_distrib = config['latent_distribution']
         optimizer = config['optimizer']
@@ -266,58 +267,49 @@ class BowVAEWorker(Worker):
         perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
         npmi = compute_coherence(model, self.vocabulary, n_latent, 10, self.data_test_csr)
         logging.info("NPMI = {}".format(npmi))
-        return ({
+        res = {
             'loss': 1.0 - npmi,
             'info': {
                 'test_perplexity': perplexity,
                 'train_loss': (epoch_loss / tr_size)
             }
-        })
+        }
+        return model, res
+
+    def compute(self, config, budget, working_directory, *args, **kwargs):
+        _, res = self._train_model(config, budget)
+        return res
+        
+    def retrain_best_config(self, config, budget):
+        model, _ = self._train_model(config, budget)
+        write_model(model, config, self.emb_size, self.vocabulary, self.c_args)
         
 
-    @staticmethod
-    def get_configspace():
-        """
-        It builds the configuration space with the needed hyperparameters.
-        It is easily possible to implement different types of hyperparameters.
-        Beside float-hyperparameters on a log scale, it is also able to handle categorical input parameter.
-        :return: ConfigurationsSpace-Object
-        """
-        cs = CS.ConfigurationSpace()
-
-        #lr = CSH.UniformFloatHyperparameter('lr', lower=1e-6, upper=1e-2, default_value='1e-3', log=True)
-
-        #latent_distribution = CSH.CategoricalHyperparameter('latent_distribution', ['vmf', 'logistic_gaussian', 'gaussian'])
-
-        #cs.add_hyperparameters([lr, latent_distribution])
-
-        #kappa =  CSH.UniformIntegerHyperparameter('kappa', lower=1.0, upper=200.0, default_value=100.0)
-        #cs.add_hyperparameters([kappa])
-        
-        #kappa_cond = CS.EqualsCondition(kappa, latent_distribution, 'vmf')
-        #cs.add_condition(kappa_cond)
-
-        #dropout_rate = CSH.UniformFloatHyperparameter('dropout_rate', lower=0.0, upper=0.9, default_value=0.2, log=False)
-        
-        #cs.add_hyperparameters([dropout_rate])
-        
-        return cs
-
-
-def select_model(worker, tmnt_config_file):
+def select_model(worker, tmnt_config_file, result_logger):
     tmnt_config = TMNTConfig(tmnt_config_file)
     worker.run(background=True)
     cs = tmnt_config.get_configspace()  ##worker.get_configspace()
     config = cs.sample_configuration().get_dictionary()
     print(config)
     bohb = BOHB(  configspace = cs,
-              run_id = '0', nameserver='127.0.0.1',
-              min_budget=2, max_budget=32
+                  run_id = '0', nameserver='127.0.0.1', result_logger=result_logger,
+                  min_budget=2, max_budget=8
            )
-    res = bohb.run(n_iterations=8)
+    res = bohb.run(n_iterations=4)
     bohb.shutdown(shutdown_workers=True)
     return res
 
+def write_model(m, config, emb_size, vocab, args):
+    pfile = os.path.join(args.model_dir, 'model.params')
+    sp_file = os.path.join(args.model_dir, 'model.specs')
+    vocab_file = os.path.join(args.model_dir, 'vocab.json')
+    m.save_parameters(pfile)
+    config['emb_size'] = emb_size
+    specs = json.dumps(config)
+    with open(sp_file, 'w') as f:
+        f.write(specs)
+    with open(vocab_file, 'w') as f:
+        f.write(vocab.to_json())
 
 def train_bow_vae(args):
     i_dt = datetime.datetime.now()
@@ -364,12 +356,13 @@ def train_bow_vae(args):
         logging.info(">> {} Words did not appear in embedding source {}".format(num_oov, args.embedding_source))
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     if args.model_select:
+        result_logger = hpres.json_result_logger(directory=args.model_select_directory, overwrite=True)
         worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx,
                               max_budget=args.epochs,
                               nameserver='127.0.0.1', run_id='0')
         NS = hpns.NameServer(run_id='0', host='127.0.0.1', port=None)
         NS.start()
-        res = select_model(worker, args.config_file)
+        res = select_model(worker, args.config_file, result_logger)
         NS.shutdown()
         id2config = res.get_id2config_mapping()
         incumbent = res.get_incumbent_id()
@@ -383,10 +376,14 @@ def train_bow_vae(args):
         inc_runs = res.get_runs_by_id(incumbent)
         inc_run = inc_runs[-1]
         inc_loss = inc_run.loss
-        inc_config = id2conf[inc_id]['config']
-        inc_test_loss = inc_run.info['test accuracy']
-        with open(os.path.join(args.shared_directory, 'results.pkl'), 'wb') as fh:
+        inc_config = id2config[incumbent]['config']
+        print("Best configuration loss = {}".format(inc_loss))
+        print("Best configuration {}".format(inc_config))
+        with open(os.path.join(args.model_select_directory, 'results.pkl'), 'wb') as fh:
             pickle.dump(res, fh)
+        if args.model_dir:
+            worker.retrain_best_config(inc_config, inc_run.budget)
+
     else:
         m = train(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx)
         if args.model_dir:
