@@ -13,16 +13,21 @@ class TMNTConfig(object):
             self.cd = yaml.safe_load(fp)
 
     def _get_range_uniform(self, param, cd):
-        p = cd[param]
-        low = float(p['range'][0])
-        upp = float(p['range'][1])
-        default_val = p.get('default')
-        if default_val:
-            default = float(default_val)
+        if cd.get(param) and (len(cd[param]['range']) > 1):
+            p = cd[param]
+            low = float(p['range'][0])
+            upp = float(p['range'][1])
+            default_val = p.get('default')
+            if default_val:
+                default = float(default_val)
+            else:
+                default = (upp + low) / 2
+            use_log = False
+            if ( (low != 0.0) and (abs(upp / low) >= 1000) ):
+                use_log = True
+            return CSH.UniformFloatHyperparameter(param, lower=low, upper=upp, default_value=default, log=use_log)
         else:
-            default = (upp + low) / 2
-        use_log = True if ((upp / low) > 100) else False
-        return CSH.UniformFloatHyperparameter(param, lower=low, upper=upp, default_value=default, log=use_log)
+            return None
 
     def _get_range_integer(self, param, cd, q=1):
         p = cd[param]
@@ -42,8 +47,11 @@ class TMNTConfig(object):
         return CSH.UniformIntegerHyperparameter(param, lower=low, upper=upp, default_value=default, q=q_val, log=use_log)
 
     def _get_categorical(self, param, cd):
-        categories = cd[param]
-        return CSH.CategoricalHyperparameter(param, categories)
+        if cd.get(param):
+            categories = cd[param]
+            return CSH.CategoricalHyperparameter(param, categories)
+        else:
+            return None
 
     def _get_ordinal(self, param, cd):
         values = cd[param]
@@ -58,5 +66,29 @@ class TMNTConfig(object):
         optimizer_c = self._get_categorical('optimizer', cd)
         n_latent_c = self._get_range_integer('n_latent',cd)
         enc_hidden_dim_c = self._get_range_integer('enc_hidden_dim', cd)
-        cs.add_hyperparameters([lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c])
+        embedding_size_c = self._get_range_integer('embedding_size', cd)
+        kappa_c = self._get_range_uniform('kappa', cd)
+
+        cs.add_hyperparameters([lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, embedding_size_c, kappa_c])
+
+        ## optional hyperparameters
+        target_sparsity_c = self._get_range_uniform('target_sparsity', cd)
+        if target_sparsity_c:
+            cs.add_hyperparameters([target_sparsity_c])
+
+        coherence_reg_penalty_c = self._get_range_uniform('coherence_regularizer_penalty', cd)
+        if coherence_reg_penalty_c:
+            cs.add_hyperparameters([coherence_reg_penalty_c])
+
+        embedding_source_c = self._get_categorical('embedding_source', cd)
+        if embedding_source_c:
+            cs.add_hyperparameters([embedding_source_c])
+            fixed_embedding_c = self._get_categorical('fixed_embedding', cd)
+            if fixed_embedding_c:
+                cs.add_hyperparameters([fixed_embedding_c])
+            
+
+        ## conditional hyperparameters
+        cond_kappa = CS.EqualsCondition(kappa_c, latent_distribution_c, 'vmf')
+        cs.add_condition(cond_kappa) # only use kappa_c if condition is met
         return cs
