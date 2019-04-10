@@ -66,10 +66,10 @@ class TMNTConfig(object):
         optimizer_c = self._get_categorical('optimizer', cd)
         n_latent_c = self._get_range_integer('n_latent',cd)
         enc_hidden_dim_c = self._get_range_integer('enc_hidden_dim', cd)
-        embedding_size_c = self._get_range_integer('embedding_size', cd)
+        
         kappa_c = self._get_range_uniform('kappa', cd)
 
-        cs.add_hyperparameters([lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, embedding_size_c, kappa_c])
+        cs.add_hyperparameters([lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, kappa_c])
 
         ## optional hyperparameters
         target_sparsity_c = self._get_range_uniform('target_sparsity', cd)
@@ -86,9 +86,16 @@ class TMNTConfig(object):
             fixed_embedding_c = self._get_categorical('fixed_embedding', cd)
             if fixed_embedding_c:
                 cs.add_hyperparameters([fixed_embedding_c])
-            
+            if embedding_source_c.is_legal('random'):  ## if NOT, then don't add embedding size as a hyperparameters at all as it's determined by the embedding
+                embedding_size_c = self._get_range_integer('embedding_size', cd)
+                cs.add_hyperparameters([embedding_size_c])
+                cond_embed = CS.EqualsCondition(embedding_size_c, embedding_source_c, 'random')
+                cs.add_condition(cond_embed)
+        else:
+            ## add embedding size if no source is specified
+            embedding_size_c = self._get_range_integer('embedding_size', cd)
+            cs.add_hyperparameters([embedding_size_c])
 
-        ## conditional hyperparameters
         cond_kappa = CS.EqualsCondition(kappa_c, latent_distribution_c, 'vmf')
         cs.add_condition(cond_kappa) # only use kappa_c if condition is met
         return cs

@@ -23,7 +23,7 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, target_sparsity = 0.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self.n_latent = n_latent
@@ -31,6 +31,8 @@ class BowNTM(HybridBlock):
         self.vocab_size = len(vocabulary)
         self.coherence_reg_penalty = coherence_reg_penalty
         self.embedding_size = embedding_size
+        self.target_sparsity = target_sparsity
+        self.vocabulary = vocabulary
         if vocabulary.embedding:
             assert vocabulary.embedding.idx_to_vec[0].size == embedding_size
         with self.name_scope():
