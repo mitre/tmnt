@@ -1,7 +1,7 @@
 # Topic Modeling Neural Toolkit
 
-The following README contains very minimal documentation to get started.  Site documentation is underway
-and will be made accessible shortly.
+The following README contains very minimal documentation to get started.  See full documentation
+for details, examples and API documentation.
 
 ## Installation
 
@@ -17,13 +17,14 @@ The commonly used 20 News Dataset is included in a sparse vector representation 
 It's possible to train a topic model on the data as follows:
 
 ```
-mkdir _model_dir
-python bin/train_bow_vae.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --n_latent 20 --lr 0.001 --batch_size 200 --epochs 40 --model_dir ./_model_dir 
+mkdir -p _model_dir
+mkdir -p _experiments
+python bin/train_model.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --save_dir ./_experiments/ --model_dir ./_model_dir_final/ --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
 ```
 
 The resulting model will be placed in the `_model_dir` directory.
 
-## Using a trained model to 
+## Using a trained model to encode texts
 
 To load a saved model via the API, do:
 
@@ -38,6 +39,8 @@ encodings2 = infer.encode_texts([['first', 'document', 'tokenized', 'about', 'gu
 	                         ['second', 'document', 'about', 'nasa', 'orbit', 'rocket']])
 ```
 
+## Evaluation
+
 To assess a trained model against a dataset, run the `evaluate.py` script as below.  Note that depending
 on your backend for handling visualization/plotting you may need to run `pythonw` instead of `python` when
 executing the script.
@@ -48,13 +51,10 @@ pythonw bin/evaluate.py --train_file ./data/train.2.vec --eval_file ./data/test.
 			--num_topics 20 --plot_file ./p1.png
 ```
 
-## Building a model from raw text files
-
-Run this via something like the following where the argument to `train_dir` is a directory containing a
-single document in each file.
+## Preparing data
 
 ```
-python bin/train_bow_vae.py --train_dir ./input-data --file_pat '*.txt' --epochs 120 --n_latent 20 --batch_size 200 --lr 0.001 --latent_distribution vmf
+python bin/prep_data.py --train_dir ./input-data --file_pat '*.txt' ...
 ```
 
 

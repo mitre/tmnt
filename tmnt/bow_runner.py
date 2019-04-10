@@ -116,7 +116,7 @@ class BowVAEWorker(Worker):
         test_iter = mx.io.NDArrayIter(data_test_csr, test_labels, c_args.batch_size, last_batch_handle='discard', shuffle=False)
         self.test_dataloader = DataIterLoader(test_iter)
 
-    def _initialize_embedding_layer(self, embedding_source=None):
+    def _initialize_embedding_layer(self, embedding_source, config):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
         
         Parameters
@@ -124,6 +124,12 @@ class BowVAEWorker(Worker):
         embedding_source: string denoting a Gluon-NLP embedding source with the format <type>:<name> where <type>
         is 'glove', 'fasttext' or 'word2vec' and <name> denotes the embedding name (e.g. 'glove.6B.300d').
         See `gluonnlp.embedding.list_sources()` for a full list
+        config: `Configuration` for this model evaluation run
+
+        Returns
+        -------
+        vocab: Resulting GluonNLP vocabulary with initialized embedding
+        emb_size: Size of embedding (based on pre-trained embedding or specified)
         """
         vocab = self.vocabulary
         if embedding_source and embedding_source != 'random':
@@ -196,7 +202,7 @@ class BowVAEWorker(Worker):
         l1_coef = c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
         embedding_source = config.get('embedding_source')
         fixed_embedding = config.get('fixed_embedding') == 'True'
-        vocab, emb_size = self._initialize_embedding_layer(embedding_source)
+        vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
         
         if self.c_args.use_labels_as_covars and train_labels is not None:
             n_covars = mx.nd.max(train_labels).asscalar() + 1
@@ -341,12 +347,12 @@ def select_model(worker, tmnt_config_space, result_logger):
 def write_model(m, config, budget, args):
     if args.model_dir:
         pfile = os.path.join(args.model_dir, 'model.params')
-        sp_file = os.path.join(args.model_dir, 'model.specs')
+        sp_file = os.path.join(args.model_dir, 'model.config')
         vocab_file = os.path.join(args.model_dir, 'vocab.json')
         m.save_parameters(pfile)
         ## if the embedding_size wasn't set explicitly (e.g. determined via pre-trained embedding), then set it here
-        emb_size = config.get('embedding_size', len(m.vocabulary.embedding.idx_to_vec[0]))
-        config['embedding_size'] = emb_size
+        if m.vocabulary.embedding:
+            config['embedding_size'] = len(m.vocabulary.embedding.idx_to_vec[0])
         config['training_epochs'] = int(budget)
         specs = json.dumps(config)
         with open(sp_file, 'w') as f:
