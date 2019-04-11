@@ -30,7 +30,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         return F.softmax(z), kld
     
     def _get_hypersphere_sample(self, F, mu, batch_size):
-        mu = mu # F.norm(...)  - already normalized
+        # mu = mu # F.norm(...)  - already normalized
         sw = self._get_weight_batch(F, batch_size)
         sw = F.expand_dims(sw, axis=1)
         sw_v = sw * F.ones((batch_size, self.n_latent), ctx=self.model_ctx)
