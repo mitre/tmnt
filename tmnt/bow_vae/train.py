@@ -32,6 +32,8 @@ import hpbandster.core.nameserver as hpns
 import hpbandster.core.result as hpres
 from hpbandster.optimizers import BOHB as BOHB
 
+__all__ = ['model_select_bow_vae', 'train_bow_vae']
+
 
 def get_wd_freqs(data_csr, max_sample_size=10000):
     sample_size = min(max_sample_size, data_csr.shape[0])
