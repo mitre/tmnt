@@ -1,6 +1,5 @@
 #coding: utf-8
 
-import math
 import mxnet as mx
 import numpy as np
 from scipy import special as sp
@@ -16,7 +15,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         self.kappa = kappa
         self.kld_v = mx.nd.array(HyperSphericalLatentDistribution._vmf_kld(self.kappa, self.n_latent), ctx=ctx)
         with self.name_scope():
-            self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
+            self.mu_encoder = gluon.nn.Dense(units = n_latent)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
@@ -46,12 +45,9 @@ class HyperSphericalLatentDistribution(LatentDistribution):
 
     @staticmethod
     def _vmf_kld(k, d):
-        tmp = (k * ((sp.iv(d / 2.0 + 1.0, k) + sp.iv(d / 2.0, k) * d / (2.0 * k)) / sp.iv(d / 2.0, k) - d / (2.0 * k)) \
-               + d * np.log(k) / 2.0 - np.log(sp.iv(d / 2.0, k)) \
-               - sp.loggamma(d / 2 + 1) - d * np.log(2) / 2).real
-        if tmp != tmp:
-            exit()
-        return np.array([tmp])
+        return np.array([(k * ((sp.iv(d / 2.0 + 1.0, k) + sp.iv(d / 2.0, k) * d / (2.0 * k)) / sp.iv(d / 2.0, k) - d / (2.0 * k))
+               + d * np.log(k) / 2.0 - np.log(sp.iv(d / 2.0, k))
+               - sp.loggamma(d / 2 + 1) - d * np.log(2) / 2).real])
 
     def _get_weight_batch(self, F, batch_size):
         batch_sample = F.zeros((batch_size,), ctx=self.model_ctx)

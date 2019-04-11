@@ -3,7 +3,6 @@
 import math
 import mxnet as mx
 from mxnet import gluon
-from mxnet.gluon import HybridBlock
 from tmnt.distributions.latent_distrib import LatentDistribution
 
 __all__ = ['LogisticGaussianLatentDistribution']
@@ -19,8 +18,8 @@ class LogisticGaussianLatentDistribution(LatentDistribution):
         self.prior_logvar = mx.nd.array([math.log(prior_var)], ctx=ctx)
 
         with self.name_scope():
-            self.mu_encoder = gluon.nn.Dense(units = n_latent, activation=None)
-            self.lv_encoder = gluon.nn.Dense(units = n_latent, activation=None)
+            self.mu_encoder = gluon.nn.Dense(units = n_latent)
+            self.lv_encoder = gluon.nn.Dense(units = n_latent)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.lv_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)

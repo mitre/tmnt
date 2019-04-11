@@ -1,8 +1,7 @@
-from math import log2, log10
+from math import log10
 from collections import Counter
 
 import numpy as np
-import mxnet as mx
 
 from tmnt.utils.ngram_helpers import BigramReader
 from itertools import combinations
@@ -40,7 +39,6 @@ class EvaluateNPMI(object):
             total_topic_npmi = 0
             N = len(words_per_topic)
             for (w1, w2) in combinations(sorted(words_per_topic), 2):
-                #wp_npmi = pmi.npmi(w1, w2)
                 wp_npmi = npmi.wd_id_pair_npmi(w1, w2)
                 total_topic_npmi += wp_npmi
             total_topic_npmi *= (2 / (N * (N-1)))

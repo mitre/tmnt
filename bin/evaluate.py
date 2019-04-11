@@ -6,9 +6,8 @@ import argparse
 import mxnet as mx
 
 from tmnt.bow_vae.runtime import BowNTMInference
-from tmnt.coherence.pmi import PMI
 from tmnt.coherence.npmi import NPMI
-from tmnt.utils.ngram_helpers import UnigramReader, BigramReader
+from tmnt.utils.ngram_helpers import BigramReader
 
 from itertools import combinations
 
@@ -17,7 +16,6 @@ from pathlib import Path
 
 import numpy as np
 
-import seaborn as sns
 import matplotlib.pyplot as plt
 
 def setup_parser():
@@ -87,8 +85,6 @@ if __name__ == "__main__":
     if args.plot_file: # get UMAP embedding visualization
         umap_model = umap.UMAP(n_neighbors=5, min_dist=0.1, metric='euclidean')
         embeddings = umap_model.fit_transform(encodings)
-        #plt.ylim(top=8,bottom=-8)
-        #plt.xlim(left=-6,right=7)
         plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.7, cmap='coolwarm')
         plt.savefig(args.plot_file, dpi=1000)
 
@@ -101,7 +97,6 @@ if __name__ == "__main__":
         total_topic_npmi = 0
         N = len(words_per_topic)
         for (w1, w2) in combinations(sorted(words_per_topic), 2):
-            #wp_npmi = pmi.npmi(w1, w2)
             wp_npmi = npmi.wd_id_pair_npmi(w1, w2)
             if verbose:
                 print("NPMI({}, {}) = {}".format(

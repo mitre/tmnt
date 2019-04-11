@@ -89,13 +89,6 @@ def collect_stream_as_sparse_matrix(stream, pre_vocab=None, min_freq=3, max_voca
     csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
     return csr_mat, vocab, total_num_words
 
-def collect_texts_as_sparse_matrix(texts, vocab):
-    for doc in txts:
-        doc_tok_ids = [vocab[token] for token in doc if token in vocab]
-        doc_counter = nlp.data.count_tokens(doc_tok_ids)        
-        items = sorted(doc_counter.items())
-    
-
 class DataIterLoader():
     """
     This is a simple wrapper around a `DataIter` geared for unsupervised learning datasets
