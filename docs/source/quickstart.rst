@@ -20,29 +20,27 @@ deploy for applications.  Some novel algorithms are also implemented, including 
 to leverage word embeddings directly as the input representation as well as methods for
 guided topic modeling that allow users to influence the make-up of learned topics.
 
-Command-line modes for Training Topic Models
+Training a Topic Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-There are two primary methods for building topic models in TMNT: 1) Cached vector *mode* and
-2) Raw text *mode*.   The latter assumes raw text files are provided as the input while the
-former assumes a corpus of text files that have been pre-processed and converted into a sparse-vector
-format for faster processing.
+Training a topic model requires both a training file containing sparse vector representations of documents
+along with a test/validation file in the same format. In addition, a vocabulary file is needed to
+map token indices back to their string representations.  See preparing data (below) for how to
+process a corpus of text data into this sparse vector format.
 
-1. Cached Vector Mode
-+++++++++++++++++++++
+Once the files are in place, training a model invovles invoking the ``train_model.py`` script
+found in the ``bin/`` directory.  Using the example data provided (20 news corpus), we can build
+a model as follows::
 
-Cached Vector Mode requires the command arguments: ``--tr_vec_file``, ``tst_vec_file`` and ``--vocab_file``
-which should refer to a training sparse vector file, test/validation sparse vector file and a
-vocabulary file (with a single vocabularly item on each line). The sparse vector files follow the
-libSVM format where each line represents a document.  The first element on each line should be
-an integer coding for the *label* of the document, if one exists. If labels are not available, this value
-should be -1. The remaining elements on each line should be space-separated and have the form ``<index>:<count>``
-where both ``index`` and ``count`` are integers and denote the vocabulary id and its frequency/count
-in the document, respectively.
+  python bin/train_model.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --save_dir ./_experiments/ --model_dir ./_model_dir_final/ --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
 
 
-2. Raw Text Mode
-++++++++++++++++
+
+2. Preparing text data
+++++++++++++++++++++++
+
+The sparse vector representation for a corpus can be obtained from two different input formats:
+1) plain text documents (one document per file) or 2) json objects with one document per json object.
 
 The key arguments required for Raw Text mode are the directory of training files (``--train_dir``),
 directory of test files (``--test_dir``) a file pattern (``--file_pat``) and (``--vocab_size``).
@@ -51,9 +49,7 @@ each file represents a document or other natural unit of text for the target dom
 should be provided to select files that match a specified regular expression.  Finally, the vocabulary
 size ``--vocab_size`` will indicate the total number of word types that will be used in the model.
 
-In Raw Text Mode, TMNT does it's own pre-processing of the text and includes a built-in stop-word list for English
+TMNT does it's own pre-processing of the text and includes a built-in stop-word list for English
 to remove certain common terms that tend to act as distractors for the purposes of generating coherent topics.
 This pre-processing is implemented in Python and relatively unoptimized.  Fortunately, the pre-processing need only
-be done once, up front, in order to experiment with a wide variety of topic model variations. By including
-the same command arguments for *Cached Vector Mode* together with the arguments for Raw Text Mode, TMNT
-will save the cached training vector file, test vector file and vocabulary file.
+be done once, up front, in order to experiment with a wide variety of topic model variations. 

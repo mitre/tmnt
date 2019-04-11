@@ -8,8 +8,9 @@ __all__ = ['BasicTokenizer']
 class BasicTokenizer(object):
     """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
-    def __init__(self, do_lower_case=True):
+    def __init__(self, do_lower_case=True, use_stop_words=True):
         self.do_lower_case = do_lower_case
+        self.use_stop_words = use_stop_words
         self.num_re = re.compile('[-+]?[.\d]*[\d]+[:,.\d]*$') ## matches straight number
 
     def __call__(self, text):
@@ -34,7 +35,10 @@ class BasicTokenizer(object):
                 token = token.lower()
                 token = self._run_strip_accents(token)
             split_tokens.extend(self._run_split_on_punc(token, keep_punct=False))
-        final_tokens = [t for t in split_tokens if len(t) > 1 and not t in default_stop_words and not self.num_re.match(t)]
+        if self.use_stop_words:
+            final_tokens = [t for t in split_tokens if len(t) > 1 and not t in default_stop_words and not self.num_re.match(t)]
+        else:
+            final_tokens = [t for t in split_tokens if len(t) > 1 and not self.num_re.match(t)]
         output_tokens = self.whitespace_tokenize(' '.join(final_tokens))
         return output_tokens
 

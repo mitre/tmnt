@@ -11,7 +11,7 @@ import threading
 from tmnt.preprocess import BasicTokenizer
 
 ## this should be re-entrant/thread-safe
-tokenizer = BasicTokenizer()
+tokenizer = BasicTokenizer(use_stop_words=False)
 
 def get_counter_file(json_file):
     counter = None
@@ -36,7 +36,6 @@ def sp_fn(json_file_and_vocab):
                 sp_vecs.append(sorted(cnts.items()))
     return sp_vecs
 
-
 def get_counter_dir_parallel(json_dir, pat='*.json'):
     files = glob.glob(json_dir + '/' + pat)
     if len(files) > 2:
@@ -52,7 +51,7 @@ def get_vocab(counter):
                               bos_token=None, eos_token=None, min_freq=5, max_size=2000)
     return vocab
 
-def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, pat='*.json'):
+def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, full_histogram_file=None, pat='*.json'):
     files = glob.glob(json_dir + '/' + pat)
     counter = get_counter_dir_parallel(json_dir, pat)
     vocab = get_vocab(counter)
@@ -77,6 +76,15 @@ def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, pat='*.json'):
         for i in range(len(vocab.idx_to_token)):
             fp.write(vocab.idx_to_token[i])
             fp.write(' 0\n')
+    if full_histogram_file:
+        with io.open(full_histogram_file, 'w') as fp:
+            items = list(counter.items())
+            items.sort(key=lambda x: -x[1])
+            for k,v in items:
+                fp.write(str(k))
+                fp.write(' ')
+                fp.write(str(v))
+                fp.write('\n')
 
 
 
