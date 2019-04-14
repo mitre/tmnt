@@ -157,6 +157,7 @@ default_stop_words = \
         'am',
         'among',
         'amongst',
+        'amp',
         'an',
         'and',
         'another',

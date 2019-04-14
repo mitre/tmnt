@@ -14,6 +14,7 @@ Welcome to TMNT's documentation!
    examples.rst
    inference.rst
    guided.rst
+   model_selection.rst
 
 
 Indices and tables

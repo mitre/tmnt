@@ -10,8 +10,9 @@ import threading
 
 from tmnt.preprocess import BasicTokenizer
 
-## this should be re-entrant/thread-safe
-tokenizer = BasicTokenizer(use_stop_words=False)
+__all__ = ['get_sparse_vecs']
+
+tokenizer = BasicTokenizer(use_stop_words=True)
 
 def get_counter_file(json_file):
     counter = None
@@ -46,15 +47,19 @@ def get_counter_dir_parallel(json_dir, pat='*.json'):
     count = sum(counters, Counter())
     return count
 
-def get_vocab(counter):
+def get_vocab(counter, size=2000):
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
-                              bos_token=None, eos_token=None, min_freq=5, max_size=2000)
+                              bos_token=None, eos_token=None, min_freq=5, max_size=size)
     return vocab
 
-def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, full_histogram_file=None, pat='*.json'):
+def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None, pat='*.json'):
     files = glob.glob(json_dir + '/' + pat)
-    counter = get_counter_dir_parallel(json_dir, pat)
-    vocab = get_vocab(counter)
+    if i_vocab is None:
+        counter = get_counter_dir_parallel(json_dir, pat)
+        vocab = get_vocab(counter, vocab_size)
+    else:
+        vocab = i_vocab
+    print("... Vocabulary constructed ...")
     files_and_vocab = [(f,vocab) for f in files]
     if len(files) > 2:
         p = Pool(cpu_count())
@@ -72,10 +77,11 @@ def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, full_histogram_file=N
                     fp.write(':')
                     fp.write(str(c))
                 fp.write('\n')
-    with io.open(vocab_out_file, 'w') as fp:
-        for i in range(len(vocab.idx_to_token)):
-            fp.write(vocab.idx_to_token[i])
-            fp.write(' 0\n')
+    if i_vocab is None: ## print out vocab if we had to create it
+        with io.open(vocab_out_file, 'w') as fp:
+            for i in range(len(vocab.idx_to_token)):
+                fp.write(vocab.idx_to_token[i])
+                fp.write(' 0\n')
     if full_histogram_file:
         with io.open(full_histogram_file, 'w') as fp:
             items = list(counter.items())
@@ -85,6 +91,7 @@ def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, full_histogram_file=N
                 fp.write(' ')
                 fp.write(str(v))
                 fp.write('\n')
+    return vocab
 
 
 

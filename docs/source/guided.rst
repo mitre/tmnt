@@ -34,4 +34,4 @@ Seed sets are specified with a simple JSON file, best shown via example ::
 
 The string serving as the key for each seed set is not interpreted and provided for convenience.
 Each of the terms must exist in the topic vocabulary.  Note that it is recommended that each
-seed set include the same number of terms, though this is not a requirement.
+seed set include the same number or nearly the same number of terms, though this is not a requirement.
