@@ -6,7 +6,6 @@ Babel==2.6.0
 certifi==2019.3.9
 cffi==1.11.5
 chardet==3.0.4
-conda==4.6.8
 ConfigSpace==0.4.9
 cryptography==2.4.2
 cycler==0.10.0
