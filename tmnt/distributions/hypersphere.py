@@ -27,6 +27,8 @@ class HyperSphericalLatentDistribution(LatentDistribution):
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
+        self.num_samples = 100000
+        self.w_samples = self._pregenerate_samples(num_samples=self.num_samples)
 
     def hybrid_forward(self, F, data, batch_size, kld_const):
         mu = self.mu_encoder(data)
@@ -35,10 +37,34 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         z_p = self._get_hypersphere_sample(F, mu_bn, batch_size)
         z = self.post_sample_dr_o(z_p)
         return F.softmax(z), kld
+
+
+    def _pregenerate_samples(self, num_samples=100000):
+        dim = self.n_latent
+        kappa = self.kappa
+        dim = dim - 1
+        b = self.b
+        dim = self.dim
+        x = self.x
+        c = self.c
+        mask = mx.nd.ones(num_samples, ctx=self.ctx)
+        zeros = mx.nd.zeros(num_samples, ctx=self.ctx)
+        w_f = mx.nd.zeros(num_samples, ctx=self.ctx)
+        zz = mx.nd.zeros(1, ctx=self.ctx)
+        while mx.nd.sum(mask) > 0.0:
+            z = mx.nd.clip(mx.nd.random.normal(0.5, self.approx_var, num_samples, ctx=self.ctx), 0.0, 1.0)
+            w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
+            u = mx.nd.random.uniform(0, 1, num_samples, ctx=self.ctx)
+            accept = kappa * w + dim * mx.nd.log(1. - x * w) - c >= mx.nd.log(u)
+            reject = 1 - accept
+            mask = mx.nd.where(accept, zeros, mask)  # if reject = 1 then return mask as is, otherwise turn it off 
+            w_f = mx.nd.where(mask, w_f, w)  # if mask is 1, then don't use w and leave as unset
+        return w_f
     
     def _get_hypersphere_sample(self, F, mu, batch_size):
         # mu = mu # F.norm(...)  - already normalized
-        sw = self._get_weight_batch(F, batch_size)
+        #sw = self._get_weight_batch(F, batch_size)
+        sw = self._get_weight_from_cache(F, batch_size)
         sw = F.expand_dims(sw, axis=1)
         sw_v = sw * F.ones((batch_size, self.n_latent), ctx=self.model_ctx)
         vv = self._get_orthonormal_batch(F, mu)
@@ -57,6 +83,9 @@ class HyperSphericalLatentDistribution(LatentDistribution):
                + d * np.log(k) / 2.0 - np.log(sp.iv(d / 2.0, k))
                - sp.loggamma(d / 2 + 1) - d * np.log(2) / 2).real])
 
+    def _get_weight_from_cache(self, F, batch_size):
+        to_select = F.random.randint(low=0, high=self.num_samples, shape=(batch_size,))
+        return F.take(self.w_samples, to_select)
 
     def _get_weight_batch(self, F, batch_size):
         dim = self.n_latent
