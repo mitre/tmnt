@@ -96,7 +96,7 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
 
 class BowVAEWorker(Worker):
     def __init__(self, c_args, vocabulary, data_train_csr, total_tr_words,
-                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, ctx=mx.cpu(), max_budget=32, **kwargs):
+                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, ctx=mx.cpu(), max_budget=27, **kwargs):
         super().__init__(**kwargs)
         self.c_args = c_args
         self.total_tr_words = total_tr_words
@@ -106,6 +106,7 @@ class BowVAEWorker(Worker):
         self.data_test_csr = data_test_csr
         self.max_budget = max_budget
         self.train_labels = train_labels
+        self.search_mode = False
         
         self.wd_freqs = get_wd_freqs(data_train_csr)
         self.vocab_cache = {}
@@ -292,7 +293,8 @@ class BowVAEWorker(Worker):
                 trainer.step(data.shape[0]) 
                 self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss)
             self._log_details(details, epoch)
-            self._eval_trace(model, epoch)
+            if not self.search_mode:
+                self._eval_trace(model, epoch)
             if model.target_sparsity > 0.0:
                 self._l1_regularize(model)
         mx.nd.waitall()
@@ -407,6 +409,7 @@ def get_worker(args):
 
 def model_select_bow_vae(args):
     worker = get_worker(args)
+    worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=args.save_dir, overwrite=True)
     NS = hpns.NameServer(run_id='0', host='127.0.0.1', port=None)
     NS.start()
