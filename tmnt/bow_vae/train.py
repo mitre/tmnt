@@ -281,6 +281,7 @@ class BowVAEWorker(Worker):
 
         for epoch in range(int(budget)):
             if epoch > 0:
+                logging.info("Setting profiler to RUN")
                 profiler.set_state('run')
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
@@ -304,6 +305,7 @@ class BowVAEWorker(Worker):
 
         mx.nd.waitall()
         profiler.set_state('stop')
+        logger.info("PRinting profile dump")
         print(profiler.dumps())
         
         perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
