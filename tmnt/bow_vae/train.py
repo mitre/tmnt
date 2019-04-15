@@ -272,17 +272,10 @@ class BowVAEWorker(Worker):
         model: VAE model with trained parameters
         res: Result dictionary with details of training run for use in model selection
         """
-        ### TEMPORARY PROFILING ###
-        from mxnet import profiler
-        profiler.set_config(profile_all=True, aggregate_stats=True, filename='profile_output.json')
-        
-        logging.info("Evaluating with Budget {} against config: {}".format(budget, config))
+        logging.info("Evaluating with Budget {} against Config: {}".format(budget, config))
         model, trainer = self._get_model(config)
 
         for epoch in range(int(budget)):
-            if epoch == 1:
-                logging.info("Setting profiler to RUN")
-                profiler.set_state('run')
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
             for i, (data, labels) in enumerate(self.train_dataloader):
@@ -302,12 +295,7 @@ class BowVAEWorker(Worker):
             self._eval_trace(model, epoch)
             if model.target_sparsity > 0.0:
                 self._l1_regularize(model)
-
         mx.nd.waitall()
-        profiler.set_state('stop')
-        logger.info("PRinting profile dump")
-        print(profiler.dumps())
-        
         perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
         npmi = compute_coherence(model, 10, self.data_test_csr)
         res = {
