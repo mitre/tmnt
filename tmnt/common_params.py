@@ -6,7 +6,6 @@ def get_base_argparser():
     parser.add_argument('--tr_vec_file', type=str, help='Training file in sparse vector format')
     parser.add_argument('--tst_vec_file', type=str, help='Test/validation file in sparse vector format')
     parser.add_argument('--vocab_file', type=str, help='Vocabulary file associated with sparse vector data')
-    parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit -- also the maximum BUDGET')    
     parser.add_argument('--seed', type=int, default=1234, help='The random seed to use for RNG')
     #parser.add_argument('--eval_freq', type=int, default=1, help='Evaluation frequency (against test data) during training')
 
@@ -19,6 +18,7 @@ def get_base_argparser():
 
     ## XXX - would like to remove this
     parser.add_argument('--init_sparsity_pen', type=float, default = 0.0)
+    parser.add_argument('--sparsity_threshold', type=float, default = 0.001)
     
     parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
     parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)    

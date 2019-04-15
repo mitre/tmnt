@@ -202,7 +202,7 @@ class BowVAEWorker(Worker):
         target_sparsity = float(config.get('target_sparsity', 0.0))
         coherence_reg_penalty = float(config.get('coherence_regularizer_penalty', 0.0))
 
-        l1_coef = c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
+        l1_coef = self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
         embedding_source = config.get('embedding_source')
         fixed_embedding = config.get('fixed_embedding') == 'True'
         vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
@@ -245,7 +245,7 @@ class BowVAEWorker(Worker):
                     npmi = compute_coherence(model, 10, self.data_test_csr)
                     fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
 
-    def _l1_regularize(self, model):
+    def _l1_regularize(self, model, cur_l1_coef):
         """Apply a regularization term based on magnitudes of the decoder (topic-term) weights.
         Set the L1 coeffficient based on these magnitudes which will be used to compute L1 loss term
 
@@ -255,9 +255,10 @@ class BowVAEWorker(Worker):
         """
         dec_weights = model.decoder.collect_params().get('weight').data().abs()
         ratio_small_weights = (dec_weights < self.c_args.sparsity_threshold).sum().asscalar() / dec_weights.size
-        l1_coef = l1_coef * math.pow(2.0, model.target_sparsity - ratio_small_weights)
+        l1_coef = cur_l1_coef * math.pow(2.0, model.target_sparsity - ratio_small_weights)
         logging.info("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(l1_coef, ratio_small_weights))
         model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
+        return l1_coef
 
     def _train_model(self, config, budget):
         """Main training function which takes a single model configuration and a budget (i.e. number of epochs) and
@@ -275,6 +276,7 @@ class BowVAEWorker(Worker):
         """
         logging.info("Evaluating with Budget {} against Config: {}".format(budget, config))
         model, trainer = self._get_model(config)
+        l1_coef = self.c_args.init_sparsity_pen
 
         for epoch in range(int(budget)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
@@ -296,7 +298,7 @@ class BowVAEWorker(Worker):
             if not self.search_mode:
                 self._eval_trace(model, epoch)
             if model.target_sparsity > 0.0:
-                self._l1_regularize(model)
+                l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
         perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
         npmi = compute_coherence(model, 10, self.data_test_csr)
@@ -338,7 +340,7 @@ class BowVAEWorker(Worker):
         write_model(model, config, budget, self.c_args)
         
 
-def select_model(worker, tmnt_config_space, result_logger):
+def select_model(worker, tmnt_config_space, total_iterations, result_logger):
     tmnt_config = TMNTConfig(tmnt_config_space)
     worker.run(background=True)
     cs = tmnt_config.get_configspace() 
@@ -348,7 +350,7 @@ def select_model(worker, tmnt_config_space, result_logger):
                   run_id = '0', nameserver='127.0.0.1', result_logger=result_logger,
                   min_budget=2, max_budget=8
            )
-    res = bohb.run(n_iterations=4)
+    res = bohb.run(n_iterations=total_iterations)
     bohb.shutdown(shutdown_workers=True)
     return res
 
@@ -369,7 +371,7 @@ def write_model(m, config, budget, args):
             f.write(m.vocabulary.to_json())
 
 
-def get_worker(args):
+def get_worker(args, budget):
     i_dt = datetime.datetime.now()
     train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
     logging_config(folder=train_out_dir, name='bow_ntm', level=logging.INFO)
@@ -403,17 +405,17 @@ def get_worker(args):
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx,
-                              max_budget=args.epochs,
+                              max_budget=budget,
                               nameserver='127.0.0.1', run_id='0')
     return worker
 
 def model_select_bow_vae(args):
-    worker = get_worker(args)
+    worker = get_worker(args, args.budget)
     worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=args.save_dir, overwrite=True)
     NS = hpns.NameServer(run_id='0', host='127.0.0.1', port=None)
     NS.start()
-    res = select_model(worker, args.config_space, result_logger)
+    res = select_model(worker, args.config_space, args.iterations, result_logger)
     NS.shutdown()
     id2config = res.get_id2config_mapping()
     incumbent = res.get_incumbent_id()
@@ -433,8 +435,8 @@ def model_select_bow_vae(args):
         worker.retrain_best_config(inc_config, inc_run.budget)
 
 def train_bow_vae(args):
-    worker = get_worker(args)
     with open(args.config, 'r') as f:
         config = json.loads(f.read())
+    worker = get_worker(args, int(config['training_epochs']))
     worker.retrain_best_config(config, int(config['training_epochs']))
 
