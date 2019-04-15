@@ -43,7 +43,8 @@ class BowNTMInference(object):
             d2 = list(map(lambda x: x.asnumpy().tolist(), dt_matrix))
             d3 = doc_lengths.asnumpy().tolist()
             d5 = term_cnts.asnumpy().tolist()
-            d = {'term_topic': d1, 'topic_doc': d2, 'doc_lengths': d3, 'term_freqs': d5}
+            d4 = list(self.vocab.token_to_idx.keys())
+            d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
             json.dump(d, fp, sort_keys=True, indent=4)
             #fp.write('')
 
