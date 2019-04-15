@@ -222,6 +222,8 @@ class BowVAEWorker(Worker):
                        init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity,
                    batch_size=self.c_args.batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
+        if self.c_args.hybridize:
+            model.hybridize()
         return model, trainer
 
     def _eval_trace(self, model, epoch):
@@ -274,7 +276,8 @@ class BowVAEWorker(Worker):
         model, trainer = self._get_model(config)
 
         for epoch in range(int(budget)):
-            details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0, 'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
+            details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
+                       'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
             for i, (data, labels) in enumerate(self.train_dataloader):
                 details['tr_size'] += data.shape[0]
                 if labels is None or labels.size == 0:
@@ -282,7 +285,8 @@ class BowVAEWorker(Worker):
                     labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
                 with autograd.record():
-                    elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, _ = model(data, labels) if self.c_args.use_labels_as_covars else model(data)
+                    elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, _ = \
+                        model(data, labels) if self.c_args.use_labels_as_covars else model(data)
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
                 trainer.step(data.shape[0]) 

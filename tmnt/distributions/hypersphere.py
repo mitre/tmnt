@@ -12,8 +12,9 @@ class HyperSphericalLatentDistribution(LatentDistribution):
 
     def __init__(self, n_latent, kappa=100.0, dr=0.2, ctx=mx.cpu()):
         super(HyperSphericalLatentDistribution, self).__init__(n_latent, ctx)
+        self.ctx = ctx
         self.kappa = kappa
-        self.kld_v = mx.nd.array(HyperSphericalLatentDistribution._vmf_kld(self.kappa, self.n_latent), ctx=ctx)
+        self.kld_v = np.float(HyperSphericalLatentDistribution._vmf_kld(self.kappa, self.n_latent))
         self.dim = n_latent - 1
         self.b = self.dim / (np.sqrt(4. * kappa ** 2 + self.dim ** 2) + 2 * kappa)  # b= 1/(sqrt(4.* kdiv**2 + 1) + 2 * kdiv)
         self.x = (1. - self.b) / (1. + self.b)
@@ -21,15 +22,16 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         aa = self.dim / 2.0
         self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))        
         with self.name_scope():
+            self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
             self.mu_encoder = gluon.nn.Dense(units = n_latent)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
 
-    def hybrid_forward(self, F, data, batch_size):
+    def hybrid_forward(self, F, data, batch_size, kld_const):
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
-        kld = F.broadcast_to(self.kld_v, shape=(batch_size,))
+        kld = F.broadcast_to(kld_const, shape=(batch_size,))
         z_p = self._get_hypersphere_sample(F, mu_bn, batch_size)
         z = self.post_sample_dr_o(z_p)
         return F.softmax(z), kld
@@ -64,10 +66,11 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         dim = self.dim
         x = self.x
         c = self.c
-        mask = mx.nd.ones(batch_size)
-        zeros = mx.nd.zeros(batch_size)
-        w_f = mx.nd.zeros(batch_size)
-        while F.sum(mask) > 0.0:
+        mask = F.ones(batch_size)
+        zeros = F.zeros(batch_size)
+        w_f = F.zeros(batch_size)
+        zz = F.zeros(1)
+        while F.broadcast_greater(F.sum(mask), zz):
             z = F.clip(F.random.normal(0.5, self.approx_var, batch_size), 0.0, 1.0)
             w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
             u = F.random.uniform(0, 1, batch_size)
