@@ -276,11 +276,11 @@ class BowVAEWorker(Worker):
         from mxnet import profiler
         profiler.set_config(profile_all=True, aggregate_stats=True, filename='profile_output.json')
         
-        logging.info("Evaluating with budget {} against config: {}".format(budget, config))
+        logging.info("Evaluating with Budget {} against config: {}".format(budget, config))
         model, trainer = self._get_model(config)
 
         for epoch in range(int(budget)):
-            if epoch > 0:
+            if epoch == 1:
                 logging.info("Setting profiler to RUN")
                 profiler.set_state('run')
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
