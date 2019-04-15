@@ -14,6 +14,12 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         super(HyperSphericalLatentDistribution, self).__init__(n_latent, ctx)
         self.kappa = kappa
         self.kld_v = mx.nd.array(HyperSphericalLatentDistribution._vmf_kld(self.kappa, self.n_latent), ctx=ctx)
+        self.dim = n_latent - 1
+        self.b = self.dim / (np.sqrt(4. * kappa ** 2 + self.dim ** 2) + 2 * kappa)  # b= 1/(sqrt(4.* kdiv**2 + 1) + 2 * kdiv)
+        self.x = (1. - self.b) / (1. + self.b)
+        self.c = self.kappa * self.x + self.dim * np.log(1 - self.x ** 2)  # dim * (kdiv *x + np.log(1-x**2))
+        aa = self.dim / 2.0
+        self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))        
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
@@ -49,7 +55,29 @@ class HyperSphericalLatentDistribution(LatentDistribution):
                + d * np.log(k) / 2.0 - np.log(sp.iv(d / 2.0, k))
                - sp.loggamma(d / 2 + 1) - d * np.log(2) / 2).real])
 
+
     def _get_weight_batch(self, F, batch_size):
+        dim = self.n_latent
+        kappa = self.kappa
+        dim = dim - 1
+        b = self.b
+        dim = self.dim
+        x = self.x
+        c = self.c
+        mask = mx.nd.ones(batch_size)
+        zeros = mx.nd.zeros(batch_size)
+        w_f = mx.nd.zeros(batch_size)
+        while F.sum(mask) > 0.0:
+            z = F.clip(F.random.normal(0.5, self.approx_var, batch_size), 0.0, 1.0)
+            w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
+            u = F.random.uniform(0, 1, batch_size)
+            accept = kappa * w + dim * F.log(1. - x * w) - c >= F.log(u)
+            reject = 1 - accept
+            mask = F.where(accept, zeros, mask)  # if reject = 1 then return mask as is, otherwise turn it off 
+            w_f = F.where(mask, w_f, w)  # if mask is 1, then don't use w and leave as unset 
+        return w
+
+    def _get_weight_batch_old(self, F, batch_size):
         batch_sample = F.zeros((batch_size,), ctx=self.model_ctx)
         for i in range(batch_size):
             batch_sample[i] = self._get_single_weight()
@@ -58,13 +86,18 @@ class HyperSphericalLatentDistribution(LatentDistribution):
     def _get_single_weight(self):
         dim = self.n_latent
         kappa = self.kappa
-        dim = dim - 1  
-        b = dim / (np.sqrt(4. * kappa ** 2 + dim ** 2) + 2 * kappa)  # b= 1/(sqrt(4.* kdiv**2 + 1) + 2 * kdiv)
-        x = (1. - b) / (1. + b)
-        c = kappa * x + dim * np.log(1 - x ** 2)  # dim * (kdiv *x + np.log(1-x**2))
+        dim = dim - 1
+        b = self.b
+        dim = self.dim
+        x = self.x
+        c = self.c
+        #b = dim / (np.sqrt(4. * kappa ** 2 + dim ** 2) + 2 * kappa)  # b= 1/(sqrt(4.* kdiv**2 + 1) + 2 * kdiv)
+        #x = (1. - b) / (1. + b)
+        #c = kappa * x + dim * np.log(1 - x ** 2)  # dim * (kdiv *x + np.log(1-x**2))
 
         while True:
-            z = np.random.beta(dim / 2., dim / 2.)  # concentrates towards 0.5 as d-> inf
+            #z = np.random.beta(dim / 2., dim / 2.)  # concentrates towards 0.5 as d-> inf
+            z = min(1.0, max(0.0,np.random.normal(0.5, self.approx_var)))
             w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
             u = np.random.uniform(low=0, high=1)
             if kappa * w + dim * np.log(1. - x * w) - c >= np.log(u):  # thresh is dim *(kdiv * (w-x) + log(1-x*w) -log(1-x**2))
