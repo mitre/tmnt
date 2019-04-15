@@ -66,14 +66,14 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         dim = self.dim
         x = self.x
         c = self.c
-        mask = F.ones(batch_size)
-        zeros = F.zeros(batch_size)
-        w_f = F.zeros(batch_size)
-        zz = F.zeros(1)
+        mask = F.ones(batch_size, ctx=self.ctx)
+        zeros = F.zeros(batch_size, ctx=self.ctx)
+        w_f = F.zeros(batch_size, ctx=self.ctx)
+        zz = F.zeros(1, ctx=self.ctx)
         while F.broadcast_greater(F.sum(mask), zz):
-            z = F.clip(F.random.normal(0.5, self.approx_var, batch_size), 0.0, 1.0)
+            z = F.clip(F.random.normal(0.5, self.approx_var, batch_size, ctx=self.ctx), 0.0, 1.0)
             w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
-            u = F.random.uniform(0, 1, batch_size)
+            u = F.random.uniform(0, 1, batch_size, ctx=self.ctx)
             accept = kappa * w + dim * F.log(1. - x * w) - c >= F.log(u)
             reject = 1 - accept
             mask = F.where(accept, zeros, mask)  # if reject = 1 then return mask as is, otherwise turn it off 
