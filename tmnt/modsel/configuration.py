@@ -42,7 +42,7 @@ class TMNTConfig(object):
         if default_val:
             default = float(default_val)
         else:
-            default = (upp + low) / 2
+            default = int((upp + low) / 2)
         use_log = False
         return CSH.UniformIntegerHyperparameter(param, lower=low, upper=upp, default_value=default, q=q_val, log=use_log)
 
