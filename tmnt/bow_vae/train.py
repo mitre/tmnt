@@ -165,7 +165,7 @@ class BowVAEWorker(Worker):
         details['l1_pen']   += l1_pen.sum().asscalar()
         details['rec_loss'] += rec_loss.sum().asscalar()
         if coherence_loss is not None:
-            details['coherence_loss'] += coherence_loss
+            details['coherence_loss'] += coherence_loss.sum().asscalar()
         if entropies is not None:
             details['entropies_loss'] += entropies.sum().asscalar()
         details['epoch_loss'] += elbo.sum().asscalar()

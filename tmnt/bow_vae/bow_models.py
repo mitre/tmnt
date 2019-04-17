@@ -41,13 +41,13 @@ class BowNTM(HybridBlock):
             ## Add in topic seed constraints
             self.seed_matrix = seed_mat
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
-            self.encoder = gluon.nn.Dense(units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
+            self.encoder = gluon.nn.Dense(in_units=self.embedding_size, units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
             elif latent_distrib == 'vmf':
                 self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
-                self.latent_dist = GaussianLatentDistribution(n_latent, ctx)
+                self.latent_dist = GaussianLatentDistribution(n_latent, enc_dim, ctx)
             elif latent_distrib == 'gaussian_unitvar':
                 self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
             else:
@@ -98,7 +98,8 @@ class BowNTM(HybridBlock):
             c = (self.coherence_regularization(w, emb) * self.coherence_reg_penalty)
             return (cur_loss + c), c
         else:
-            return (cur_loss, None)
+            #return (cur_loss, None)
+            return (cur_loss, F.zeros_like(cur_loss))
 
     def add_seed_constraint_loss(self, F, cur_loss):
         # G - number of seeded topics
@@ -126,7 +127,8 @@ class BowNTM(HybridBlock):
             entropies = F.add(entropies, per_topic_entropy)
             return (F.add(cur_loss, entropies), entropies)
         else:
-            return (cur_loss, None)
+            return (cur_loss, F.zeros_like(cur_loss))
+            #return (cur_loss, None)
 
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
@@ -136,7 +138,7 @@ class BowNTM(HybridBlock):
     def get_loss_terms(self, F, data, y, KL, l1_pen_const, batch_size):
         l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
         recon_loss = -F.sparse.sum( data * F.log(y+1e-12), axis=0, exclude=True )
-        i_loss = recon_loss + l1_pen + KL
+        i_loss = F.broadcast_plus(recon_loss, F.broadcast_plus(l1_pen, KL))
         ii_loss, coherence_loss = self.add_coherence_reg_penalty(F, i_loss)
         iii_loss, entropies = self.add_seed_constraint_loss(F, ii_loss)
         return iii_loss, recon_loss, l1_pen, entropies, coherence_loss

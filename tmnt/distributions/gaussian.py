@@ -7,11 +7,11 @@ __all__ = ['GaussianLatentDistribution']
 
 class GaussianLatentDistribution(LatentDistribution):
 
-    def __init__(self, n_latent, ctx, dr=0.2):
+    def __init__(self, n_latent, enc_size, ctx, dr=0.2):
         super(GaussianLatentDistribution, self).__init__(n_latent, ctx)
         with self.name_scope():
-            self.mu_encoder = gluon.nn.Dense(units = n_latent)
-            self.lv_encoder = gluon.nn.Dense(units = n_latent)
+            self.mu_encoder = gluon.nn.Dense(in_units=enc_size, units = n_latent)
+            self.lv_encoder = gluon.nn.Dense(in_units=enc_size, units = n_latent)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.lv_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)

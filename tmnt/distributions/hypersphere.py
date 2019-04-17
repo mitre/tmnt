@@ -20,21 +20,27 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         self.x = (1. - self.b) / (1. + self.b)
         self.c = self.kappa * self.x + self.dim * np.log(1 - self.x ** 2)  # dim * (kdiv *x + np.log(1-x**2))
         aa = self.dim / 2.0
-        self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))        
+        self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))
+        self.num_samples = 100000
+        self.w_samples = self._pregenerate_samples(num_samples=self.num_samples)
+        print("Shape w_samples = {}".format(self.w_samples.shape))
         with self.name_scope():
             self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
+            self.vmf_samples = self.params.get('vmf_samples', shape=(self.num_samples,), grad_req='null',
+                                               init = mx.init.Constant([self.kld_v]), differentiable=False)
             self.mu_encoder = gluon.nn.Dense(units = n_latent)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
-        self.num_samples = 100000
-        self.w_samples = self._pregenerate_samples(num_samples=self.num_samples)
+        self.vmf_samples.initialize()
+        self.vmf_samples.set_data(self.w_samples)
+        
 
-    def hybrid_forward(self, F, data, batch_size, kld_const):
+    def hybrid_forward(self, F, data, batch_size, kld_const, vmf_samples):
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
         kld = F.broadcast_to(kld_const, shape=(batch_size,))
-        z_p = self._get_hypersphere_sample(F, mu_bn, batch_size)
+        z_p = self._get_hypersphere_sample(F, mu_bn, batch_size, vmf_samples)
         z = self.post_sample_dr_o(z_p)
         return F.softmax(z), kld
 
@@ -61,13 +67,14 @@ class HyperSphericalLatentDistribution(LatentDistribution):
             w_f = mx.nd.where(mask, w_f, w)  # if mask is 1, then don't use w and leave as unset
         return w_f
     
-    def _get_hypersphere_sample(self, F, mu, batch_size):
+    def _get_hypersphere_sample(self, F, mu, batch_size, vmf_samples):
         # mu = mu # F.norm(...)  - already normalized
         #sw = self._get_weight_batch(F, batch_size)
-        sw = self._get_weight_from_cache(F, batch_size)
+        sw = self._get_weight_from_cache(F, batch_size, vmf_samples)
         sw = F.expand_dims(sw, axis=1)
-        sw_v = sw * F.ones((batch_size, self.n_latent), ctx=self.model_ctx)
-        vv = self._get_orthonormal_batch(F, mu)
+
+        sw_v = F.broadcast_to(sw, shape=(batch_size, self.n_latent))
+        vv = self._get_orthonormal_batch(F, mu, batch_size)
         sc11 = F.ones((batch_size, self.n_latent), ctx=self.model_ctx)
         sc22 = sw_v ** 2.0
         sc_factor = F.sqrt(sc11 - sc22)
@@ -83,9 +90,9 @@ class HyperSphericalLatentDistribution(LatentDistribution):
                + d * np.log(k) / 2.0 - np.log(sp.iv(d / 2.0, k))
                - sp.loggamma(d / 2 + 1) - d * np.log(2) / 2).real])
 
-    def _get_weight_from_cache(self, F, batch_size):
+    def _get_weight_from_cache(self, F, batch_size, vmf_samples):
         to_select = F.random.randint(low=0, high=self.num_samples, shape=(batch_size,))
-        return F.take(self.w_samples, to_select)
+        return F.take(vmf_samples, to_select)
 
     def _get_weight_batch(self, F, batch_size):
         dim = self.n_latent
@@ -135,16 +142,17 @@ class HyperSphericalLatentDistribution(LatentDistribution):
             if kappa * w + dim * np.log(1. - x * w) - c >= np.log(u):  # thresh is dim *(kdiv * (w-x) + log(1-x*w) -log(1-x**2))
                 return w
 
-    def _get_orthonormal_batch(self, F, mu):
-        batch_size = mu.shape[0]
+    def _get_orthonormal_batch(self, F, mu, batch_size):
         dim = self.n_latent
         mu_1 = F.expand_dims(mu, axis=1)
         rv = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent, 1), ctx=self.model_ctx)
-        rescaled = F.squeeze(F.linalg.gemm2(mu_1, rv), axis=2)
-        proj_mu_v = mu * rescaled
+        rescaled_1 = F.squeeze(F.linalg.gemm2(mu_1, rv), axis=2)
+        rescaled = F.broadcast_to(rescaled_1, shape=(batch_size, self.n_latent))
+        proj_mu_v = F.broadcast_mul(mu, rescaled)        
         o_vec = rv.squeeze() - proj_mu_v
         o_norm = F.norm(o_vec, axis=1, keepdims=True)
-        return o_vec / o_norm
+        #print("Shape o_vec = {}, o_norm = {}".format(o_vec.shape, o_norm.shape))
+        return F.broadcast_div(o_vec, o_norm)
 
 
 
