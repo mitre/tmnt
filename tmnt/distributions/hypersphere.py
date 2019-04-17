@@ -32,7 +32,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
-        self.vmf_samples.initialize()
+        self.vmf_samples.initialize(ctx=self.ctx)
         self.vmf_samples.set_data(self.w_samples)
         
 
