@@ -52,6 +52,8 @@ def get_vocab(counter, size=2000):
                               bos_token=None, eos_token=None, min_freq=5, max_size=size)
     return vocab
 
+
+
 def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None, pat='*.json'):
     files = glob.glob(json_dir + '/' + pat)
     if i_vocab is None:
