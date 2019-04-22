@@ -46,7 +46,7 @@ class BowNTMInference(object):
             d4 = list(self.vocab.token_to_idx.keys())
             d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
             json.dump(d, fp, sort_keys=True, indent=4)
-            #fp.write('')
+        return d
 
 
     def encode_texts(self, intexts):

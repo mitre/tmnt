@@ -125,10 +125,30 @@ class BowNTM(HybridBlock):
             per_topic_entropy = F.sum(seed_means_pr * per_topic_entropy)
             entropies = F.add(entropies, F.sum(pref_loss))
             entropies = F.add(entropies, per_topic_entropy)
-            return (F.add(cur_loss, entropies), entropies)
+            return (F.broadcast_add(cur_loss, entropies), entropies)
         else:
             return (cur_loss, F.zeros_like(cur_loss))
             #return (cur_loss, None)
+
+    def general_entropy_min_loss(self, F, cur_loss):
+        if F is mx.ndarray:
+            w = self.decoder.params.get('weight').data()
+        else:
+            w = self.decoder.params.get('weight').var()
+        #print("Shape w = {}".format(w.shape))
+        w_term_probs = F.softmax(w, axis=1) ** 4.0
+
+        #w_topic_probs = F.softmax(w, axis=0) ** 2.0
+        #print("Term 1 = {}".format(w_term_probs[0].asnumpy()))
+
+        entropies = -F.sum(w_term_probs * F.log(w_term_probs))
+
+        #entropies = -F.sum(w_topic_probs * F.log(w_topic_probs))
+        #entropies_term = -F.sum(w_term_probs * F.log(w_term_probs), axis=1)
+        #print("Shape entropies = {}".format(entropies_term.shape))        
+        #print("Entropies term = {}".format(entropies_term[:20].asnumpy()))
+        return (F.broadcast_add(cur_loss, entropies), entropies)
+        
 
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
@@ -141,6 +161,7 @@ class BowNTM(HybridBlock):
         i_loss = F.broadcast_plus(recon_loss, F.broadcast_plus(l1_pen, KL))
         ii_loss, coherence_loss = self.add_coherence_reg_penalty(F, i_loss)
         iii_loss, entropies = self.add_seed_constraint_loss(F, ii_loss)
+        #iv_loss, entropies = self.general_entropy_min_loss(F, iii_loss)
         return iii_loss, recon_loss, l1_pen, entropies, coherence_loss
 
     def hybrid_forward(self, F, data, l1_pen_const=None):

@@ -14,12 +14,12 @@ __all__ = ['get_sparse_vecs_txt']
 
 tokenizer = BasicTokenizer(use_stop_words=True)
 
-def get_counter_file(txt_file):
+def get_counter_file_batch(txt_file_batch):
     counter = Counter()
-    i = 0
-    with io.open(txt_file, 'r') as fp:
-        for txt in fp:
-            counter = nlp.data.count_tokens(tokenizer.tokenize(txt), counter = counter)
+    for txt_file in txt_file_batch:
+        with io.open(txt_file, 'r') as fp:
+            for txt in fp:
+                counter = nlp.data.count_tokens(tokenizer.tokenize(txt), counter = counter)
     return counter
 
 def sp_fn(txt_file_and_vocab):
@@ -35,15 +35,21 @@ def sp_fn(txt_file_and_vocab):
         sp_vecs.append(sorted(cnts.items()))
     return sp_vecs
 
+def batches(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i+n]
+
 def get_counter_dir_parallel(txt_dir, pat='*.txt'):
     files = glob.glob(txt_dir + '/' + pat)
-    if len(files) > 2:
+    batch_size = max(1, int(len(files) / 20))
+    file_batches = list(batches(files, batch_size))
+    if len(file_batches) > 2:
         p = Pool(cpu_count())
-        counters = p.map(get_counter_file, files)
+        counters = p.map(get_counter_file_batch, file_batches)
     else:
-        counters = map(get_counter_file, files)
-    count = sum(counters, Counter())
-    return count
+        counters = map(get_counter_file_batch, file_batches)
+    print("Built {} counters".format(len(counters)))
+    return sum(counters, Counter())
 
 def get_vocab(counter, size=2000):
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
@@ -68,13 +74,14 @@ def get_sparse_vecs_txt(sp_out_file, vocab_out_file, txt_dir, vocab_size=2000, i
     with io.open(sp_out_file, 'w') as fp:
         for block in sp_vecs:
             for v in block:
-                fp.write('-1')  ## the label (-1  if none)
-                for (i,c) in v:
-                    fp.write(' ')
-                    fp.write(str(i))
-                    fp.write(':')
-                    fp.write(str(c))
-                fp.write('\n')
+                if len(v) > 5:
+                    fp.write('-1')  ## the label (-1  if none)
+                    for (i,c) in v:
+                        fp.write(' ')
+                        fp.write(str(i))
+                        fp.write(':')
+                        fp.write(str(c))
+                    fp.write('\n')
     if i_vocab is None: ## print out vocab if we had to create it
         with io.open(vocab_out_file, 'w') as fp:
             for i in range(len(vocab.idx_to_token)):

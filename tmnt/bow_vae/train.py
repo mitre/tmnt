@@ -37,6 +37,7 @@ __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
 def get_wd_freqs(data_csr, max_sample_size=1000000):
     sample_size = min(max_sample_size, data_csr.shape[0])
+    print("Sample size = {}".format(sample_size))
     data = data_csr[:sample_size].asnumpy() # should select at RANDOM
     sums = np.sum(data, axis=0)
     return list(sums)
