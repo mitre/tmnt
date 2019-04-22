@@ -86,7 +86,7 @@ def get_sparse_vecs_txt(sp_out_file, vocab_out_file, txt_dir, vocab_size=2000, i
         with io.open(vocab_out_file, 'w') as fp:
             for i in range(len(vocab.idx_to_token)):
                 fp.write(vocab.idx_to_token[i])
-                fp.write(' 0\n')
+                fp.write('\n')
     if full_histogram_file:
         with io.open(full_histogram_file, 'w') as fp:
             items = list(counter.items())
