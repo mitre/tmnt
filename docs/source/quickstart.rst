@@ -32,8 +32,10 @@ Once the files are in place, training a model invovles invoking the ``train_mode
 found in the ``bin/`` directory.  Using the example data provided (20 news corpus), we can build
 a model as follows::
 
-  python bin/train_model.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --save_dir ./_experiments/ --model_dir ./_model_dir_final/ --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
-
+  python bin/train_model.py --tr_vec_file ./data/train.2.vec \
+  --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab \
+  --save_dir ./_experiments/ --model_dir ./_model_dir_final/ \
+  --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
 
 
 2. Preparing text data
@@ -42,12 +44,29 @@ a model as follows::
 The sparse vector representation for a corpus can be obtained from two different input formats:
 1) plain text documents (one document per file) or 2) json objects with one document per json object.
 
-The key arguments required for Raw Text mode are the directory of training files (``--train_dir``),
-directory of test files (``--test_dir``) a file pattern (``--file_pat``) and (``--vocab_size``).
-The data in the training and test directories should consiste of raw UTF-8 encoded text files where
-each file represents a document or other natural unit of text for the target domain. The file pattern
-should be provided to select files that match a specified regular expression.  Finally, the vocabulary
-size ``--vocab_size`` will indicate the total number of word types that will be used in the model.
+There are two input formats (currently).  The first assumes a single JSON object per line in a file.  The value of the key 'text' will
+be used as the document string.  All other fields are ignored. So, for example::
+
+
+  {"id": "1052322266514673664", "text": "This is the text of one of the documents in the corpus."}
+  {"id": "1052322266514673664", "text": "This is the text of another of the documents in the corpus."}
+  ...
+
+Two directories of such files should be provided, one for training and one for test.  Assuming the files end with `.json` extensions, the
+following example invocation would prepare the data for the training and test sets, creating vector representations with a vocabulary
+size of 2000.  Note that this script uses the built in pre-processing which tokenizes, downcases and removes common English stopwords.
+An example invocation ::
+
+
+  python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.json' --tr_input_dir ./train-json-files/ --tst_input_dir ./test-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec 
+
+
+Another input format assumes directories for training and test sets, where each file is a separate plain text document. This should be
+invoked by adding the `--txt_mode` option::
+
+
+  python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.txt' --tr_input_dir ./train-txt-files/ --tst_input_dir ./test-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec --txt_mode
+   
 
 TMNT does it's own pre-processing of the text and includes a built-in stop-word list for English
 to remove certain common terms that tend to act as distractors for the purposes of generating coherent topics.
