@@ -69,7 +69,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
     
     def _get_hypersphere_sample(self, F, mu, batch_size, vmf_samples):
         # mu = mu # F.norm(...)  - already normalized
-        #sw = self._get_weight_batch(F, batch_size)
+        #sw = self._get_weight_batch_old(F, batch_size)
         sw = self._get_weight_from_cache(F, batch_size, vmf_samples)
         sw = F.expand_dims(sw, axis=1)
 

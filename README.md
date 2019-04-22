@@ -62,7 +62,7 @@ be used as the document string.  All other fields are ignored. So, for example:
 ....
 ```
 
-Two directories of such files should be provided, one for training and one for test.  Assuming the files end with the `.json` extensions, the
+Two directories of such files should be provided, one for training and one for test.  Assuming the files end with `.json` extensions, the
 following example invocation would prepare the data for the training and test sets, creating vector representations with a vocabulary
 size of 2000.  Note that this script uses the built in pre-processing which tokenizes, downcases and removes common English stopwords.
 

@@ -63,8 +63,9 @@ class BowNTM(HybridBlock):
             if fixed_embedding:
                 self.embedding.collect_params().setattr('grad_req', 'null')
         ## Initialize decoder bias terms to corpus frequencies
-        if wd_freqs:
-            freq_nd = mx.nd.array(wd_freqs, ctx=ctx) + 1
+        if wd_freqs is not None:
+            #freq_nd = mx.nd.array(wd_freqs, ctx=ctx) + 1
+            freq_nd = wd_freqs + 1
             total = freq_nd.sum()
             log_freq = freq_nd.log() - freq_nd.sum().log()
             bias_param = self.decoder.collect_params().get('bias')
