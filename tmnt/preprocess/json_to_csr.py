@@ -10,17 +10,26 @@ import threading
 
 from tmnt.preprocess import BasicTokenizer
 
-__all__ = ['get_sparse_vecs']
+__all__ = ['get_sparse_vecs', 'set_text_key', 'set_min_doc_size']
 
 tokenizer = BasicTokenizer(use_stop_words=True)
+txt_key = 'text'
+min_doc_size = 6
+
+def set_text_key(k):
+    global txt_key
+    txt_key = k
+
+def set_min_doc_size(k):
+    global min_doc_size
+    min_doc_size = k
 
 def get_counter_file(json_file):
     counter = None
-    i = 0
     with io.open(json_file, 'r') as fp:
         for l in fp:
             js = json.loads(l)
-            txt = js['text'] ## text field
+            txt = js[txt_key] ## text field
             counter = nlp.data.count_tokens(tokenizer.tokenize(txt), counter = counter)
     return counter
 
@@ -30,9 +39,9 @@ def sp_fn(json_file_and_vocab):
     with io.open(json_file, 'r') as fp:
         for l in fp:
             js = json.loads(l)
-            toks = tokenizer.tokenize(js['text'])
+            toks = tokenizer.tokenize(js[txt_key])
             tok_ids = [vocab[token] for token in toks if token in vocab]
-            if (len(tok_ids) > 5):
+            if (len(tok_ids) >= min_doc_size):
                 cnts = nlp.data.count_tokens(tok_ids)
                 sp_vecs.append(sorted(cnts.items()))
     return sp_vecs
@@ -53,7 +62,6 @@ def get_vocab(counter, size=2000):
     return vocab
 
 
-
 def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None, pat='*.json'):
     files = glob.glob(json_dir + '/' + pat)
     if i_vocab is None:
@@ -61,7 +69,6 @@ def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, vocab_size=2000, i_vo
         vocab = get_vocab(counter, vocab_size)
     else:
         vocab = i_vocab
-    print("... Vocabulary constructed ...")
     files_and_vocab = [(f,vocab) for f in files]
     if len(files) > 2:
         p = Pool(cpu_count())
