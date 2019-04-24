@@ -29,6 +29,7 @@ def setup_parser():
     parser.add_argument('--model_dir', required=True, type=Path,
                         help='The directory where the params, specs, and vocab should be found.')
     parser.add_argument('--plot_file', type=str, help='Output plot')
+    parser.add_argument('--words_per_topic', type=int, help='Number of terms per topic to output', default=10)
     return parser
 
 def read_vector_file(file):
@@ -76,7 +77,7 @@ if __name__ == "__main__":
         plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.7, cmap='coolwarm')
         plt.savefig(args.plot_file, dpi=1000)
 
-    top_k_words_per_topic = inference_model.get_top_k_words_per_topic(10)        
+    top_k_words_per_topic = inference_model.get_top_k_words_per_topic(args.words_per_topic)        
     for i in range(len(top_k_words_per_topic)):
         print("Topic {}: {}".format(i, top_k_words_per_topic[i]))
 

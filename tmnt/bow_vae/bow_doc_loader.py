@@ -139,14 +139,18 @@ class NullSplitter(nlp.data.Splitter):
 
 def load_vocab(vocab_file):
     """
-    Load a pre-derived vocabulary, assumes format consisting of "word id" on each line
+    Load a pre-derived vocabulary, assumes format consisting of a single word on each line.
+    Note: this is a bit of a hack to use a counter to sort the vocab items IN THE ORDER THEY ARE FOUND IN THE FILE.
     """
     w_dict = {}
+    words = []
     with io.open(vocab_file, 'r') as fp:
         for line in fp:
             els = line.split(' ')
-            cnt = int(els[1]) if len(els) > 1 else 1
-            w_dict[els[0].strip()] = cnt
+            words.append(els[0].strip())
+    ln_wds = len(words)
+    for i in range(ln_wds):
+        w_dict[words[i]] = ln_wds - i
     counter = nlp.data.Counter(w_dict)
     return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 
