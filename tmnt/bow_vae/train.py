@@ -135,9 +135,9 @@ class BowVAEWorker(Worker):
         emb_size: Size of embedding (based on pre-trained embedding or specified)
         """
         vocab = self.vocabulary
-        if embedding_source and embedding_source != 'random':
+        if embedding_source != 'random':
             if self.vocab_cache.get(embedding_source):
-                vocab = self.vocab_cache[embedding_source]
+                vocab = copy.deepcopy(self.vocab_cache[embedding_source])
             else:
                 e_type, e_name = tuple(embedding_source.split(':'))
                 pt_embedding = nlp.embedding.create(e_type, source=e_name)
