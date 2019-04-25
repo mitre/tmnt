@@ -64,12 +64,18 @@ def compute_coherence(model, k, test_data, log_terms=False):
     top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
     npmi_eval = EvaluateNPMI(top_k_words_per_topic)
     npmi = npmi_eval.evaluate_csr_mat(test_data)
+    unique_term_ids = set()
+    for i in range(num_topics):
+        topic_ids = list(top_k_words_per_topic[i])
+        for j in range(len(topic_ids)):
+            unique_term_ids.add(topic_ids[j])
+    redundancy = 1.0 - float(len(unique_term_ids)) / k / num_topics
     logging.info("Test Coherence: {}".format(npmi))
     if log_terms:
         top_k_tokens = [list(map(lambda x: model.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
         for i in range(num_topics):
             logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
-    return npmi
+    return npmi, redundancy
 
 
 def analyze_seed_matrix(model, seed_matrix):
@@ -249,7 +255,7 @@ class BowVAEWorker(Worker):
                 with io.open(self.c_args.trace_file, otype) as fp:
                     if otype == 'w+':
                         fp.write("Epoch,PPL,NPMI\n")
-                    npmi = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
+                    npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
                     fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
 
     def _l1_regularize(self, model, cur_l1_coef):
@@ -313,11 +319,12 @@ class BowVAEWorker(Worker):
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
         perplexity = evaluate(model, test_dataloader, self.total_tst_words, self.c_args, self.ctx)
-        npmi = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
+        npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
         res = {
-            'loss': 1.0 - npmi,
+            'loss': 1.0 - npmi + redundancy,
             'info': {
                 'test_perplexity': perplexity,
+                'redundancy': redundancy,
                 'test_npmi': npmi
             }
         }
