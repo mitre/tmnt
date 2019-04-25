@@ -198,6 +198,7 @@ class BowVAEWorker(Worker):
         latent_distrib = config['latent_distribution']
         optimizer = config['optimizer']
         n_latent = int(config['n_latent'])
+        kappa = float(config.get('kappa', 100.0))
         enc_hidden_dim = int(config['enc_hidden_dim'])
         target_sparsity = float(config.get('target_sparsity', 0.0))
         coherence_reg_penalty = float(config.get('coherence_regularizer_penalty', 0.0))
@@ -213,14 +214,14 @@ class BowVAEWorker(Worker):
             test_labels = mx.nd.one_hot(test_labels, n_covars) if test_labels is not None else None
             model = \
                 MetaDataBowNTM(n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
-                               fixed_embedding=fixed_embedding, latent_distrib=self.c_args.latent_distribution,
+                               fixed_embedding=fixed_embedding, latent_distrib=self.c_args.latent_distribution, kappa=kappa,
                                init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity = target_sparsity,
                                batch_size=self.c_args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
         else:
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
                    fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
-                       init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity,
+                       init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity, kappa=kappa,
                    batch_size=self.c_args.batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
         if self.c_args.hybridize:
