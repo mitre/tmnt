@@ -56,7 +56,7 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
     return perplexity
 
 
-def compute_coherence(model, k, test_data):
+def compute_coherence(model, k, test_data, log_terms=False):
     w = model.decoder.collect_params().get('weight').data()
     num_topics = model.n_latent
     sorted_ids = w.argsort(axis=0, is_ascend=False)
@@ -65,6 +65,10 @@ def compute_coherence(model, k, test_data):
     npmi_eval = EvaluateNPMI(top_k_words_per_topic)
     npmi = npmi_eval.evaluate_csr_mat(test_data)
     logging.info("Test Coherence: {}".format(npmi))
+    if log_terms:
+        top_k_tokens = [list(map(lambda x: model.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
+        for i in range(num_topics):
+            logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
     return npmi
 
 
@@ -135,7 +139,7 @@ class BowVAEWorker(Worker):
         emb_size: Size of embedding (based on pre-trained embedding or specified)
         """
         vocab = self.vocabulary
-        if embedding_source != 'random':
+        if embedding_source and embedding_source != 'random':
             if self.vocab_cache.get(embedding_source):
                 vocab = copy.deepcopy(self.vocab_cache[embedding_source])
             else:
@@ -243,7 +247,7 @@ class BowVAEWorker(Worker):
                 with io.open(self.c_args.trace_file, otype) as fp:
                     if otype == 'w+':
                         fp.write("Epoch,PPL,NPMI\n")
-                    npmi = compute_coherence(model, 10, self.data_test_csr)
+                    npmi = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
                     fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
 
     def _l1_regularize(self, model, cur_l1_coef):
