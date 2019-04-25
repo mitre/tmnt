@@ -110,6 +110,10 @@ class BowVAEWorker(Worker):
         self.data_test_csr = data_test_csr
         self.max_budget = max_budget
         self.train_labels = train_labels
+        self.test_labels = test_labels
+        self.data_train_csr = data_train_csr
+        self.data_test_csr = data_test_csr
+        
         self.search_mode = False
         
         self.wd_freqs = get_wd_freqs(data_train_csr)
@@ -118,10 +122,7 @@ class BowVAEWorker(Worker):
         self.seed_matrix = None
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary)
-        train_iter = mx.io.NDArrayIter(data_train_csr, train_labels, c_args.batch_size, last_batch_handle='discard', shuffle=True)
-        self.train_dataloader = DataIterLoader(train_iter)    
-        test_iter = mx.io.NDArrayIter(data_test_csr, test_labels, c_args.batch_size, last_batch_handle='discard', shuffle=False)
-        self.test_dataloader = DataIterLoader(test_iter)
+
 
     def _initialize_embedding_layer(self, embedding_source, config):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
@@ -206,6 +207,7 @@ class BowVAEWorker(Worker):
         enc_hidden_dim = int(config['enc_hidden_dim'])
         target_sparsity = float(config.get('target_sparsity', 0.0))
         coherence_reg_penalty = float(config.get('coherence_regularizer_penalty', 0.0))
+        batch_size = int(config['batch_size'])
 
         l1_coef = self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
         embedding_source = config.get('embedding_source')
@@ -220,19 +222,19 @@ class BowVAEWorker(Worker):
                 MetaDataBowNTM(n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=self.c_args.latent_distribution, kappa=kappa,
                                init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity = target_sparsity,
-                               batch_size=self.c_args.batch_size, wd_freqs=wd_freqs, ctx=ctx)
+                               batch_size=batch_size, wd_freqs=wd_freqs, ctx=ctx)
         else:
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
                    fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
                        init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity, kappa=kappa,
-                   batch_size=self.c_args.batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+                   batch_size=batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
         if self.c_args.hybridize:
             model.hybridize()
         return model, trainer
 
-    def _eval_trace(self, model, epoch):
+    def _eval_trace(self, model, epoch, test_dataloader):
         """Evaluate the model against test/validation data and optionally write to a trace file.
         
         Parameters
@@ -240,8 +242,8 @@ class BowVAEWorker(Worker):
         model: VAE model
         epoch: int - the current epoch
         """
-        if self.data_test_csr is not None and (epoch + 1) % self.c_args.eval_freq == 0:
-            perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
+        if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
+            perplexity = evaluate(model, test_dataloader, self.total_tst_words, self.c_args, self.ctx)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
@@ -281,12 +283,17 @@ class BowVAEWorker(Worker):
         """
         logging.info("Evaluating with Budget {} against Config: {}".format(budget, config))
         model, trainer = self._get_model(config)
+        batch_size = int(config['batch_size'])
         l1_coef = self.c_args.init_sparsity_pen
+        train_dataloader = \
+            DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size, last_batch_handle='discard', shuffle=True))
+        test_dataloader = \
+            DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='discard', shuffle=True))
 
         for epoch in range(int(budget)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
-            for i, (data, labels) in enumerate(self.train_dataloader):
+            for i, (data, labels) in enumerate(train_dataloader):
                 details['tr_size'] += data.shape[0]
                 if labels is None or labels.size == 0:
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
@@ -301,11 +308,11 @@ class BowVAEWorker(Worker):
                 self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss)
             self._log_details(details, epoch)
             if not self.search_mode:
-                self._eval_trace(model, epoch)
+                self._eval_trace(model, epoch, test_dataloader)
             if model.target_sparsity > 0.0:
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
-        perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
+        perplexity = evaluate(model, test_dataloader, self.total_tst_words, self.c_args, self.ctx)
         npmi = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
         res = {
             'loss': 1.0 - npmi,

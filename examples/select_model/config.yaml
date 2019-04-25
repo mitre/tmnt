@@ -1,6 +1,7 @@
 ## Learnable hyper-parameters 
 ---
   lr: {range: [1e-6, 1e-2]}
+  batch_size: {i_range: [100, 400], step: 100}
   latent_distribution: [vmf, gaussian, logistic_gaussian]
   optimizer: [adam]
   n_latent: {i_range: [20, 40], step: 5}

@@ -60,7 +60,6 @@ class TMNTConfig(object):
     def get_configspace(self):
         cd = self.cd
         cs = CS.ConfigurationSpace()
-        ## learning rate
         lr_c = self._get_range_uniform('lr', cd)
         latent_distribution_c = self._get_categorical('latent_distribution', cd)
         optimizer_c = self._get_categorical('optimizer', cd)
@@ -69,7 +68,9 @@ class TMNTConfig(object):
         
         kappa_c = self._get_range_uniform('kappa', cd)
 
-        cs.add_hyperparameters([lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, kappa_c])
+        batch_size_c = self._get_range_integer('batch_size', cd)
+
+        cs.add_hyperparameters([batch_size_c, lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, kappa_c])
 
         ## optional hyperparameters
         target_sparsity_c = self._get_range_uniform('target_sparsity', cd)
