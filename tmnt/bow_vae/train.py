@@ -306,7 +306,7 @@ class BowVAEWorker(Worker):
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
         perplexity = evaluate(model, self.test_dataloader, self.total_tst_words, self.c_args, self.ctx)
-        npmi = compute_coherence(model, 10, self.data_test_csr)
+        npmi = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
         res = {
             'loss': 1.0 - npmi,
             'info': {
