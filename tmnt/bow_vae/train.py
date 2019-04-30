@@ -65,11 +65,12 @@ def compute_coherence(model, k, test_data, log_terms=False):
     npmi_eval = EvaluateNPMI(top_k_words_per_topic)
     npmi = npmi_eval.evaluate_csr_mat(test_data)
     unique_term_ids = set()
+    unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
     for i in range(num_topics):
-        topic_ids = list(top_k_words_per_topic[i])
+        topic_ids = list(top_k_words_per_topic[i:unique_limit])
         for j in range(len(topic_ids)):
             unique_term_ids.add(topic_ids[j])
-    redundancy = 1.0 - float(len(unique_term_ids)) / k / num_topics
+    redundancy = 1.0 - float(len(unique_term_ids)) / k / unique_limit
     logging.info("Test Coherence: {}".format(npmi))
     if log_terms:
         top_k_tokens = [list(map(lambda x: model.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]

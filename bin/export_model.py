@@ -23,6 +23,6 @@ full_model_dict = infer.export_full_model_inference_details(args.vec_file, args.
 
 if args.html_vis:
     import pyLDAvis
-    opts = funcy.merge(full_model_dict)
+    opts = funcy.merge(full_model_dict, {'mds': 'mmds'})
     vis_data = pyLDAvis.prepare(**opts)
     pyLDAvis.save_html(vis_data, args.html_vis)
