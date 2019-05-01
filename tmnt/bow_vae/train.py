@@ -70,7 +70,7 @@ def compute_coherence(model, k, test_data, log_terms=False):
         topic_ids = list(top_k_words_per_topic[i][:unique_limit])
         for j in range(len(topic_ids)):
             unique_term_ids.add(topic_ids[j])
-    redundancy = 1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit) ** 2
+    redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
     logging.info("Test Coherence: {}".format(npmi))
     logging.info("Test Redundancy at 5: {}".format(redundancy))    
     if log_terms:
