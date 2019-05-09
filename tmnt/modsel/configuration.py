@@ -5,6 +5,7 @@ import io
 import ConfigSpace as CS
 import ConfigSpace.hyperparameters as CSH
 
+
 class TMNTConfig(object):
 
     def __init__(self, c_file):
@@ -13,8 +14,10 @@ class TMNTConfig(object):
             self.cd = yaml.safe_load(fp)
 
     def _get_range_uniform(self, param, cd):
-        if cd.get(param) and (len(cd[param]['range']) > 1):
+        if cd.get(param):            
             p = cd[param]
+            if len(p['range']) == 1:
+                return CSH.Constant(param, float(p['range'][0]))
             low = float(p['range'][0])
             upp = float(p['range'][1])
             default_val = p.get('default')
@@ -31,6 +34,10 @@ class TMNTConfig(object):
 
     def _get_range_integer(self, param, cd, q=1):
         p = cd[param]
+        
+        if len(p['i_range']) < 2:
+            return CSH.Constant(param, int(p['i_range'][0]))
+        
         low = int(p['i_range'][0])
         upp = int(p['i_range'][1])
         default_val = p.get('default')
@@ -44,7 +51,10 @@ class TMNTConfig(object):
         else:
             default = int((upp + low) / 2)
         use_log = False
-        return CSH.UniformIntegerHyperparameter(param, lower=low, upper=upp, default_value=default, q=q_val, log=use_log)
+        if low == upp:
+            return CSH.Constant(param, low)
+        else:
+            return CSH.UniformIntegerHyperparameter(param, lower=low, upper=upp, default_value=default, q=q_val, log=use_log)
 
     def _get_categorical(self, param, cd):
         if cd.get(param):
