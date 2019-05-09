@@ -17,8 +17,8 @@ parser.add_argument('--vocab_size', type=int, help='Size of the vocabulary to co
 parser.add_argument('--vocab_file', type=str, help='File for resulting vocabulary')
 parser.add_argument('--full_vocab_histogram', type=str, help='Optional output of entire histogram', default=None)
 parser.add_argument('--txt_mode', action='store_true', help='Assume txt file input (1 document per file)')
-parser.add_argument('--json-text-key', type=str, help='Key for json field containing document text (default is \'text\')', default='text')
-parser.add_argument('--min-doc-length', type=int, help='Minimum document length (in tokens)', default=10)
+parser.add_argument('--json_text_key', type=str, help='Key for json field containing document text (default is \'text\')', default='text')
+parser.add_argument('--min_doc_length', type=int, help='Minimum document length (in tokens)', default=10)
 
 args = parser.parse_args()
 
