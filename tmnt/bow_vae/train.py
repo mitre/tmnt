@@ -322,8 +322,12 @@ class BowVAEWorker(Worker):
         mx.nd.waitall()
         perplexity = evaluate(model, test_dataloader, self.total_tst_words, self.c_args, self.ctx)
         npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
+        try:
+            coherence_coefficient = self.c_args.coherence_coefficient
+        except AttributeError:
+            coherence_coefficient = 1.0
         res = {
-            'loss': 1.0 - (npmi * self.c_args.coherence_coefficient) + redundancy + (perplexity / 1000),
+            'loss': 1.0 - (npmi * coherence_coefficient) + redundancy + (perplexity / 1000),
             'info': {
                 'test_perplexity': perplexity,
                 'redundancy': redundancy,
