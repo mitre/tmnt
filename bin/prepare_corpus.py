@@ -27,6 +27,7 @@ if args.txt_mode:
                                 pat=args.file_pat)
     _ = get_sparse_vecs_txt(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab, pat=args.file_pat)
 else:
+    ## NOTE: if the file pattern is '*.txt' the input is assumed to be just plain text with one document per line, rather than JSON
     set_text_key(args.json_text_key)
     set_min_doc_size(args.min_doc_length)
     vocab = get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir, args.vocab_size, full_histogram_file=args.full_vocab_histogram,

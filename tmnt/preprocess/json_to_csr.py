@@ -33,6 +33,13 @@ def get_counter_file(json_file):
             counter = nlp.data.count_tokens(tokenizer.tokenize(txt), counter = counter)
     return counter
 
+def get_counter_plain_text_file(txt_file):
+    counter = None
+    with io.open(txt_file, 'r') as fp:
+        for txt in fp:
+            counter = nlp.data.count_tokens(tokenizer.tokenize(txt), counter = counter)
+    return counter
+
 def sp_fn(json_file_and_vocab):
     json_file, vocab = json_file_and_vocab
     sp_vecs = []
@@ -46,13 +53,29 @@ def sp_fn(json_file_and_vocab):
                 sp_vecs.append(sorted(cnts.items()))
     return sp_vecs
 
+def sp_plain_text_fn(txt_file_and_vocab):
+    txt_file, vocab = txt_file_and_vocab
+    sp_vecs = []
+    with io.open(txt_file, 'r') as fp:
+        for txt in fp:
+            toks = tokenizer.tokenize(txt)
+            tok_ids = [vocab[token] for token in toks if token in vocab]
+            if (len(tok_ids) >= min_doc_size):
+                cnts = nlp.data.count_tokens(tok_ids)
+                sp_vecs.append(sorted(cnts.items()))
+    return sp_vecs
+
 def get_counter_dir_parallel(json_dir, pat='*.json'):
     files = glob.glob(json_dir + '/' + pat)
+    if pat == '*.txt':
+        cnt_fn = get_counter_plain_text_file
+    else:
+        cnt_fn = get_counter_file
     if len(files) > 2:
         p = Pool(cpu_count())
-        counters = p.map(get_counter_file, files)
+        counters = p.map(cnt_fn, files)
     else:
-        counters = map(get_counter_file, files)
+        counters = map(cnt_fn, files)
     count = sum(counters, Counter())
     return count
 
@@ -70,11 +93,15 @@ def get_sparse_vecs(sp_out_file, vocab_out_file, json_dir, vocab_size=2000, i_vo
     else:
         vocab = i_vocab
     files_and_vocab = [(f,vocab) for f in files]
+    if pat == '*.txt':
+        vec_fn = sp_plain_text_fn
+    else:
+        vec_fn = sp_fn
     if len(files) > 2:
         p = Pool(cpu_count())
-        sp_vecs = p.map(sp_fn, files_and_vocab)
+        sp_vecs = p.map(vec_fn, files_and_vocab)
     else:
-        sp_vecs = map(sp_fn, files_and_vocab)
+        sp_vecs = map(vec_fn, files_and_vocab)
     ## write sp vecs
     with io.open(sp_out_file, 'w') as fp:
         for block in sp_vecs:

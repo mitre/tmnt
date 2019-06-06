@@ -24,7 +24,8 @@ class BowNTMInference(object):
         self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
         self.model.load_parameters(str(param_file), allow_missing=False)
 
-    def export_full_model_inference_details(self, sp_vec_file, ofile):
+
+    def get_model_details(self, sp_vec_file):
         data_csr, _, labels = file_to_sp_vec(sp_vec_file, len(self.vocab))        
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
@@ -36,6 +37,10 @@ class BowNTMInference(object):
         ## 4) vocab (in same order as W columns)
         ## 5) frequency of each word w_i \in W over the test corpus
         term_cnts = mx.nd.sum(data_csr, axis=0)
+        return w_pr, dt_matrix, doc_lengths, term_cnts
+
+    def export_full_model_inference_details(self, sp_vec_file, ofile):
+        w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file)
         
         with io.open(ofile, 'w') as fp:
             ## write this as JSON
