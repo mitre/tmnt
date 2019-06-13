@@ -11,7 +11,7 @@ Quickstart Guide
 What is TMNT?
 ~~~~~~~~~~~~~
 
-TMNT (Topic Modeling Neural Toolkit) implements a number of recently published methods for
+TMNT (Topic Modeling Neural Toolkit) implements a number of methods for
 training and applying neural network variational autoencoders (VAEs) to the problem of
 modeling latent topics in large documents collections. While various open source implementations
 of some of the algorithms in these recent papers are available, TMNT strives to include
@@ -21,21 +21,26 @@ to leverage word embeddings directly as the input representation as well as meth
 guided topic modeling that allow users to influence the make-up of learned topics.
 
 1. Training a Topic Model
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++++++++++++++++++++++++++
 
 Training a topic model requires both a training file containing sparse vector representations of documents
 along with a test/validation file in the same format. In addition, a vocabulary file is needed to
 map token indices back to their string representations.  See preparing data (below) for how to
 process a corpus of text data into this sparse vector format.
 
-Once the files are in place, training a model invovles invoking the ``train_model.py`` script
+Once the prepared files are in place, training a model invovles invoking the ``train_model.py`` script
 found in the ``bin/`` directory.  Using the example data provided (20 news corpus), we can build
 a model as follows::
 
   python bin/train_model.py --tr_vec_file ./data/train.2.vec \
   --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab \
   --save_dir ./_experiments/ --model_dir ./_model_dir_final/ \
-  --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
+  --config ./examples/train_model/model.config --trace_file ./TRACE.csv
+
+In general, TMNT assumes a test/validation corpus is available to determine the held out perplexity
+and coherence. If a separate held-out dataset is unavailable or not desired (testing on the training
+data is less of an issue for unsupervised algorithms), the `--test_vec_file` vector file can
+take the same file as for trainin (via the `--tr_vec_file` option).
 
 
 2. Preparing text data
@@ -49,7 +54,7 @@ be used as the document string.  All other fields are ignored. So, for example::
 
 
   {"id": "1052322266514673664", "text": "This is the text of one of the documents in the corpus."}
-  {"id": "1052322266514673664", "text": "This is the text of another of the documents in the corpus."}
+  {"id": "1052322266514673665", "text": "This is the text of another of the documents in the corpus."}
   ...
 
 Two directories of such files should be provided, one for training and one for test.  Assuming the files end with `.json` extensions, the
