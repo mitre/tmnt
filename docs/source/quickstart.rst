@@ -20,7 +20,7 @@ deploy for applications.  Some novel algorithms are also implemented, including 
 to leverage word embeddings directly as the input representation as well as methods for
 guided topic modeling that allow users to influence the make-up of learned topics.
 
-Training a Topic Model
+1. Training a Topic Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Training a topic model requires both a training file containing sparse vector representations of documents
@@ -42,7 +42,7 @@ a model as follows::
 ++++++++++++++++++++++
 
 The sparse vector representation for a corpus can be obtained from two different input formats:
-1) plain text documents (one document per file) or 2) json objects with one document per json object.
+1) json objects with one document per json object or 2) plain text documents (one document per file) 
 
 There are two input formats (currently).  The first assumes a single JSON object per line in a file.  The value of the key 'text' will
 be used as the document string.  All other fields are ignored. So, for example::
@@ -68,7 +68,6 @@ invoked by adding the `--txt_mode` option::
   python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.txt' --tr_input_dir ./train-txt-files/ --tst_input_dir ./test-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec --txt_mode
    
 
-TMNT does it's own pre-processing of the text and includes a built-in stop-word list for English
+TMNT does its own rudimentary pre-processing of the text and includes a built-in stop-word list for English
 to remove certain common terms that tend to act as distractors for the purposes of generating coherent topics.
-This pre-processing is implemented in Python and relatively unoptimized.  Fortunately, the pre-processing need only
-be done once, up front, in order to experiment with a wide variety of topic model variations. 
+This pre-processing is implemented in Python and relatively unoptimized.  
