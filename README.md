@@ -16,7 +16,15 @@ Once Conda is installed properly, install a new conda environment for TMNT as fo
 
 
 ```
-conda create --name TMNT pip gxx_linux-64 gcc_linux-64 numpy==1.14.6
+conda create --name TMNT pip numpy==1.16.4
+```
+
+For some platforms, it may be preferred to install the necessary
+C compiler/environment via conda by adding the `gxx_linux-64`
+and `gcc_linux-64` targets:
+
+```
+conda create --name TMNT pip gxx_linux-64 gcc_linux-64 numpy==1.16.4
 ```
 
 Then, from the tmnt top-level directory, execute
@@ -41,7 +49,7 @@ It's possible to train a topic model on the data as follows:
 ```
 mkdir -p _model_dir
 mkdir -p _experiments
-python bin/train_model.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --save_dir ./_experiments/ --model_dir ./_model_dir_final/ --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
+python bin/train_model.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --save_dir ./_experiments/ --model_dir ./_model_dir/ --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
 ```
 
 The resulting model will be placed in the `_model_dir` directory.
