@@ -5,7 +5,18 @@ for details, examples and API documentation.
 
 ## Installation
 
-## Dependencies and Environment
+### Getting TMNT
+
+TMNT can be obtained via GitLab:
+
+```
+git clone https://gitlab.mitre.org/milu/tmnt.git
+```
+
+Note that the test data provided in the TMNT archive uses `git lfs`, see details here for installing
+and setting up in your git environment: `https://git-lfs.github.com`
+
+### Dependencies and Environment
 
 TMNT is easiest to use by installing all necessary dependencies with Conda (Miniconda or Anaconda). If
 Conda is not installed, please install by grabbing the necessary install script from:
