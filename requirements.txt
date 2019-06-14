@@ -9,7 +9,7 @@ chardet==3.0.4
 ConfigSpace==0.4.10
 cryptography==2.4.2
 cycler==0.10.0
-Cython==0.29.6
+Cython==0.29.10
 docutils==0.14
 funcy==1.11
 future==0.17.1
