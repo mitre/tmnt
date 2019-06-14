@@ -33,9 +33,12 @@ Once the prepared files are in place, training a model invovles invoking the ``t
 found in the ``bin/`` directory.  Using the example data provided (20 news corpus), we can build
 a model as follows::
 
+  mkdir _experiments
+  mkdir _model_dir
+
   python bin/train_model.py --tr_vec_file ./data/train.2.vec \
   --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab \
-  --save_dir ./_experiments/ --model_dir ./_model_dir_final/ \
+  --save_dir ./_experiments/ --model_dir ./_model_dir/ \
   --config ./examples/train_model/model.config --trace_file ./TRACE.csv
 
 In general, TMNT assumes a test/validation corpus is available to determine the held out perplexity
