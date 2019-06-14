@@ -34,11 +34,12 @@ not work, try the following::
 
 Once the environment is setup, activate it and install TMNT-specific libraries::
 
-  conda activate TMNT
+  conda activate TMNT 
+  cd tmnt
   pip install -r requirements.txt
 
 
-Finally, TMNT should be installed as a package locally by running::
+Finally, TMNT must be installed as a package locally by running::
 
   python setup.py develop
 
