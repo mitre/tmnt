@@ -20,7 +20,6 @@ deploy for applications.  Some novel algorithms are also implemented, including 
 to leverage word embeddings directly as the input representation as well as methods for
 guided topic modeling that allow users to influence the make-up of learned topics.
 
-Installation ..... details here.
 
 1. Training a Topic Model
 +++++++++++++++++++++++++
