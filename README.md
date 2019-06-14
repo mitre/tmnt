@@ -5,7 +5,29 @@ for details, examples and API documentation.
 
 ## Installation
 
-After cloning the repository, TMNT should be installed as a package locally by running:
+## Dependencies and Environment
+
+TMNT is easiest to use by installing all necessary dependencies with Conda (Miniconda or Anaconda). If
+Conda is not installed, please install by grabbing the necessary install script from:
+
+https://docs.conda.io/en/latest/miniconda.html
+
+Once Conda is installed properly, install a new conda environment for TMNT as follows:
+
+
+```
+conda create --name TMNT pip gxx_linux-64 gcc_linux-64 numpy==1.14.6
+```
+
+Then, from the tmnt top-level directory, execute
+
+
+```
+conda activate TMNT
+pip install -r requirements.txt
+```
+
+Finally, TMNT should be installed as a package locally by running:
 
 ```
 python setup.py develop
