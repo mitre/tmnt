@@ -26,8 +26,8 @@ Once Conda is installed properly, install a new conda environment for TMNT as fo
 
 
 For some platforms, it may be preferred to install the necessary
-C compiler/environment via conda by adding the `gxx_linux-64`
-and `gcc_linux-64` targets.  If the `conda create` step above does
+C compiler/environment via conda by adding the ``gxx_linux-64``
+and ``gcc_linux-64`` targets.  If the ``conda create`` step above does
 not work, try the following::
 
   conda create --name TMNT pip gxx_linux-64 gcc_linux-64 numpy==1.16.4

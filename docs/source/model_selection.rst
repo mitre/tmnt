@@ -35,9 +35,9 @@ Categorical-valued hyperparameters are indicated by including a simple list
 of strings as the value for each hyperparameter key.
 
 Bounded integer-valued hyperparameters are specified using an object that includes
-the keys `i_range` and `step`. `i_range` should have a value consisting of a list
-of two integers, the first the lower bound and the second the upper bound. The `step`
-key should take an integer as a value to provide the step-size. If the `step` key-value
+the keys ``i_range`` and ``step``. ``i_range`` should have a value consisting of a list
+of two integers, the first the lower bound and the second the upper bound. The ``step``
+key should take an integer as a value to provide the step-size. If the ``step`` key-value
 pair is not provided, the default step of 1 is used. Thus::
 
   {i_range: [20, 50], step: 5}
@@ -46,7 +46,7 @@ Indicates that the hyperparameter ranges from 20 to 50 over increments of size 5
 20, 25, 30, 35, 40, 45, 50
 
 Bounded real-valued hyperparameters are specified by simply including an object with
-a `range` key with a list value having two elements. The first element as the lower
+a ``range`` key with a list value having two elements. The first element as the lower
 bound and the second as the upper bound.  Thus::
 
   {range: [1.0, 5.0]}
@@ -72,6 +72,6 @@ enc_hidden_dim       integer        Number of dimensions for encoding layer
 batch_size           integer        Batch size to use during learning
 embedding_size       integer        Number of embedding dimensions if pre-trained embedding not used
 embedding_source     categorical    MXNet pre-trained embedding name (see embedding docs for details)
-fixed_embedding      categorical    Either `True` or `False`; fixes weights of embedding layer
-latent_distribution  categorical    Either `vmf`, `gaussian` or `logistic_gaussian`
+fixed_embedding      categorical    Either ``True`` or ``False``; fixes weights of embedding layer
+latent_distribution  categorical    Either ``vmf``, ``gaussian`` or ``logistic_gaussian``
 ===================  ===========    =================================================================
