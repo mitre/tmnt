@@ -10,6 +10,7 @@ Welcome to TMNT's documentation!
    :maxdepth: 1
    :titlesonly:
 
+   overview.rst
    installation.rst
    quickstart.rst
    examples.rst

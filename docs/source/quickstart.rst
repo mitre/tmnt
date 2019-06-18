@@ -8,17 +8,6 @@ Quickstart Guide
 .. contents::
     :local:
 
-What is TMNT?
-~~~~~~~~~~~~~
-
-TMNT (Topic Modeling Neural Toolkit) implements a number of methods for
-training and applying neural network variational autoencoders (VAEs) to the problem of
-modeling latent topics in large documents collections. While various open source implementations
-of some of the algorithms in these recent papers are available, TMNT strives to include
-the best variations across the literature within a software package that is quick to use and
-deploy for applications.  Some novel algorithms are also implemented, including an approach
-to leverage word embeddings directly as the input representation as well as methods for
-guided topic modeling that allow users to influence the make-up of learned topics.
 
 
 1. Training a Topic Model
