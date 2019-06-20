@@ -27,7 +27,7 @@ llvmlite==0.28.0
 MarkupSafe==1.1.1
 matplotlib==3.0.3
 more-itertools==7.0.0
-mxnet==1.4.1
+mxnet-cu100==1.4.1
 netifaces==0.10.9
 numba==0.43.0
 numexpr==2.6.9

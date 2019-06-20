@@ -67,6 +67,8 @@ def get_top_k_terms_from_file(in_file):
     return top_k_terms
 
 
+os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
+
 if __name__ == "__main__":
     parser = setup_parser()
     args = parser.parse_args()

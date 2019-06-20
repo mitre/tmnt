@@ -17,6 +17,7 @@ Welcome to TMNT's documentation!
    inference.rst
    guided.rst
    model_selection.rst
+   hpc.rst
 
 
 Indices and tables

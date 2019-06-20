@@ -83,13 +83,13 @@ encodings2 = infer.encode_texts([['first', 'document', 'tokenized', 'about', 'gu
 ## Evaluation
 
 To assess a trained model against a dataset, run the `evaluate.py` script as below.  Note that depending
-on your backend for handling visualization/plotting you may need to run `pythonw` instead of `python` when
+on your backend for handling visualization/plotting you may need to run `python` instead of `python` when
 executing the script.
 
 ```
-pythonw bin/evaluate.py --train_file ./data/train.2.vec --eval_file ./data/test.2.vec \
-                        --vocab_file ./data/train.2.vocab --model_dir ./_model_dir/ \
-			--num_topics 20 --plot_file ./p1.png
+python bin/evaluate.py --train_file ./data/train.2.vec --test_file ./data/test.2.vec \
+                        --vocab_file ./data/train.2.vocab --model_dir ./_model_dir/ 
+			
 ```
 
 ## Preparing data
