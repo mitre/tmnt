@@ -45,10 +45,9 @@ def get_counter_dir_parallel(txt_dir, pat='*.txt'):
     file_batches = list(batches(files, batch_size))
     if len(file_batches) > 2:
         p = Pool(cpu_count())
-        counters = p.map(get_counter_file_batch, file_batches)
+        counters = p.map(get_counter_file_batch, file_batches)        
     else:
-        counters = map(get_counter_file_batch, file_batches)
-    print("Built {} counters".format(len(counters)))
+        counters = map(get_counter_file_batch, file_batches)    
     return sum(counters, Counter())
 
 def get_vocab(counter, size=2000):
