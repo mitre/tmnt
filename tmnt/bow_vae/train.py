@@ -373,7 +373,7 @@ def select_model(worker, tmnt_config_space, total_iterations, result_logger):
     logging.info(config)
     bohb = BOHB(  configspace = cs,
                   run_id = '0', nameserver='127.0.0.1', result_logger=result_logger,
-                  min_budget=2, max_budget=8
+                  min_budget=2, max_budget=worker.max_budget
            )
     res = bohb.run(n_iterations=total_iterations)
     bohb.shutdown(shutdown_workers=True)

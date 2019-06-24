@@ -15,9 +15,9 @@ Welcome to TMNT's documentation!
    quickstart.rst
    examples.rst
    inference.rst
-   guided.rst
    model_selection.rst
    hpc.rst
+   guided.rst   
 
 
 Indices and tables
