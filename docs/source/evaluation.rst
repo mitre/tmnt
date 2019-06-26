@@ -21,8 +21,12 @@ Also, it will provide the normalized point-wise mutual information-based coheren
 
 The ``evaluate.py`` script can also encode the test documents and produce an embedding visualized
 using UMAP ( https://umap-learn.readthedocs.io/en/latest/ ) by simply adding the ``--plot_file`` argument
-specifying the output PNG file. Note that on a Mac, typically Python must be installed as a Framework
-and ``pythonw`` to interpret the program, e.g.::
+specifying the output PNG file. If the test vector file includes label indices (as the first entry on each row), these
+will be mapped to colors in the plot.  If meaninful labels aren't available (i.e. the ``.vec`` file has values of
+-1 for the label of each document), the scatter plot will still be generated with all points having the same color.
+This is less useful, but can still be helpful to see how documents are embedded across the topic space.
+Note that when using the ``plot_file`` option to generate a UMAP plot on a Mac,
+typically Python must be installed as a Framework and ``pythonw`` used to interpret the program, e.g.::
 
   pythonw bin/evaluate.py --test_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --model_dir ./_model_dir/ --words_per_topic 10 \
                           --plot_file 20news.plot.png
