@@ -16,6 +16,7 @@ Welcome to TMNT's documentation!
    examples.rst
    inference.rst
    model_selection.rst
+   evaluation.rst
    hpc.rst
    guided.rst   
 

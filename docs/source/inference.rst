@@ -21,7 +21,7 @@ topic distribution.
 To use a trained model in this fashion within a larger application, or perhaps as a web-service
 the ``tmnt.bow_vae.runtime`` module provides a simple API to encode documents::
 
-  python3 -i tmnt/bow_vae/runtime.py
+  python -i tmnt/bow_vae/runtime.py
   >>> infer = BowNTMInference('_model_dir/model.params','_model_dir/model.specs', '_model_dir/vocab.json')
   >>> top_k_terms = infer.get_top_k_words_per_topic(10)
   >>> encoding1 = infer.encode_texts([['gun', 'gun', 'gun', 'shooting', 'police', 'defense', 'gun', 'gun', 'gun']])

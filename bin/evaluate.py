@@ -3,6 +3,7 @@
 import math
 import argparse
 import io
+import os
 import mxnet as mx
 
 from tmnt.bow_vae.runtime import BowNTMInference
@@ -20,13 +21,10 @@ from tmnt.bow_vae.bow_doc_loader import load_vocab
 
 import numpy as np
 
-import matplotlib.pyplot as plt
-
 def setup_parser():
     parser = argparse.ArgumentParser(
         description='Evaluate a Variational AutoEncoder topic model')
     parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
-    parser.add_argument('--train_file', type=str, required=True, help='file in sparse vector format')        
     parser.add_argument('--test_file', type=str, required=True, help='file in sparse vector format')    
     parser.add_argument('--vocab_file', type=str, required=True, help='Vocabulary file associated with sparse vector data')
     parser.add_argument('--model_dir', type=Path,
@@ -34,7 +32,6 @@ def setup_parser():
     parser.add_argument('--plot_file', type=str, help='Output plot')
     parser.add_argument('--words_per_topic', type=int, help='Number of terms per topic to output', default=10)
     parser.add_argument('--override_top_k_terms', type=str, help='File of topic terms to use instead of those from model', default=None)
-    parser.add_argument('--json_vocab_file', type=str, help='Json vocabulary file', default=None)
     return parser
 
 def read_vector_file(file):
@@ -78,7 +75,7 @@ if __name__ == "__main__":
     if args.override_top_k_terms:
         top_k_words_per_topic = get_top_k_terms_from_file(args.override_top_k_terms)
         
-        _, _, _, tst_csr, _, _, _ = collect_sparse_data(args.train_file, args.vocab_file, args.test_file)
+        _, _, _, tst_csr, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
         vocab = load_vocab(args.vocab_file)
         top_k_words_per_topic_ids = [ [ vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
@@ -94,6 +91,7 @@ if __name__ == "__main__":
 
 
     if args.plot_file: # get UMAP embedding visualization
+        import matplotlib.pyplot as plt
         encoded, labels = inference_model.encode_vec_file(args.test_file)
         encodings = np.array([doc.asnumpy() for doc in encoded])
         print("There are {0} labels and {1} encodings".format(len(labels), len(encodings)))
@@ -102,7 +100,6 @@ if __name__ == "__main__":
         plt.scatter(*embeddings.T, c=labels, s=0.2, alpha=0.7, cmap='coolwarm')
         plt.savefig(args.plot_file, dpi=1000)
 
-    
     top_k_words_per_topic = inference_model.get_top_k_words_per_topic(args.words_per_topic)        
     for i in range(len(top_k_words_per_topic)):
         print("Topic {}: {}".format(i, top_k_words_per_topic[i]))
@@ -110,7 +107,7 @@ if __name__ == "__main__":
     top_k_words_per_topic_ids = [ [ inference_model.vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
 
     npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
-    _, tr_csr, _, tst_csr, _, _, _ = collect_sparse_data(args.train_file, args.vocab_file, args.test_file)
+    _, _, _, tst_csr, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
     test_npmi = npmi_eval.evaluate_csr_mat(tst_csr)
     print("**** Test NPMI = {} *******".format(test_npmi))
               

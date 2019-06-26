@@ -39,19 +39,22 @@ class BowNTMInference(object):
         term_cnts = mx.nd.sum(data_csr, axis=0)
         return w_pr, dt_matrix, doc_lengths, term_cnts
 
-    def export_full_model_inference_details(self, sp_vec_file, ofile):
+
+    def get_pyldavis_details(self, sp_vec_file):
         w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file)
-        
-        with io.open(ofile, 'w') as fp:
-            ## write this as JSON
-            d1 = w_pr.asnumpy().tolist()
-            d2 = list(map(lambda x: x.asnumpy().tolist(), dt_matrix))
-            d3 = doc_lengths.asnumpy().tolist()
-            d5 = term_cnts.asnumpy().tolist()
-            d4 = list(self.vocab.token_to_idx.keys())
-            d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
-            json.dump(d, fp, sort_keys=True, indent=4)
+        d1 = w_pr.asnumpy().tolist()
+        d2 = list(map(lambda x: x.asnumpy().tolist(), dt_matrix))
+        d3 = doc_lengths.asnumpy().tolist()
+        d5 = term_cnts.asnumpy().tolist()
+        d4 = list(self.vocab.token_to_idx.keys())
+        d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
         return d
+    
+
+    def export_full_model_inference_details(self, sp_vec_file, ofile):
+        d = self.get_pyldavis_details(sp_vec_file)
+        with io.open(ofile, 'w') as fp:
+            json.dump(d, fp, sort_keys=True, indent=4)        
 
 
     def encode_texts(self, intexts):
