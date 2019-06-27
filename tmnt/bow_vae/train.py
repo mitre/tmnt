@@ -438,7 +438,7 @@ def model_select_bow_vae(args):
     worker, log_dir = get_worker(args, args.budget)
     worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=log_dir, overwrite=True)
-    NS = hpns.NameServer(run_id='0', host='127.0.0.1', port=None)
+    NS = hpns.NameServer(run_id='0', host='127.0.0.1', port=args.ns_port)
     NS.start()
     res = select_model(worker, args.config_space, args.iterations, result_logger)
     NS.shutdown()
