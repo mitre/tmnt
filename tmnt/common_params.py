@@ -8,12 +8,11 @@ def get_base_argparser():
     parser.add_argument('--vocab_file', type=str, help='Vocabulary file associated with sparse vector data')
     parser.add_argument('--seed', type=int, default=1234, help='The random seed to use for RNG')
     parser.add_argument('--save_dir', type=str, default='_experiments')
-    #parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch, perplexity, NPMI) into a separate file for producing training curves')
     parser.add_argument('--model_dir', type=str, default=None, help='Save final model and associated meta-data to this directory (default None)')
     parser.add_argument('--use_labels_as_covars', action='store_true', help='If labels/meta-data are provided, use as covariates in model', default=False)
     parser.add_argument('--topic_seed_file', type=str, default=None, help='Seed topic terms')
 
-    ## XXX - would like to remove this
+    ## XXX - would prefer to remove this
     parser.add_argument('--init_sparsity_pen', type=float, default = 0.00001)
     parser.add_argument('--sparsity_threshold', type=float, default = 0.001)
     

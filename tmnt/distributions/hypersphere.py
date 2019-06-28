@@ -23,7 +23,6 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))
         self.num_samples = 100000
         self.w_samples = self._pregenerate_samples(num_samples=self.num_samples)
-        print("Shape w_samples = {}".format(self.w_samples.shape))
         with self.name_scope():
             self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
             self.vmf_samples = self.params.get('vmf_samples', shape=(self.num_samples,), grad_req='null',
@@ -45,6 +44,9 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         return F.softmax(z), kld
 
 
+    """
+    Method to pre-generate 
+    """
     def _pregenerate_samples(self, num_samples=100000):
         dim = self.n_latent
         kappa = self.kappa
@@ -68,8 +70,6 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         return w_f
     
     def _get_hypersphere_sample(self, F, mu, batch_size, vmf_samples):
-        # mu = mu # F.norm(...)  - already normalized
-        #sw = self._get_weight_batch_old(F, batch_size)
         sw = self._get_weight_from_cache(F, batch_size, vmf_samples)
         sw = F.expand_dims(sw, axis=1)
 
@@ -81,8 +81,6 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         orth_term = vv * sc_factor
         mu_scaled = mu * sw_v
         return orth_term + mu_scaled    
-        #return F.expand_dims(orth_term + mu_scaled, axis=0)
-
 
     @staticmethod
     def _vmf_kld(k, d):
@@ -136,7 +134,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
 
         while True:
             #z = np.random.beta(dim / 2., dim / 2.)  # concentrates towards 0.5 as d-> inf
-            z = min(1.0, max(0.0,np.random.normal(0.5, self.approx_var)))
+            z = min(1.0, max(0.0,np.random.normal(0.5, self.approx_var))) ## approximation with normal for efficiency
             w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
             u = np.random.uniform(low=0, high=1)
             if kappa * w + dim * np.log(1. - x * w) - c >= np.log(u):  # thresh is dim *(kdiv * (w-x) + log(1-x*w) -log(1-x**2))
@@ -144,14 +142,13 @@ class HyperSphericalLatentDistribution(LatentDistribution):
 
     def _get_orthonormal_batch(self, F, mu, batch_size):
         dim = self.n_latent
-        mu_1 = F.expand_dims(mu, axis=1)
-        rv = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent, 1), ctx=self.model_ctx)
+        mu_1       = F.expand_dims(mu, axis=1)
+        rv         = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent, 1), ctx=self.model_ctx)
         rescaled_1 = F.squeeze(F.linalg.gemm2(mu_1, rv), axis=2)
-        rescaled = F.broadcast_to(rescaled_1, shape=(batch_size, self.n_latent))
-        proj_mu_v = F.broadcast_mul(mu, rescaled)        
-        o_vec = rv.squeeze() - proj_mu_v
-        o_norm = F.norm(o_vec, axis=1, keepdims=True)
-        #print("Shape o_vec = {}, o_norm = {}".format(o_vec.shape, o_norm.shape))
+        rescaled   = F.broadcast_to(rescaled_1, shape=(batch_size, self.n_latent))
+        proj_mu_v  = F.broadcast_mul(mu, rescaled)        
+        o_vec      = rv.squeeze() - proj_mu_v
+        o_norm     = F.norm(o_vec, axis=1, keepdims=True)
         return F.broadcast_div(o_vec, o_norm)
 
 
