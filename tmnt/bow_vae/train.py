@@ -438,7 +438,8 @@ def model_select_bow_vae(args):
     worker, log_dir = get_worker(args, args.budget)
     worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=log_dir, overwrite=True)
-    NS = hpns.NameServer(run_id='0', host='127.0.0.1', port=args.ns_port)
+    id_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=None)
     NS.start()
     res = select_model(worker, args.config_space, args.iterations, result_logger)
     NS.shutdown()
@@ -456,6 +457,10 @@ def model_select_bow_vae(args):
     logging.info("Best configuration {}".format(inc_config))
     with open(os.path.join(args.save_dir, 'results.pkl'), 'wb') as fh:
         pickle.dump(res, fh)
+    with open(os.path.join(args.save_dir, 'best.model.config'), 'w') as fp:
+        inc_config['training_epochs'] = args.budget
+        specs = json.dumps(inc_config)
+        fp.write(specs)
     if args.model_dir:
         worker.retrain_best_config(inc_config, inc_run.budget)
 
