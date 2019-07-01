@@ -455,7 +455,7 @@ def model_select_bow_vae(args):
     inc_config = id2config[incumbent]['config']
     logging.info("Best configuration loss = {}".format(inc_loss))
     logging.info("Best configuration {}".format(inc_config))
-    with open(os.path.join(log_dir, 'results.pkl'), 'wb') as fh:
+    with open(os.path.join(log_dir, 'model_selection_results.pkl'), 'wb') as fh:
         pickle.dump(res, fh)
     with open(os.path.join(log_dir, 'best.model.config'), 'w') as fp:
         inc_config['training_epochs'] = args.budget
