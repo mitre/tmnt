@@ -10,6 +10,7 @@ import mxnet as mx
 import numpy as np
 import pickle
 import copy
+import socket
 
 from mxnet import autograd
 from mxnet import gluon
@@ -33,6 +34,18 @@ import hpbandster.core.result as hpres
 from hpbandster.optimizers import BOHB as BOHB
 
 __all__ = ['model_select_bow_vae', 'train_bow_vae']
+
+
+def usedPort(port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = True
+    try:
+        sock.bind(("0.0.0.0", port))
+        result = False
+    except:
+        result = True
+    sock.close()
+    return result
 
 
 def get_wd_freqs(data_csr, max_sample_size=1000000):
@@ -365,14 +378,14 @@ class BowVAEWorker(Worker):
         write_model(model, config, budget, self.c_args)
         
 
-def select_model(worker, tmnt_config_space, total_iterations, result_logger):
+def select_model(worker, tmnt_config_space, total_iterations, result_logger, id_str, ns_port):
     tmnt_config = TMNTConfig(tmnt_config_space)
     worker.run(background=True)
     cs = tmnt_config.get_configspace() 
     config = cs.sample_configuration().get_dictionary()
     logging.info(config)
     bohb = BOHB(  configspace = cs,
-                  run_id = '0', nameserver='127.0.0.1', result_logger=result_logger,
+                  run_id = id_str, nameserver='127.0.0.1', result_logger=result_logger, nameserver_port=ns_port,
                   min_budget=2, max_budget=worker.max_budget
            )
     res = bohb.run(n_iterations=total_iterations)
@@ -396,9 +409,9 @@ def write_model(m, config, budget, args):
             f.write(m.vocabulary.to_json())
 
 
-def get_worker(args, budget):
+def get_worker(args, budget, id_str, ns_port):
     i_dt = datetime.datetime.now()
-    train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
+    train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond)
     logging_config(folder=train_out_dir, name='bow_ntm', level=logging.INFO)
     logging.info(args)
     seed_rng(args.seed)
@@ -431,18 +444,27 @@ def get_worker(args, budget):
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx,
                               max_budget=budget,
-                              nameserver='127.0.0.1', run_id='0')
+                              nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
     return worker, train_out_dir
 
+
+def get_port():
+    p = 9090
+    while usedPort(p):
+        p += 1
+    return p
+
 def model_select_bow_vae(args):
-    worker, log_dir = get_worker(args, args.budget)
+    dd = datetime.datetime.now()
+    id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
+    ns_port = get_port()
+    worker, log_dir = get_worker(args, args.budget, id_str, ns_port)
     worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=log_dir, overwrite=True)
-    id_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=None)
+    logging.info("Starting nameserver on port {}".format(ns_port))
+    NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
     NS.start()
-    res = select_model(worker, args.config_space, args.iterations, result_logger)
-    NS.shutdown()
+    res = select_model(worker, args.config_space, args.iterations, result_logger, id_str, ns_port)
     id2config = res.get_id2config_mapping()
     incumbent = res.get_incumbent_id()
     logging.info('Best found configuration:', id2config[incumbent]['config'])
@@ -463,6 +485,7 @@ def model_select_bow_vae(args):
         fp.write(specs)
     if args.model_dir:
         worker.retrain_best_config(inc_config, inc_run.budget)
+    NS.shutdown()
 
 def train_bow_vae(args):
     with open(args.config, 'r') as f:
