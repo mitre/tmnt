@@ -427,19 +427,7 @@ def get_worker(args, budget, id_str, ns_port):
         vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels = \
             collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file)
     else:
-        logging.info("Loading and pre-processing text data found in {}".format(args.train_dir))
-        tr_dataset = BowDataSet(args.train_dir, args.file_pat)    
-        tr_csr_mat, vocab, total_tr_words = collect_stream_as_sparse_matrix(tr_dataset, max_vocab_size=args.max_vocab_size)
-        tr_labels = None
-        tst_labels = None
-        if args.vocab_file and args.tr_vec_file:
-            export_sparse_matrix(tr_csr_mat, args.tr_vec_file)
-            export_vocab(vocab, args.vocab_file)
-        if args.test_dir:
-            tst_dataset = BowDataSet(args.test_dir, args.file_pat)
-            tst_csr_mat, _, total_tst_words = collect_stream_as_sparse_matrix(tst_dataset, pre_vocab=vocab)
-            if args.vocab_file and args.tst_vec_file:
-                export_sparse_matrix(tst_csr_mat, args.tst_vec_file)
+        raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx,
