@@ -60,7 +60,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         w_f = mx.nd.zeros(num_samples, ctx=self.ctx)
         zz = mx.nd.zeros(1, ctx=self.ctx)
         while mx.nd.sum(mask) > 0.0:
-            z = mx.nd.clip(mx.nd.random.normal(0.5, self.approx_var, num_samples, ctx=self.ctx), 0.0, 1.0)
+            z = mx.nd.clip(mx.nd.random.normal(0.5, self.approx_var, num_samples, ctx=self.ctx), 1e-6, 1.0 - 1e-6)
             w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
             u = mx.nd.random.uniform(0, 1, num_samples, ctx=self.ctx)
             accept = kappa * w + dim * mx.nd.log(1. - x * w) - c >= mx.nd.log(u)
