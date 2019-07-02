@@ -478,6 +478,9 @@ def model_select_bow_vae(args):
 def train_bow_vae(args):
     with open(args.config, 'r') as f:
         config = json.loads(f.read())
-    worker, log_dir = get_worker(args, int(config['training_epochs']))
+    dd = datetime.datetime.now()
+    id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
+    ns_port = get_port()
+    worker, log_dir = get_worker(args, int(config['training_epochs']), id_str, ns_port)
     worker.retrain_best_config(config, int(config['training_epochs']))
 
