@@ -21,7 +21,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         self.c = self.kappa * self.x + self.dim * np.log(1 - self.x ** 2)  # dim * (kdiv *x + np.log(1-x**2))
         aa = self.dim / 2.0
         self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))
-        self.num_samples = 100000
+        self.num_samples = 200000
         self.w_samples = self._pregenerate_samples(num_samples=self.num_samples)
         with self.name_scope():
             self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
@@ -47,7 +47,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
     """
     Method to pre-generate 
     """
-    def _pregenerate_samples(self, num_samples=100000):
+    def _pregenerate_samples(self, num_samples=200000):
         dim = self.n_latent
         kappa = self.kappa
         dim = dim - 1
@@ -70,8 +70,8 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         return w_f
     
     def _get_hypersphere_sample(self, F, mu, batch_size, vmf_samples):
-        #sw = self._get_weight_from_cache(F, batch_size, vmf_samples)
-        sw = self._get_weight_batch(F, batch_size)
+        sw = self._get_weight_from_cache(F, batch_size, vmf_samples)
+        #sw = self._get_weight_batch(F, batch_size)
         sw = F.expand_dims(sw, axis=1)
         sw_v = F.broadcast_to(sw, shape=(batch_size, self.n_latent))
         vv = self._get_orthonormal_batch(F, mu, batch_size)
