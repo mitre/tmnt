@@ -21,7 +21,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         self.c = self.kappa * self.x + self.dim * np.log(1 - self.x ** 2)  # dim * (kdiv *x + np.log(1-x**2))
         aa = self.dim / 2.0
         self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))
-        self.num_samples = 200000
+        self.num_samples = 100000
         self.w_samples = self._pregenerate_samples(num_samples=self.num_samples)
         with self.name_scope():
             self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
@@ -47,7 +47,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
     """
     Method to pre-generate 
     """
-    def _pregenerate_samples(self, num_samples=200000):
+    def _pregenerate_samples(self, num_samples=100000):
         dim = self.n_latent
         kappa = self.kappa
         dim = dim - 1
@@ -105,7 +105,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         w_f = F.zeros(batch_size, ctx=self.ctx)
         zz = F.zeros(1, ctx=self.ctx)
         while F.broadcast_greater(F.sum(mask), zz):
-            z = F.clip(F.random.normal(0.5, self.approx_var, batch_size, ctx=self.ctx), 0.0, 1.0)
+            z = F.clip(F.random.normal(0.5, self.approx_var, batch_size, ctx=self.ctx), 0.000001, 0.99999)
             w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
             u = F.random.uniform(0, 1, batch_size, ctx=self.ctx)
             accept = kappa * w + dim * F.log(1. - x * w) - c >= F.log(u)
