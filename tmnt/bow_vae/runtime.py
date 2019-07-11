@@ -6,6 +6,8 @@ import gluonnlp as nlp
 import io
 from tmnt.bow_vae.bow_models import BowNTM
 from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
+from tmnt.preprocess.tokenizer import BasicTokenizer
+from multiprocessing import Pool, cpu_count
 
 class BowNTMInference(object):
 
@@ -82,16 +84,18 @@ class BowNTMInference(object):
             data = data.as_in_context(self.ctx)
             encs = self.model.encode_data(data)
             if use_probs:
-                norm = mx.nd.norm(encs, axis=1, keepdims=True)
-                encs = mx.nd.softmax(encs / norm)
+                #norm = mx.nd.norm(encs, axis=1, keepdims=True)
+                e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
+                encs = mx.nd.softmax(e1 ** 0.5)
             encodings.extend(encs)
         ## handle the last batch explicitly as NDArrayIter doesn't do that for us
         if last_batch_size > 0:
             data = csr[-last_batch_size:].as_in_context(self.ctx)
             encs = self.model.encode_data(data)
             if use_probs:
-                norm = mx.nd.norm(encs, axis=1, keepdims=True)                
-                encs = mx.nd.softmax(encs / norm)
+                #norm = mx.nd.norm(encs, axis=1, keepdims=True)
+                e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
+                encs = mx.nd.softmax(e1 ** 0.5)
             encodings.extend(encs)
         return encodings
 
@@ -112,3 +116,34 @@ class BowNTMInference(object):
         dataset_strm = BowDataSet(directory, pat, sampler='sequential') # preserve file ordering
         return self.encode_text_stream(dataset_strm)
         
+
+class TextEncoder(object):
+
+    def __init__(self, inference, use_probs=True):
+        self.inference = inference
+        self.use_probs = use_probs        
+        self.tokenizer = BasicTokenizer(do_lower_case=True, use_stop_words=False)
+
+    def encode_single_string(self, txt):
+        return self.encode_batch([txt])[0]
+
+    def _txt_to_vec(self, txt):
+        toks = self.tokenizer.tokenize(txt)
+        ids = [self.inference.vocab[token] for token in toks if token in self.inference.vocab]
+        return ids
+
+    def encode_batch(self, txts):
+        if (len(txts) > cpu_count() * 5):
+            p = Pool(cpu_count())
+            ids = p.map(self._txt_to_vec, txts)
+        else:
+            ids = map(self._txt_to_vec, txts)
+        data = mx.nd.zeros((len(txts), len(self.inference.vocab.idx_to_token)))
+        for i, txt_ids in enumerate(ids):
+            for t in txt_ids:
+                data[i][t] += 1.0
+        encs = self.inference.model.encode_data(data)
+        if self.use_probs:
+            e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
+            encs = mx.nd.softmax(e1 ** 0.5)
+        return encs

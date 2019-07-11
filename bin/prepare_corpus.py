@@ -5,6 +5,7 @@ import argparse
 
 from tmnt.preprocess import get_sparse_vecs, get_sparse_vecs_txt
 from tmnt.preprocess.json_to_csr import set_text_key, set_min_doc_size
+from tmnt.preprocess.vectorizer import JsonVectorizer, TextVectorizer
 
 parser = argparse.ArgumentParser('Prepare a training and validation/test dataset for topic model training')
 
@@ -19,18 +20,12 @@ parser.add_argument('--full_vocab_histogram', type=str, help='Optional output of
 parser.add_argument('--txt_mode', action='store_true', help='Assume txt file input (1 document per file)')
 parser.add_argument('--json_text_key', type=str, help='Key for json field containing document text (default is \'text\')', default='text')
 parser.add_argument('--min_doc_length', type=int, help='Minimum document length (in tokens)', default=10)
+parser.add_argument('--custom_stop_words', type=str, help='Custom stop-word file (one word per line)', default=None)
 
 args = parser.parse_args()
 
-if args.txt_mode:
-    vocab = get_sparse_vecs_txt(args.tr_vec_file, args.vocab_file, args.tr_input_dir, args.vocab_size, full_histogram_file=args.full_vocab_histogram,
-                                pat=args.file_pat)
-    _ = get_sparse_vecs_txt(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab, pat=args.file_pat)
-else:
-    ## NOTE: if the file pattern is '*.txt' the input is assumed to be just plain text with one document per line, rather than JSON
-    set_text_key(args.json_text_key)
-    set_min_doc_size(args.min_doc_length)
-    vocab = get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir, args.vocab_size, full_histogram_file=args.full_vocab_histogram,
+vectorizer = TextVectorizer(min_doc_size=args.min_doc_length) if args.txt_mode else JsonVectorizer(text_key=args.json_text_key, min_doc_size=args.min_doc_length)
+vocab = vectorizer.get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir, args.vocab_size, full_histogram_file=args.full_vocab_histogram,
                             pat=args.file_pat)
-    if args.tst_input_dir and args.tst_vec_file:
-        _ = get_sparse_vecs(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab, pat=args.file_pat)
+if args.tst_input_dir and args.tst_vec_file:
+    _ = vectorizer.get_sparse_vecs(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab, pat=args.file_pat)
