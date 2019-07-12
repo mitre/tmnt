@@ -1,7 +1,6 @@
 # coding: utf-8
 
 from .tokenizer import *
-from .json_to_csr import *
-from .txt_to_csr import *
+from .vectorizer import *
 
-__all__ = tokenizer.__all__ + json_to_csr.__all__ + txt_to_csr.__all__
+__all__ = tokenizer.__all__ + vectorizer.__all__ 

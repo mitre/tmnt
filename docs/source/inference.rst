@@ -22,8 +22,9 @@ To use a trained model in this fashion within a larger application, or perhaps a
 the ``tmnt.bow_vae.runtime`` module provides a simple API to encode documents::
 
   python -i tmnt/bow_vae/runtime.py
-  >>> infer = BowNTMInference('_model_dir/model.params','_model_dir/model.specs', '_model_dir/vocab.json')
-  >>> top_k_terms = infer.get_top_k_words_per_topic(10)
-  >>> encoding1 = infer.encode_texts([['gun', 'gun', 'gun', 'shooting', 'police', 'defense', 'gun', 'gun', 'gun']])
-  >>> encoding2 = infer.encode_texts([['space', 'flight', 'shuttle', 'space', 'flight', 'shuttle', 'space', 'flight', 'shuttle',]])
+  >>> infer = BowNTMInference('_model_dir/model.params','_model_dir/model.config', '_model_dir/vocab.json')
+  >>> text_encoder = TextEncoder(infer)
+  >>> encodings = text_encoder.encode_batch(['While space flight has been ongoing for decades, thoughts of returning to the moon have dominated nasa engineers thinking in recent years.', 'Sales have been slow with increases in shipping costs depending on brand items or generic'])
+
+The resulting ``encodings`` is an ``NDArray`` with shape ``(N,K)`` where ``N`` is the number of texts/documents encoded and ``K`` is the number of topics.
   

@@ -10,6 +10,8 @@ import threading
 
 from tmnt.preprocess import BasicTokenizer
 
+__all__ = ['JsonVectorizer', 'TextVectorizer']
+
 
 class Vectorizer(object):
 
