@@ -119,9 +119,20 @@ class BowNTMInference(object):
 
 class TextEncoder(object):
 
-    def __init__(self, inference, use_probs=True):
+    """
+    Takes a batch of text strings/documents and returns a matrix of their encodings (each row in the matrix
+    corresponds to the encoding of the corresponding input text).
+
+    Parameters
+    ----------
+    inference - the inference object using the trained model
+    use_probs - boolean that indicates whether raw topic scores should be converted to probabilities or not (default = True)
+    concurrent_processing_size - integer that specifies to use concurrent processing for text pre-processing when batch size exceeds this value
+    """
+    def __init__(self, inference, use_probs=True, concurrent_processing_size=12):
         self.inference = inference
-        self.use_probs = use_probs        
+        self.use_probs = use_probs
+        self.concurrent_processing_size = concurrent_processing_size
         self.tokenizer = BasicTokenizer(do_lower_case=True, use_stop_words=False)
 
     def encode_single_string(self, txt):
@@ -133,7 +144,7 @@ class TextEncoder(object):
         return ids
 
     def encode_batch(self, txts):
-        if (len(txts) > cpu_count() * 5):
+        if (len(txts) > self.concurrent_processing_size):
             p = Pool(cpu_count())
             ids = p.map(self._txt_to_vec, txts)
         else:
