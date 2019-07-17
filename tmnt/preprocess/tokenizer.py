@@ -38,12 +38,11 @@ class BasicTokenizer(object):
         """Tokenizes a piece of text."""
         text = self.to_unicode(text)
         text = self._clean_text(text)
+        if self.do_lower_case:
+            text = self._run_strip_accents(text.lower())
         orig_tokens = self.whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:
-            if self.do_lower_case:
-                token = token.lower()
-                token = self._run_strip_accents(token)
             split_tokens.extend(self._run_split_on_punc(token, keep_punct=False))
         if self.use_stop_words:
             final_tokens = [t for t in split_tokens if len(t) > 1 and not t in self.stop_word_set and not self.num_re.match(t)]

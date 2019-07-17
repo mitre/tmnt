@@ -7,7 +7,7 @@ import io
 from tmnt.bow_vae.bow_models import BowNTM
 from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
 from tmnt.preprocess.tokenizer import BasicTokenizer
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
 
 class BowNTMInference(object):
 
@@ -127,12 +127,12 @@ class TextEncoder(object):
     ----------
     inference - the inference object using the trained model
     use_probs - boolean that indicates whether raw topic scores should be converted to probabilities or not (default = True)
-    concurrent_processing_size - integer that specifies to use concurrent processing for text pre-processing when batch size exceeds this value
+    pool_size - integer that specifies the number of processes to use for concurrent text pre-processing
     """
-    def __init__(self, inference, use_probs=True, concurrent_processing_size=12):
+    def __init__(self, inference, use_probs=True):
         self.inference = inference
         self.use_probs = use_probs
-        self.concurrent_processing_size = concurrent_processing_size
+        self.vocab_len = len(self.inference.vocab.idx_to_token)
         self.tokenizer = BasicTokenizer(do_lower_case=True, use_stop_words=False)
 
     def encode_single_string(self, txt):
@@ -143,13 +143,9 @@ class TextEncoder(object):
         ids = [self.inference.vocab[token] for token in toks if token in self.inference.vocab]
         return ids
 
-    def encode_batch(self, txts):
-        if (len(txts) > self.concurrent_processing_size):
-            p = Pool(cpu_count())
-            ids = p.map(self._txt_to_vec, txts)
-        else:
-            ids = map(self._txt_to_vec, txts)
-        data = mx.nd.zeros((len(txts), len(self.inference.vocab.idx_to_token)))
+    def encode_batch(self, txts, pool_size=4):
+        ids = Pool(pool_size).map(self._txt_to_vec, txts)
+        data = mx.nd.zeros((len(txts), self.vocab_len))
         for i, txt_ids in enumerate(ids):
             for t in txt_ids:
                 data[i][t] += 1.0
