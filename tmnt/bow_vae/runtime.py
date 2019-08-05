@@ -135,16 +135,27 @@ class TextEncoder(object):
         self.vocab_len = len(self.inference.vocab.idx_to_token)
         self.tokenizer = BasicTokenizer(do_lower_case=True, use_stop_words=False)
 
-    def encode_single_string(self, txt):
-        return self.encode_batch([txt])[0]
-
     def _txt_to_vec(self, txt):
         toks = self.tokenizer.tokenize(txt)
         ids = [self.inference.vocab[token] for token in toks if token in self.inference.vocab]
         return ids
 
+    def encode_single_string(self, txt):
+        data = mx.nd.zeros((1, self.vocab_len))
+        for t in self._txt_to_vec(txt):
+            data[0][t] += 1.0
+        encs = self.inference.model.encode_data(data)
+        if self.use_probs:
+            e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
+            encs = mx.nd.softmax(e1 ** 0.5)
+        return encs
+
     def encode_batch(self, txts, pool_size=4):
-        ids = Pool(pool_size).map(self._txt_to_vec, txts)
+        pool = Pool(pool_size)
+        ids  = pool.map(self._txt_to_vec, txts)
+        # Prevent zombie threads from hanging around
+        pool.terminate()
+        pool = None
         data = mx.nd.zeros((len(txts), self.vocab_len))
         for i, txt_ids in enumerate(ids):
             for t in txt_ids:
