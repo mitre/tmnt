@@ -89,7 +89,7 @@ on your backend for handling visualization/plotting you may need to run `python`
 executing the script.
 
 ```
-python bin/evaluate.py --train_file ./data/train.2.vec --test_file ./data/test.2.vec \
+python bin/evaluate.py --test_file ./data/test.2.vec \
                         --vocab_file ./data/train.2.vocab --model_dir ./_model_dir/ 
 			
 ```
