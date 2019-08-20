@@ -27,7 +27,7 @@ Once Conda is installed properly, install a new conda environment for TMNT as fo
 
 
 ```
-conda create --name TMNT pip numpy==1.16.4
+conda create --name TMNT -c conda-forge pip numpy==1.17.0
 ```
 
 For some platforms, it may be preferred to install the necessary
@@ -35,7 +35,7 @@ C compiler/environment via conda by adding the `gxx_linux-64`
 and `gcc_linux-64` targets:
 
 ```
-conda create --name TMNT pip gxx_linux-64 gcc_linux-64 numpy==1.16.4
+conda create --name TMNT pip -c conda-forge gxx_linux-64 gcc_linux-64 numpy==1.17.0
 ```
 
 Then, from the tmnt top-level directory, execute
