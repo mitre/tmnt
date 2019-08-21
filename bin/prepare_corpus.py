@@ -3,8 +3,6 @@
 import os, sys
 import argparse
 
-from tmnt.preprocess import get_sparse_vecs, get_sparse_vecs_txt
-from tmnt.preprocess.json_to_csr import set_text_key, set_min_doc_size
 from tmnt.preprocess.vectorizer import JsonVectorizer, TextVectorizer
 
 parser = argparse.ArgumentParser('Prepare a training and validation/test dataset for topic model training')
