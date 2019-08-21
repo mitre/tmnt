@@ -27,7 +27,7 @@ Once Conda is installed properly, install a new conda environment for TMNT as fo
 
 
 ```
-conda create --name TMNT pip numpy==1.16.4
+conda create --name TMNT -c conda-forge pip numpy==1.17.0
 ```
 
 For some platforms, it may be preferred to install the necessary
@@ -35,7 +35,7 @@ C compiler/environment via conda by adding the `gxx_linux-64`
 and `gcc_linux-64` targets:
 
 ```
-conda create --name TMNT pip gxx_linux-64 gcc_linux-64 numpy==1.16.4
+conda create --name TMNT pip -c conda-forge gxx_linux-64 gcc_linux-64 numpy==1.17.0
 ```
 
 Then, from the tmnt top-level directory, execute
@@ -60,7 +60,9 @@ It's possible to train a topic model on the data as follows:
 ```
 mkdir -p _model_dir
 mkdir -p _experiments
-python bin/train_model.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --save_dir ./_experiments/ --model_dir ./_model_dir/ --config ./examples/train_model/model.config --trace_file ./TRACE.csv 
+python bin/train_model.py --tr_vec_file ./data/train.2.vec --tst_vec_file ./data/test.2.vec --vocab_file \
+./data/train.2.vocab --save_dir ./_experiments/ --model_dir ./_model_dir/ \
+--config ./examples/train_model/model.config --trace_file ./TRACE.csv 
 ```
 
 The resulting model will be placed in the `_model_dir` directory.
@@ -87,7 +89,7 @@ on your backend for handling visualization/plotting you may need to run `python`
 executing the script.
 
 ```
-python bin/evaluate.py --train_file ./data/train.2.vec --test_file ./data/test.2.vec \
+python bin/evaluate.py --test_file ./data/test.2.vec \
                         --vocab_file ./data/train.2.vocab --model_dir ./_model_dir/ 
 			
 ```
@@ -108,12 +110,16 @@ following example invocation would prepare the data for the training and test se
 size of 2000.  Note that this script uses the built in pre-processing which tokenizes, downcases and removes common English stopwords.
 
 ```
-python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.json' --tr_input_dir ./train-json-files/ --tst_input_dir ./test-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec 
+python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.json' --tr_input_dir ./train-json-files/ \
+--tst_input_dir ./test-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  \
+--tst_vec_file ./test.2k.vec 
 ```
 
 Another input format assumes directories for training and test sets, where each file is a separate plain text document. This should be
 invoked by adding the `--txt_mode` option:
 
-
-python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.txt' --tr_input_dir ./train-txt-files/ --tst_input_dir ./test-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec --txt_mode
-
+```
+python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.txt' --tr_input_dir ./train-txt-files/ \
+--tst_input_dir ./test-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  \
+--tst_vec_file ./test.2k.vec --txt_mode
+```

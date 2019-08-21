@@ -109,6 +109,7 @@ if __name__ == "__main__":
     _, _, _, tst_csr, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
     test_npmi = npmi_eval.evaluate_csr_mat(tst_csr)
     print("**** Test NPMI = {} *******".format(test_npmi))
-              
+    exit(0)
+
 
 
