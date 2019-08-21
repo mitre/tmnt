@@ -22,8 +22,10 @@ parser.add_argument('--custom_stop_words', type=str, help='Custom stop-word file
 
 args = parser.parse_args()
 
-vectorizer = TextVectorizer(min_doc_size=args.min_doc_length) if args.txt_mode else JsonVectorizer(text_key=args.json_text_key, min_doc_size=args.min_doc_length)
-vocab = vectorizer.get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir, args.vocab_size, full_histogram_file=args.full_vocab_histogram,
-                            pat=args.file_pat)
+vectorizer = TextVectorizer(min_doc_size=args.min_doc_length) if args.txt_mode \
+    else JsonVectorizer(text_key=args.json_text_key, min_doc_size=args.min_doc_length)
+vocab = vectorizer.get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir,
+                                   args.vocab_size, full_histogram_file=args.full_vocab_histogram,
+                                   pat=args.file_pat)
 if args.tst_input_dir and args.tst_vec_file:
     _ = vectorizer.get_sparse_vecs(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab, pat=args.file_pat)
