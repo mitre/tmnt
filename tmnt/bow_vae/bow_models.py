@@ -21,7 +21,8 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, target_sparsity = 0.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, target_sparsity = 0.0, batch_size=None, wd_freqs=None,
+                 seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self.n_latent = n_latent
@@ -41,7 +42,8 @@ class BowNTM(HybridBlock):
             ## Add in topic seed constraints
             self.seed_matrix = seed_mat
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
-            self.encoder = gluon.nn.Dense(in_units=self.embedding_size, units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
+            self.encoder = gluon.nn.Dense(in_units=(self.embedding_size + n_covars),
+                                          units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
             elif latent_distrib == 'vmf':
@@ -180,14 +182,16 @@ class MetaDataBowNTM(BowNTM):
     def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
-                                             coherence_reg_penalty, kappa, batch_size, wd_freqs, seed_mat, ctx)
+                                             coherence_reg_penalty, kappa, 0.0, batch_size, wd_freqs, seed_mat, n_covars, ctx)
         self.n_covars = n_covars
         with self.name_scope():
-            self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=False)
+            self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=True)
+
 
     def hybrid_forward(self, F, data, labels, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
+        n_in = F.concat(emb_out, labels)
         z, KL = self.run_encode(F, F.concat(emb_out, labels), batch_size)
         dec_out = self.decoder(z)
         cov_dec_out = self.cov_decoder(z, labels)
@@ -209,7 +213,8 @@ class CovariateModel(HybridBlock):
         with self.name_scope():
             self.cov_decoder = gluon.nn.Dense(in_units=n_covars, units=self.vocab_size, activation=None, use_bias=False)
             if self.interactions:
-                self.cov_inter_decoder = gluon.nn.Dense(in_units = self.n_covars * self.n_topics, units=self.vocab_size, activation=None, use_bias=False)
+                self.cov_inter_decoder = gluon.nn.Dense(in_units = self.n_covars * self.n_topics, units=self.vocab_size,
+                                                        activation=None, use_bias=False)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
                 
 

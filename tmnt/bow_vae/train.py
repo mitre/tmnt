@@ -235,15 +235,15 @@ class BowVAEWorker(Worker):
         fixed_embedding = config.get('fixed_embedding') == 'True'
         vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
         
-        if self.c_args.use_labels_as_covars and train_labels is not None:
-            n_covars = mx.nd.max(train_labels).asscalar() + 1
-            train_labels = mx.nd.one_hot(train_labels, n_covars)
-            test_labels = mx.nd.one_hot(test_labels, n_covars) if test_labels is not None else None
+        if self.c_args.use_labels_as_covars and self.train_labels is not None:
+            n_covars = mx.nd.max(self.train_labels).asscalar() + 1
+            self.train_labels = mx.nd.one_hot(self.train_labels, n_covars)
+            self.test_labels = mx.nd.one_hot(self.test_labels, n_covars) if self.test_labels is not None else None
             model = \
                 MetaDataBowNTM(n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
-                               fixed_embedding=fixed_embedding, latent_distrib=self.c_args.latent_distribution, kappa=kappa,
-                               init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity = target_sparsity,
-                               batch_size=batch_size, wd_freqs=wd_freqs, ctx=ctx)
+                               fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa,
+                               init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, 
+                               batch_size=batch_size, wd_freqs=self.wd_freqs, ctx=self.ctx)
         else:
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,

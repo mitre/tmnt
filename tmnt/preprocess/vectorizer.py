@@ -44,8 +44,8 @@ class Vectorizer(object):
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
         with io.open(sp_out_file, 'w') as fp:
             for block in sp_vecs:
-                for v in block:
-                    fp.write('-1')  ## the label (-1  if none)
+                for (v,l) in block:
+                    fp.write(str(l))  
                     for (i,c) in v:
                         fp.write(' ')
                         fp.write(str(i))
@@ -71,10 +71,12 @@ class Vectorizer(object):
 
 class JsonVectorizer(Vectorizer):
 
-    def __init__(self, custom_stop_word_file=None, text_key='body', min_doc_size=6):
+    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6):
         super(JsonVectorizer, self).__init__(custom_stop_word_file)
         self.text_key = text_key
+        self.label_key = label_key
         self.min_doc_size = min_doc_size
+        self.label_map = {}
     
     def get_counter_file(self, json_file):
         counter = None
@@ -101,10 +103,20 @@ class JsonVectorizer(Vectorizer):
             for l in fp:
                 js = json.loads(l)
                 toks = self.tokenizer.tokenize(js[self.text_key])
+                try:
+                    label_str = js[self.label_key]
+                    try:
+                        label = self.label_map[label_str]
+                    except:
+                        label = len(self.label_map) + 1
+                        self.label_map[label_str] = label
+                except:
+                    label = -1
                 tok_ids = [vocab[token] for token in toks if token in vocab]
                 if (len(tok_ids) >= self.min_doc_size):
                     cnts = nlp.data.count_tokens(tok_ids)
-                    sp_vecs.append(sorted(cnts.items()))
+                    sp_vecs.append((sorted(cnts.items()), label))
+            print('.', end='')
         return sp_vecs
 
 
@@ -149,7 +161,7 @@ class TextVectorizer(Vectorizer):
                 tok_ids = [vocab[token] for token in toks if token in vocab]
                 doc_tok_ids.extend(tok_ids)
             cnts = nlp.data.count_tokens(doc_tok_ids)
-            sp_vecs.append(sorted(cnts.items()))
+            sp_vecs.append((sorted(cnts.items()), -1))
         return sp_vecs
 
     

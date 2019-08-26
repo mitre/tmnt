@@ -96,7 +96,7 @@ python bin/evaluate.py --test_file ./data/test.2.vec \
 
 ## Preparing data
 
-There are two input formats (currently).  The first assumes a single JSON object per line in a file.  The value of the key 'text' will
+There are two input formats.  The first assumes a single JSON object per line in a file.  The value of the key 'text' will
 be used as the document string.  All other fields are ignored. So, for example:
 
 ```
