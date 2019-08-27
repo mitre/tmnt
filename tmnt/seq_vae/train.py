@@ -45,8 +45,8 @@ logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_c
 logging.info(args)
 
 
-def get_model(emb_dim, vocab_dim):
-    model = SeqVAE(emb_dim, vocab_dim, n_latent=64)
+def get_model(emb_dim, vocab_dim, ctx):
+    model = SeqVAE(emb_dim, vocab_dim, n_latent=64, model_ctx=ctx)
     return model
     
 
@@ -59,7 +59,7 @@ def train_cvae(vocabulary, data_transform, data_train, data_val, report_fn, ctx=
     #val_dataloader   = mx.gluon.data.DataLoader(data_val, batch_size=args.batch_size, shuffle=False)
 
     vocab_dim, emb_dim = vocabulary.embedding.idx_to_vec.shape
-    model = get_model(emb_dim, vocab_dim)
+    model = get_model(emb_dim, vocab_dim, ctx)
     model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)  ## initialize model parameters on the context ctx
 
     model.embedding.weight.set_data(vocab.embedding.idx_to_vec) ## set the embedding layer parameters to pre-trained embedding
