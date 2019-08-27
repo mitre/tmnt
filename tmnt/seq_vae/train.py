@@ -86,6 +86,8 @@ def train_cvae(vocabulary, data_transform, data_train, data_val, report_fn, ctx=
             report_fn(data, predictions)
 
 
+
+
 def get_report_reconstruct_data_fn(vocab, pad_id=0):
     def report_reconstruct_data_fn(data, predictions):
         reconstructed_sent_ids = mx.nd.argmax(predictions[0],1).asnumpy() ## get the first item of batch and arg_max over vocab size
