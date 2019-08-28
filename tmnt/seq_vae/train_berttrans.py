@@ -116,7 +116,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     gen_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
                                   clip_gradient=5.0,
                                   lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
-                                                                               lr,
+                                                                               args.gen_lr,
                                                                                self.c_args.min_lr,
                                                                                warmup_steps=int(decayed_updates/10),
                                                                                warmup_begin_lr=(args.gen_lr / 10),
