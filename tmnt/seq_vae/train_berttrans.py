@@ -33,8 +33,6 @@ parser.add_argument('--gpus',type=str, help='GPU device ids', default='')
 parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='cvae_model_out')
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=8)
 parser.add_argument('--num_filters',type=int, help='Number of filters in first layer (each subsequent layer uses x2 filters)', default=64)
-parser.add_argument('--decrease_filters', action='store_true')
-parser.add_argument('--increase_filters', action='store_true')
 parser.add_argument('--latent_dim',type=int, help='Encoder dimensionality', default=256)
 parser.add_argument('--kld_wt',type=float, help='Weight of the KL divergence term in variational loss', default=1.0)
 parser.add_argument('--sent_size',type=int, help='Fixed/max length of sentence (zero padded); should be power of 2', default=16)
@@ -45,7 +43,7 @@ parser.add_argument('--bert_warmup_ratio', type=float, default=0.1)
 parser.add_argument('--log_interval', type=int, default=20)
 parser.add_argument('--offset_factor', type=float, default=1.0)
 parser.add_argument('--min_lr', type=float, default=1e-7)
-parser.add_argument('--decoder_lr_mult', type=float, help='Multiple global learning rate by this within all decoder layers', default=1.0)
+
 
 args = parser.parse_args()
 i_dt = datetime.datetime.now()
@@ -80,7 +78,7 @@ def load_dataset(sent_file, max_len=64, ctx=mx.cpu()):
 
 
 def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
-    model = BertTransVAE(bert_base, wd_embed_dim=300, n_latent=256, max_sent_len=args.sent_size, batch_size=args.batch_size,
+    model = BertTransVAE(bert_base, wd_embed_dim=200, n_latent=128, max_sent_len=args.sent_size, batch_size=args.batch_size,
                        kld=args.kld_wt, ctx=ctx)
     model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
     model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)    
