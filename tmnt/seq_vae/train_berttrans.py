@@ -51,7 +51,7 @@ args = parser.parse_args()
 i_dt = datetime.datetime.now()
 train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
 print("Set logging config to {}".format(train_out_dir))
-logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_console=True)
+logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_console=False)
 logging.info(args)
 
 trans_table = str.maketrans(dict.fromkeys(string.punctuation))
@@ -110,8 +110,19 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     for prs in [model.mu_encoder.collect_params(), model.lv_encoder.collect_params(),
                 model.decoder.collect_params(), model.out_embedding.collect_params()]:
         non_bert_params.update(prs)
+    #gen_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
+    #                                  lr_scheduler=CosineAnnealingSchedule(args.min_lr, args.gen_lr, num_train_steps))
+    decayed_updates = int(num_train_steps * 0.8)
     gen_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
-                                      lr_scheduler=CosineAnnealingSchedule(args.min_lr, args.gen_lr, num_train_steps))
+                                  clip_gradient=5.0,
+                                  lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
+                                                                               lr,
+                                                                               self.c_args.min_lr,
+                                                                               warmup_steps=int(decayed_updates/10),
+                                                                               warmup_begin_lr=(args.gen_lr / 10),
+                                                                               warmup_mode='linear'
+                                                                               ))
+
     gen_trainer = gluon.Trainer(non_bert_params, gen_optimizer)
 
     lr = args.bert_lr

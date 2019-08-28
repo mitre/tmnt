@@ -57,8 +57,8 @@ class BertTransVAE(Block):
         mu = self.mu_encoder(pooler_out_bert)
         lv = self.lv_encoder(pooler_out_bert)
 
-        eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
-        z = mu + mx.nd.exp(0.5*lv)*eps
+        #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
+        z = mu # + mx.nd.exp(0.5*lv)*eps
         y = self.decoder(z)
 
         KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
@@ -71,7 +71,7 @@ class BertTransVAE(Block):
         ## serves to project a reasonable sized embedding back to BERT vocabulary
         prob_logits = self.inv_embed(rec_y)
         log_prob = mx.nd.log_softmax(prob_logits)
-        loss = self.ce_loss_fn(log_prob, wp_toks) - (KL * self.kld_wt)
+        loss = self.ce_loss_fn(log_prob, wp_toks) # - (KL * self.kld_wt)
         return loss, log_prob
         
 
