@@ -19,7 +19,8 @@ from mxnet.gluon import nn
 from mxnet import autograd as ag
 from tmnt.seq_vae.trans_seq_models import BertTransVAE
 from tmnt.utils.log_utils import logging_config
-from bert.tokenization import FullTokenizer, EncoderTransform
+from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform
+
 
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational AutoEncoder on Context-aware Encodings')
 
