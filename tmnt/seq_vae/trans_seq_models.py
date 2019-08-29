@@ -78,7 +78,7 @@ class BertTransVAE(Block):
         x_dot_y = mx.nd.sum(x*y, axis=-1)
 
         #eps_arr = F.array([1e-12])
-        eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.ctx)
+        eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.model_ctx)
         ## sum over all distances in each height or channel dim
         loss = mx.nd.sum(1 - (x_dot_y / mx.nd.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
         
