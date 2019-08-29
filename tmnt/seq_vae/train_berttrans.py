@@ -85,8 +85,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
     #model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)    
     model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
-    model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
-    model.inv_embed.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
+    #model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
+    #model.inv_embed.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
     
     #model.hybridize(static_alloc=True)
 
@@ -109,13 +109,13 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     #bert_trainer = gluon.Trainer(model.bert.collect_params(), args.optimizer,
     #                        {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
 
-    non_bert_params = gluon.parameter.ParameterDict()
-    for prs in [model.mu_encoder.collect_params(), # model.lv_encoder.collect_params(),
-                model.decoder.collect_params(), model.out_embedding.collect_params(), model.inv_embed.collect_params()]:
-        non_bert_params.update(prs)
+    #non_bert_params = gluon.parameter.ParameterDict()
+    #for prs in [model.mu_encoder.collect_params(), # model.lv_encoder.collect_params(),
+    #            model.decoder.collect_params(), model.out_embedding.collect_params(), model.inv_embed.collect_params()]:
+    #    non_bert_params.update(prs)
 
-    non_bert_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
-                                      lr_scheduler=CosineAnnealingSchedule(args.min_lr, args.gen_lr, num_train_steps))
+    #non_bert_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
+    #                                  lr_scheduler=CosineAnnealingSchedule(args.min_lr, args.gen_lr, num_train_steps))
     #gen_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
     #                                  lr_scheduler=CosineAnnealingSchedule(args.min_lr, args.gen_lr, num_train_steps))
     #decayed_updates = int(num_train_steps * 0.8)
