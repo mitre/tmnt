@@ -60,7 +60,8 @@ class BertTransVAE(Block):
 
         #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
         z = mu # + mx.nd.exp(0.5*lv)*eps
-        y = self.decoder(z)
+        #y = self.decoder(z)
+        y = self.decoder(pooler_out_bert)
 
         #KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
         
