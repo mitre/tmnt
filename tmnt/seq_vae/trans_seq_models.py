@@ -56,7 +56,7 @@ class BertTransVAE(Block):
         #mu_lv = mx.nd.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
         mu = self.mu_encoder(pooler_out_bert)
         
-        #lv = self.lv_encoder(pooler_out_bert)
+        lv = self.lv_encoder(pooler_out_bert)
 
         #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
         z = mu # + mx.nd.exp(0.5*lv)*eps
