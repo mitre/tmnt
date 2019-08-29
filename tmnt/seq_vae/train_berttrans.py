@@ -26,9 +26,8 @@ parser = argparse.ArgumentParser(description='Train a Transformer-based Variatio
 
 parser.add_argument('--input_file', type=str, help='Directory containing a RecordIO file representing the input data')
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
-parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
-parser.add_argument('--bert_lr',type=float, help='BERT Learning rate', default=0.00001)
-parser.add_argument('--gen_lr', type=float, help='General (nonBERT) learning rate', default=0.0001)
+parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='bertadam')
+parser.add_argument('--gen_lr', type=float, help='General learning rate', default=0.00001)
 parser.add_argument('--gpus',type=str, help='GPU device ids', default='')
 parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='cvae_model_out')
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=8)
@@ -103,8 +102,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     differentiable_params = []
 
 
-    #bert_trainer = gluon.Trainer(model.bert.collect_params(), args.optimizer,
-    #                        {'learning_rate': args.bert_lr, 'epsilon': 1e-9, 'wd':args.weight_decay})
+    gen_trainer = gluon.Trainer(model.bert.collect_params(), args.optimizer,
+                            {'learning_rate': args.gen_lr, 'epsilon': 1e-9, 'wd':args.weight_decay})
 
     #non_bert_params = gluon.parameter.ParameterDict()
     #for prs in [model.mu_encoder.collect_params(), model.lv_encoder.collect_params(),
@@ -112,41 +111,43 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     #    non_bert_params.update(prs)
     #gen_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
     #                                  lr_scheduler=CosineAnnealingSchedule(args.min_lr, args.gen_lr, num_train_steps))
-    decayed_updates = int(num_train_steps * 0.8)
-    gen_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
-                                  clip_gradient=5.0,
-                                  lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
-                                                                               args.gen_lr,
-                                                                               args.min_lr,
-                                                                               warmup_steps=int(decayed_updates/10),
-                                                                               warmup_begin_lr=(args.gen_lr / 10),
-                                                                               warmup_mode='linear'
-                                                                               ))
+    #decayed_updates = int(num_train_steps * 0.8)
+    #gen_optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
+    #                              clip_gradient=5.0,
+    #                              lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
+    #                                                                           args.gen_lr,
+    #                                                                           args.min_lr,
+    #                                                                           warmup_steps=int(decayed_updates/10),
+    #                                                                           warmup_begin_lr=(args.gen_lr / 10),
+    #                                                                           warmup_mode='linear'
+    #                                                                           ))
 
     #gen_trainer = gluon.Trainer(non_bert_params, gen_optimizer)
-    gen_trainer = gluon.Trainer(model.collect_params(), gen_optimizer)
+    #gen_trainer = gluon.Trainer(model.collect_params(), gen_optimizer)
 
-    lr = args.bert_lr
+
 
     # Do not apply weight decay on LayerNorm and bias terms
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
         v.wd_mult = 0.0
 
     ## change to only do this for BERT parameters - will clip the gradients
-    #for p in model.bert.collect_params().values():
-    #    if p.grad_req != 'null':
-    #        differentiable_params.append(p)
-        
+    for p in model.bert.collect_params().values():
+        if p.grad_req != 'null':
+            differentiable_params.append(p)
+
+    lr = args.gen_lr
+    
     for epoch_id in range(args.epochs):
         step_loss = 0
         for batch_id, seqs in enumerate(bert_dataloader):
             step_num += 1
-            #if step_num < num_warmup_steps:
-            #    new_lr = lr * step_num / num_warmup_steps
-            #else:
-            #    offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
-            #    new_lr = max(lr - offset, args.min_lr)
-            #bert_trainer.set_learning_rate(new_lr)
+            if step_num < num_warmup_steps:
+                new_lr = lr * step_num / num_warmup_steps
+            else:
+                offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
+                new_lr = max(lr - offset, args.min_lr)
+            gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 input_ids, valid_length, type_ids = seqs
                 ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
@@ -154,11 +155,12 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
             ls.backward()
             #grads = [p.grad(ctx) for p in differentiable_params]
             #gluon.utils.clip_global_norm(grads, 1)
+            nlp.utils.clip_global_norm(differentiable_params, 1)
             #bert_trainer.step(1)  # BERT param updates not adjusted by batch size ...
-            gen_trainer.step(input_ids.shape[0], ignore_stale_grad=True) # let rest of model be updated by batch size
+            gen_trainer.update(1) # let rest of model be updated by batch size
             step_loss += ls.mean().asscalar()
             if (batch_id + 1) % (args.log_interval) == 0:
-                logging.info('[Epoch {} Batch {}/{}] loss={:.4f}, bert_lr={:.7f}, gen_lr={:.7f}'
+                logging.info('[Epoch {} Batch {}/{}] loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, batch_id + 1, len(bert_dataloader),
                                      step_loss / args.log_interval,
                                      gen_trainer.learning_rate, gen_trainer.learning_rate))
