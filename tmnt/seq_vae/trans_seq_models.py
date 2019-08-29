@@ -30,7 +30,7 @@ class BertTransVAE(Block):
         self.max_sent_len = max_sent_len
         self.batch_size = batch_size
         self.wd_embed_dim = wd_embed_dim
-        self.bert.word_embed.collect_params.setattr('grad_req', 'null')  ## force embedding weights to stay fixed
+        #self.bert.word_embed.collect_params.setattr('grad_req', 'null')  ## force embedding weights to stay fixed
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units=n_latent, activation='tanh')
             #self.lv_encoder = gluon.nn.HybridSequential(prefix=prefix)
