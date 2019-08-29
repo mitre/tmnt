@@ -31,8 +31,7 @@ class BertTransVAE(Block):
         self.batch_size = batch_size
         self.wd_embed_dim = wd_embed_dim
         with self.name_scope():
-            #self.mu_encoder = gluon.nn.HybridSequential(prefix=prefix)
-            #self.mu_encoder.add(gluon.nn.Dense(units=n_latent, activation='relu'))
+            self.mu_encoder = gluon.nn.Dense(units=n_latent, activation='tanh')
             #self.lv_encoder = gluon.nn.HybridSequential(prefix=prefix)
             #self.lv_encoder.add(gluon.nn.Dense(units=n_latent, activation='softrelu'))  ## logvar term should be non-negative
         #self.decoder = Decoder3Fixed(output_dim=wd_embed_dim, n_latent=n_latent, sent_size = max_sent_len,
@@ -55,13 +54,13 @@ class BertTransVAE(Block):
         #print("Encoder out size = {}".format(enc_out.shape))
         #mu_lv = mx.nd.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
         
-        #mu = self.mu_encoder(pooler_out_bert)
+        mu = self.mu_encoder(pooler_out_bert)
         #lv = self.lv_encoder(pooler_out_bert)
 
         #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
-        # z = mu # + mx.nd.exp(0.5*lv)*eps
-        #y = self.decoder(z)
-        y = self.decoder(pooler_out_bert)
+        z = mu # + mx.nd.exp(0.5*lv)*eps
+        y = self.decoder(z)
+        #y = self.decoder(pooler_out_bert)
 
         #KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
         
