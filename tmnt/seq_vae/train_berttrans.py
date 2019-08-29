@@ -34,6 +34,7 @@ parser.add_argument('--save_dir',type=str, help='Target directory for trained mo
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=8)
 parser.add_argument('--num_filters',type=int, help='Number of filters in first layer (each subsequent layer uses x2 filters)', default=64)
 parser.add_argument('--latent_dim',type=int, help='Encoder dimensionality', default=256)
+parser.add_argument('--wd_embed_dim',type=int, help='Word embedding dimensionality', default=256)
 parser.add_argument('--kld_wt',type=float, help='Weight of the KL divergence term in variational loss', default=1.0)
 parser.add_argument('--sent_size',type=int, help='Fixed/max length of sentence (zero padded); should be power of 2', default=16)
 parser.add_argument('--batch_report_freq', type=int, help='Frequency to report batch stats during training', default=10)
@@ -78,7 +79,7 @@ def load_dataset(sent_file, max_len=64, ctx=mx.cpu()):
 
 
 def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
-    model = BertTransVAE(bert_base, wd_embed_dim=512, n_latent=args.latent_dim, max_sent_len=args.sent_size, batch_size=args.batch_size,
+    model = BertTransVAE(bert_base, wd_embed_dim=args.wd_embed_dim, n_latent=args.latent_dim, max_sent_len=args.sent_size, batch_size=args.batch_size,
                        kld=args.kld_wt, ctx=ctx)
     model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
     model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)    
