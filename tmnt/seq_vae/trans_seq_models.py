@@ -129,10 +129,10 @@ class TransformerDecoder(HybridBlock):
                 attention_cell = 'multi_head',
                 num_layers = 6,
                 units = wd_embed_dim,  
-                hidden_size = 1024,
+                hidden_size = 512,
                 max_length = sent_size,
-                num_heads = 8,
-                scaled = False,
+                num_heads = 4,
+                scaled = True,
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
                 ctx = ctx)
