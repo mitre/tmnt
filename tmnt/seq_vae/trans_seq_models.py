@@ -32,7 +32,7 @@ class BertTransVAE(Block):
         self.wd_embed_dim = wd_embed_dim
         with self.name_scope():
             self.mu_encoder = gluon.nn.HybridSequential(prefix=prefix)
-            self.mu_encoder.add(gluon.nn.Dense(units=n_latent))
+            self.mu_encoder.add(gluon.nn.Dense(units=n_latent, activation='relu'))
             self.lv_encoder = gluon.nn.HybridSequential(prefix=prefix)
             self.lv_encoder.add(gluon.nn.Dense(units=n_latent, activation='softrelu'))  ## logvar term should be non-negative
         #self.decoder = Decoder3Fixed(output_dim=wd_embed_dim, n_latent=n_latent, sent_size = max_sent_len,
@@ -55,13 +55,14 @@ class BertTransVAE(Block):
         #print("Encoder out size = {}".format(enc_out.shape))
         #mu_lv = mx.nd.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
         mu = self.mu_encoder(pooler_out_bert)
-        lv = self.lv_encoder(pooler_out_bert)
+        
+        #lv = self.lv_encoder(pooler_out_bert)
 
         #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
         z = mu # + mx.nd.exp(0.5*lv)*eps
         y = self.decoder(z)
 
-        KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
+        #KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
         
         y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
         rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
@@ -78,7 +79,7 @@ class BertTransVAE(Block):
 
 class Decoder3Fixed(HybridBlock):
 
-    def __init__(self, output_dim, n_latent=256, sent_size = 30, filter_size=4, num_filters=64, batch_size=8,
+    def __init__(self, output_dim, n_latent=256, sent_size = 42, filter_size=4, num_filters=64, batch_size=8,
                  embed_dim=1024,
                  activation='relu'):
         super(Decoder3Fixed, self).__init__()
