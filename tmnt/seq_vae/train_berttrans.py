@@ -109,7 +109,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     #                        {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
 
     non_bert_params = gluon.parameter.ParameterDict()
-    for prs in [model.mu_encoder.collect_params(), model.lv_encoder.collect_params(),
+    for prs in [model.mu_encoder.collect_params(), # model.lv_encoder.collect_params(),
                 model.decoder.collect_params(), model.out_embedding.collect_params(), model.inv_embed.collect_params()]:
         non_bert_params.update(prs)
 
