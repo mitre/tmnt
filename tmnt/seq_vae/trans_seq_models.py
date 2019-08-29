@@ -72,16 +72,16 @@ class BertTransVAE(Block):
         ## Let's move to cosine embedding loss over last dimension
         #prob_logits = self.inv_bert_embed(rec_y)
         emb_w = self.bert.word_embed[0].collect_params().get('weight').data()
-        x = F.transpose(emb_w)
+        x = mx.nd.transpose(emb_w)
         y = rec_y
-        x_norm = F.norm(w, axis=-1)
-        y_norm = F.norm(y, axis=-1)
-        x_dot_y = F.sum(x*y, axis=-1)
+        x_norm = mx.nd.norm(w, axis=-1)
+        y_norm = mx.nd.norm(y, axis=-1)
+        x_dot_y = mx.nd.sum(x*y, axis=-1)
 
         #eps_arr = F.array([1e-12])
-        eps_arr = F.full((1, 1), 1e-12)
+        eps_arr = mx.nd.full((1, 1), 1e-12)
         ## sum over all distances in each height or channel dim
-        loss = F.sum(1 - (x_dot_y / F.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
+        loss = mx.nd.sum(1 - (x_dot_y / mx.nd.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
         
         prob_logits = self.inv_bert_embed(y)
         log_prob = mx.nd.log_softmax(prob_logits)
