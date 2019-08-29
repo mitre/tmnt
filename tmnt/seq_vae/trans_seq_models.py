@@ -74,7 +74,7 @@ class BertTransVAE(Block):
         emb_w = self.bert.word_embed[0].collect_params().get('weight').data()
         x = mx.nd.transpose(emb_w)
         y = rec_y
-        x_norm = mx.nd.norm(w, axis=-1)
+        x_norm = mx.nd.norm(x, axis=-1)
         y_norm = mx.nd.norm(y, axis=-1)
         x_dot_y = mx.nd.sum(x*y, axis=-1)
 
