@@ -40,9 +40,9 @@ class BertTransVAE(Block):
         ## use the BERT embeddings ... and invert
             self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len, batch_size = batch_size, ctx = ctx)
             self.vocab_size = self.bert.word_embed[0].params.get('weight').shape[0]
-            self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
-            #self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=n_latent, weight_initializer=mx.init.Uniform(0.1))
-            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
+            #self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
+            #self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
+            self.inv_bert_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.bert.word_embed.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
 
     def __call__(self, wp_toks, tok_types, valid_length=None):
@@ -68,11 +68,31 @@ class BertTransVAE(Block):
         rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
         rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
 
+        ## BERT word embedding reconstruction experiment ...
+        ## Let's move to cosine embedding loss over last dimension
+        #prob_logits = self.inv_bert_embed(rec_y)
+        if F is mx.ndarray:
+            emb_w = self.bert.word_embed.params.get('weight').data()
+        else:
+            emb_w = self.bert.word_embed.params.get('weight').data()
+        x = F.transpose(emb_w)
+        y = rec_y
+        x_norm = F.norm(w, axis=-1)
+        y_norm = F.norm(y, axis=-1)
+        x_dot_y = F.sum(x*y, axis=-1)
+
+        #eps_arr = F.array([1e-12])
+        eps_arr = F.full((1, 1), 1e-12)
+        ## sum over all distances in each height or channel dim
+        loss = F.sum(1 - (x_dot_y / F.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
+        
+        prob_logits = self.inv_bert_embed(y)
+        log_prob = mx.nd.log_softmax(prob_logits)
         ## does a matrix mult: rec_y = (32, 64, 300), shape mm = (32, 300, 25002)
         ## serves to project a reasonable sized embedding back to BERT vocabulary
-        prob_logits = self.inv_embed(rec_y)
-        log_prob = mx.nd.log_softmax(prob_logits)
-        loss = self.ce_loss_fn(log_prob, wp_toks) # - (KL * self.kld_wt)
+        #prob_logits = self.inv_embed(rec_y)
+        #log_prob = mx.nd.log_softmax(prob_logits)
+        #loss = self.ce_loss_fn(log_prob, wp_toks) # - (KL * self.kld_wt)
         return loss, log_prob
         
 
