@@ -71,7 +71,7 @@ class BertTransVAE(Block):
         ## BERT word embedding reconstruction experiment ...
         ## Let's move to cosine embedding loss over last dimension
         #prob_logits = self.inv_bert_embed(rec_y)
-        emb_w = self.bert.word_embed.params.get('weight').data()
+        emb_w = self.bert.word_embed.collect_params().get('weight').data()
         x = F.transpose(emb_w)
         y = rec_y
         x_norm = F.norm(w, axis=-1)
