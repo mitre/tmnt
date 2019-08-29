@@ -174,11 +174,7 @@ class InverseEmbed(HybridBlock):
 
 
     def get_weights(self):
-        if F is mx.ndarray:
-            psym = self.params.get('weight').data()
-        else:
-            psym = self.params.get('weight').var()
-        return psym
+        return self.params.get('weight').data()
     
 
     def hybrid_forward(self, F, x):
