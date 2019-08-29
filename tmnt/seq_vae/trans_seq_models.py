@@ -126,11 +126,11 @@ class TransformerDecoder(HybridBlock):
             self.projection = nn.Dense(in_units = n_latent, units = wd_embed_dim)
             self.trans_block = TransformerBlock(
                 attention_cell = 'multi_head',
-                num_layers = 8,
+                num_layers = 6,
                 units = wd_embed_dim,  
-                hidden_size = 512,
+                hidden_size = 1024,
                 max_length = sent_size,
-                num_heads = 1,
+                num_heads = 8,
                 scaled = False,
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
