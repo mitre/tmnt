@@ -84,8 +84,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     #model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
     #model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)    
     model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
-    model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
-    model.inv_embed.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
+    model.out_embedding.initialize(init=mx.init.Uniform(0.5), ctx=ctx)
+    model.inv_embed.initialize(init=mx.init.Uniform(0.5), ctx=ctx)
     
     #model.hybridize(static_alloc=True)
 
@@ -103,7 +103,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
 
 
     gen_trainer = gluon.Trainer(model.bert.collect_params(), args.optimizer,
-                            {'learning_rate': args.gen_lr, 'epsilon': 1e-9, 'wd':args.weight_decay})
+                            {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
 
     #non_bert_params = gluon.parameter.ParameterDict()
     #for prs in [model.mu_encoder.collect_params(), model.lv_encoder.collect_params(),
@@ -152,12 +152,13 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
                 input_ids, valid_length, type_ids = seqs
                 ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
                                 valid_length.astype('float32').as_in_context(ctx))
+                ls = ls.mean()
             ls.backward()
             grads = [p.grad(ctx) for p in differentiable_params]
             gluon.utils.clip_global_norm(grads, 1)
             #bert_trainer.step(1)  # BERT param updates not adjusted by batch size ...
-            gen_trainer.update(1) # let rest of model be updated by batch size
-            step_loss += ls.mean().asscalar()
+            gen_trainer.step(1) # step of 1 since we averaged loss
+            step_loss += ls.asscalar()
             if (batch_id + 1) % (args.log_interval) == 0:
                 logging.info('[Epoch {} Batch {}/{}] loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, batch_id + 1, len(bert_dataloader),
