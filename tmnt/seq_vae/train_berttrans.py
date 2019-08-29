@@ -137,7 +137,6 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     for epoch_id in range(args.epochs):
         step_loss = 0
         for batch_id, seqs in enumerate(bert_dataloader):
-            print("Batch = {}".format(batch_id))
             step_num += 1
             if step_num < num_warmup_steps:
                 new_lr = lr * step_num / num_warmup_steps
