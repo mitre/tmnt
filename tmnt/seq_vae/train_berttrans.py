@@ -101,8 +101,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     differentiable_params = []
 
 
-    bert_trainer = gluon.Trainer(model.bert.collect_params(), args.optimizer,
-                            {'learning_rate': args.bert_lr, 'epsilon': 1e-9, 'wd':args.weight_decay})
+    #bert_trainer = gluon.Trainer(model.bert.collect_params(), args.optimizer,
+    #                        {'learning_rate': args.bert_lr, 'epsilon': 1e-9, 'wd':args.weight_decay})
 
     non_bert_params = gluon.parameter.ParameterDict()
     for prs in [model.mu_encoder.collect_params(), model.lv_encoder.collect_params(),
@@ -122,7 +122,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
                                                                                ))
 
     #gen_trainer = gluon.Trainer(non_bert_params, gen_optimizer)
-    gen_trainer = gluon.Traner(model.collect_params(), gen_optimizer)
+    gen_trainer = gluon.Trainer(model.collect_params(), gen_optimizer)
 
     lr = args.bert_lr
 
@@ -131,9 +131,9 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
         v.wd_mult = 0.0
 
     ## change to only do this for BERT parameters - will clip the gradients
-    for p in model.bert.collect_params().values():
-        if p.grad_req != 'null':
-            differentiable_params.append(p)
+    #for p in model.bert.collect_params().values():
+    #    if p.grad_req != 'null':
+    #        differentiable_params.append(p)
         
     for epoch_id in range(args.epochs):
         step_loss = 0
@@ -150,8 +150,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
                 ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
                                 valid_length.astype('float32').as_in_context(ctx))
             ls.backward()
-            grads = [p.grad(ctx) for p in differentiable_params]
-            gluon.utils.clip_global_norm(grads, 1)
+            #grads = [p.grad(ctx) for p in differentiable_params]
+            #gluon.utils.clip_global_norm(grads, 1)
             #bert_trainer.step(1)  # BERT param updates not adjusted by batch size ...
             gen_trainer.step(input_ids.shape[0], ignore_stale_grad=True) # let rest of model be updated by batch size
             step_loss += ls.mean().asscalar()
@@ -159,7 +159,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
                 logging.info('[Epoch {} Batch {}/{}] loss={:.4f}, bert_lr={:.7f}, gen_lr={:.7f}'
                              .format(epoch_id, batch_id + 1, len(bert_dataloader),
                                      step_loss / args.log_interval,
-                                     bert_trainer.learning_rate, gen_trainer.learning_rate))
+                                     gen_trainer.learning_rate, gen_trainer.learning_rate))
                 step_loss = 0
             if (batch_id + 1) % args.log_interval == 0:
                 if report_fn:
