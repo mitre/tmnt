@@ -154,8 +154,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
                                 valid_length.astype('float32').as_in_context(ctx))
                 ls = ls.mean()
             ls.backward()
-            grads = [p.grad(ctx) for p in differentiable_params]
-            gluon.utils.clip_global_norm(grads, 1)
+            #grads = [p.grad(ctx) for p in differentiable_params]
+            #gluon.utils.clip_global_norm(grads, 1)
             #bert_trainer.step(1)  # BERT param updates not adjusted by batch size ...
             gen_trainer.step(1) # step of 1 since we averaged loss
             step_loss += ls.asscalar()
