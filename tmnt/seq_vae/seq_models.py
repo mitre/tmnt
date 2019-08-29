@@ -174,7 +174,7 @@ class InverseEmbed(HybridBlock):
 
 
     def get_weights(self):
-        return self.params.get('weight').data()
+        return self.collect_params().get('weight').data()
     
 
     def hybrid_forward(self, F, x):
