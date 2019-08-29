@@ -44,6 +44,7 @@ parser.add_argument('--bert_warmup_ratio', type=float, default=0.1)
 parser.add_argument('--log_interval', type=int, default=20)
 parser.add_argument('--offset_factor', type=float, default=1.0)
 parser.add_argument('--min_lr', type=float, default=1e-7)
+parser.add_argument('--wd_temp', type=float, help='Temperature coefficient for output embedding' ,default=0.01)
 
 
 args = parser.parse_args()
