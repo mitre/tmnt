@@ -82,7 +82,6 @@ def load_dataset(sent_file, max_len=64, ctx=mx.cpu()):
 def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     model = BertTransVAE(bert_base, wd_embed_dim=args.wd_embed_dim, n_latent=args.latent_dim, max_sent_len=args.sent_size, batch_size=args.batch_size,
                        kld=args.kld_wt, ctx=ctx)
-    model.bert.initialize()
     model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
     #model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)    
     model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
