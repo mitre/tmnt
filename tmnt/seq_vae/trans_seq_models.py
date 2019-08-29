@@ -60,35 +60,29 @@ class BertTransVAE(Block):
         #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
         z = mu # + mx.nd.exp(0.5*lv)*eps
         y = self.decoder(z)
-        #y = self.decoder(pooler_out_bert)
 
         #KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
+        
         
         y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
         rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
         rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
-
         ## BERT word embedding reconstruction experiment ...
         ## Let's move to cosine embedding loss over last dimension
-        #prob_logits = self.inv_bert_embed(rec_y)
-        x = self.bert.word_embed[0](wp_toks)
-        y = rec_y
-        x_norm = mx.nd.norm(x, axis=-1)
-        y_norm = mx.nd.norm(y, axis=-1)
-        x_dot_y = mx.nd.sum(x*y, axis=-1)
-
-        #eps_arr = F.array([1e-12])
-        eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.model_ctx)
+        #x = self.bert.word_embed[0](wp_toks)
+        #y = rec_y
+        #x_norm = mx.nd.norm(x, axis=-1)
+        #y_norm = mx.nd.norm(y, axis=-1)
+        #x_dot_y = mx.nd.sum(x*y, axis=-1)
+        #eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.model_ctx)
         ## sum over all distances in each height or channel dim
-        loss = mx.nd.sum(1 - (x_dot_y / mx.nd.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
+        #loss = mx.nd.sum(1 - (x_dot_y / mx.nd.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
         
-        prob_logits = self.inv_embed(y)
-        log_prob = mx.nd.log_softmax(prob_logits)
         ## does a matrix mult: rec_y = (32, 64, 300), shape mm = (32, 300, 25002)
         ## serves to project a reasonable sized embedding back to BERT vocabulary
-        #prob_logits = self.inv_embed(rec_y)
-        #log_prob = mx.nd.log_softmax(prob_logits)
-        #loss = self.ce_loss_fn(log_prob, wp_toks) # - (KL * self.kld_wt)
+        prob_logits = self.inv_embed(rec_y)
+        log_prob = mx.nd.log_softmax(prob_logits)
+        loss = self.ce_loss_fn(log_prob, wp_toks) # - (KL * self.kld_wt)
         return loss, log_prob
         
 
