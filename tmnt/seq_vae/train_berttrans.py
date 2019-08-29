@@ -121,7 +121,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
                                                                                warmup_mode='linear'
                                                                                ))
 
-    gen_trainer = gluon.Trainer(non_bert_params, gen_optimizer)
+    #gen_trainer = gluon.Trainer(non_bert_params, gen_optimizer)
+    gen_trainer = gluon.Traner(model.collect_params(), gen_optimizer)
 
     lr = args.bert_lr
 
@@ -138,12 +139,12 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
         step_loss = 0
         for batch_id, seqs in enumerate(bert_dataloader):
             step_num += 1
-            if step_num < num_warmup_steps:
-                new_lr = lr * step_num / num_warmup_steps
-            else:
-                offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
-                new_lr = max(lr - offset, args.min_lr)
-            bert_trainer.set_learning_rate(new_lr)
+            #if step_num < num_warmup_steps:
+            #    new_lr = lr * step_num / num_warmup_steps
+            #else:
+            #    offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
+            #    new_lr = max(lr - offset, args.min_lr)
+            #bert_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 input_ids, valid_length, type_ids = seqs
                 ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
@@ -151,7 +152,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
             ls.backward()
             grads = [p.grad(ctx) for p in differentiable_params]
             gluon.utils.clip_global_norm(grads, 1)
-            bert_trainer.step(1)  # BERT param updates not adjusted by batch size ...
+            #bert_trainer.step(1)  # BERT param updates not adjusted by batch size ...
             gen_trainer.step(input_ids.shape[0], ignore_stale_grad=True) # let rest of model be updated by batch size
             step_loss += ls.mean().asscalar()
             if (batch_id + 1) % (args.log_interval) == 0:
