@@ -19,7 +19,7 @@ from tmnt.seq_vae.seq_models import InverseEmbed
 
 
 class BertTransVAE(Block):
-    def __init__(self, bert_base, wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6, batch_size=16, kld=0.1, ctx = mx.cpu(),
+    def __init__(self, bert_base, wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6, batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
                  increasing=True, decreasing=False,
                  prefix=None, params=None):
         super(BertTransVAE, self).__init__(prefix=prefix, params=params)
@@ -42,7 +42,7 @@ class BertTransVAE(Block):
             self.vocab_size = self.bert.word_embed[0].params.get('weight').shape[0]
             self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
             #self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=n_latent, weight_initializer=mx.init.Uniform(0.1))
-            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, params = self.out_embedding.params)
+            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
 
     def __call__(self, wp_toks, tok_types, valid_length=None):
