@@ -59,7 +59,7 @@ class BertTransVAE(Block):
         #lv = self.lv_encoder(pooler_out_bert)
 
         #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
-        z = mu # + mx.nd.exp(0.5*lv)*eps
+        # z = mu # + mx.nd.exp(0.5*lv)*eps
         #y = self.decoder(z)
         y = self.decoder(pooler_out_bert)
 
