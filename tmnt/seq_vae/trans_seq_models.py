@@ -124,7 +124,7 @@ class TransformerDecoder(HybridBlock):
         self._n_latent = n_latent
         self._wd_embed_dim = wd_embed_dim
         with self.name_scope():
-            #self.projection = nn.Dense(in_units = n_latent, units = wd_embed_dim)
+            self.projection = nn.Dense(in_units = n_latent, units = wd_embed_dim)
             self.trans_block = TransformerBlock(
                 attention_cell = 'multi_head',
                 num_layers = 6,
@@ -143,7 +143,7 @@ class TransformerDecoder(HybridBlock):
 
     def hybrid_forward(self, F, x):
         ## x is shape (N, n_latent)
-        # x = self.projection(x)  ## Map n_latent ==> wd_embed_dim
+        x = self.projection(x)  ## Map n_latent ==> wd_embed_dim
         x = F.expand_dims(x, 1) ## (N, 1, wd_embed_dim)
         x = F.broadcast_to(x, (self._batch_size, self._sent_size, self._wd_embed_dim))
         y, _ = self.trans_block(x)
