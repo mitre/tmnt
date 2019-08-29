@@ -102,7 +102,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     differentiable_params = []
 
 
-    gen_trainer = gluon.Trainer(model.bert.collect_params(), args.optimizer,
+    gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
 
     #non_bert_params = gluon.parameter.ParameterDict()
