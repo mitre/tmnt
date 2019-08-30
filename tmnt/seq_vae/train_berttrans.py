@@ -22,38 +22,6 @@ from tmnt.utils.log_utils import logging_config
 from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform
 
 
-parser = argparse.ArgumentParser(description='Train a Transformer-based Variational AutoEncoder on Context-aware Encodings')
-
-parser.add_argument('--input_file', type=str, help='Directory containing a RecordIO file representing the input data')
-parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
-parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='bertadam')
-parser.add_argument('--gen_lr', type=float, help='General learning rate', default=0.00001)
-parser.add_argument('--gpus',type=str, help='GPU device ids', default='')
-parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='cvae_model_out')
-parser.add_argument('--batch_size',type=int, help='Training batch size', default=8)
-parser.add_argument('--num_filters',type=int, help='Number of filters in first layer (each subsequent layer uses x2 filters)', default=64)
-parser.add_argument('--latent_dim',type=int, help='Encoder dimensionality', default=256)
-parser.add_argument('--wd_embed_dim',type=int, help='Word embedding dimensionality', default=256)
-parser.add_argument('--dec_layers',type=int, help='Decoder transformer layers', default=6)
-parser.add_argument('--kld_wt',type=float, help='Weight of the KL divergence term in variational loss', default=1.0)
-parser.add_argument('--sent_size',type=int, help='Fixed/max length of sentence (zero padded); should be power of 2', default=16)
-parser.add_argument('--batch_report_freq', type=int, help='Frequency to report batch stats during training', default=10)
-parser.add_argument('--save_model_freq', type=int, help='Number of epochs to save intermediate model', default=100)
-parser.add_argument('--weight_decay', type=float, default=0.00001)
-parser.add_argument('--bert_warmup_ratio', type=float, default=0.1)
-parser.add_argument('--log_interval', type=int, default=20)
-parser.add_argument('--offset_factor', type=float, default=1.0)
-parser.add_argument('--min_lr', type=float, default=1e-7)
-parser.add_argument('--wd_temp', type=float, help='Temperature coefficient for output embedding' ,default=0.01)
-
-
-args = parser.parse_args()
-i_dt = datetime.datetime.now()
-train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
-print("Set logging config to {}".format(train_out_dir))
-logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_console=False)
-logging.info(args)
-
 trans_table = str.maketrans(dict.fromkeys(string.punctuation))
 
 def remove_punct_and_urls(txt):
@@ -83,7 +51,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     model = BertTransVAE(bert_base, wd_embed_dim=args.wd_embed_dim, n_latent=args.latent_dim, max_sent_len=args.sent_size, batch_size=args.batch_size,
                        kld=args.kld_wt, ctx=ctx)
     model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
-    #model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)    
+    model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)    
     model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
     model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
     model.inv_embed.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
@@ -97,7 +65,7 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
 
     num_train_examples = len(data_train)
     num_train_steps = int(num_train_examples / args.batch_size * args.epochs)
-    warmup_ratio = args.bert_warmup_ratio
+    warmup_ratio = args.warmup_ratio
     num_warmup_steps = int(num_train_steps * warmup_ratio)
     step_num = 0
     differentiable_params = []
@@ -147,7 +115,8 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     
     for epoch_id in range(args.epochs):
         step_loss = 0
-        model.inv_embed.set_temp(epoch_id, args.epochs) # adjust temp parameter based on current epoch
+        ntmp = model.inv_embed.set_temp(epoch_id, args.epochs) # adjust temp parameter based on current epoch
+        logging.info(">>> Setting Inverse Embedding temp to {}".format(ntmp))
         for batch_id, seqs in enumerate(bert_dataloader):
             step_num += 1
             if step_num < num_warmup_steps:
@@ -164,12 +133,11 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
             ls.backward()
             #grads = [p.grad(ctx) for p in differentiable_params]
             #gluon.utils.clip_global_norm(grads, 1)
-            #bert_trainer.step(1)  # BERT param updates not adjusted by batch size ...
-            gen_trainer.step(1) # step of 1 since we averaged loss
+            gen_trainer.step(1) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
             if (batch_id + 1) % (args.log_interval) == 0:
-                logging.info('[Epoch {} Batch {}/{}] loss={:.4f}, gen_lr={:.7f}'
-                             .format(epoch_id, batch_id + 1, len(bert_dataloader),
+                logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, gen_lr={:.7f}'
+                             .format(epoch_id, args.epochs, batch_id + 1, len(bert_dataloader),
                                      step_loss / args.log_interval,
                                      gen_trainer.learning_rate, gen_trainer.learning_rate))
                 step_loss = 0
@@ -177,22 +145,6 @@ def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
                 if report_fn:
                     mx.nd.waitall()
                     report_fn(input_ids, predictions)
-
-
-class CosineAnnealingSchedule():
-    def __init__(self, min_lr, max_lr, cycle_length):
-        self.min_lr = min_lr
-        self.max_lr = max_lr
-        self.cycle_length = cycle_length
-        
-    def __call__(self, iteration):
-        if iteration <= self.cycle_length:
-            unit_cycle = (1 + math.cos(iteration * math.pi / self.cycle_length)) / 2
-            adjusted_cycle = (unit_cycle * (self.max_lr - self.min_lr)) + self.min_lr
-            return adjusted_cycle
-        else:
-            return self.min_lr
-
 
 
 def get_report_reconstruct_data_fn(vocab, pad_id=0):
@@ -209,7 +161,7 @@ def get_report_reconstruct_data_fn(vocab, pad_id=0):
     return report_reconstruct_data_fn
         
 
-if __name__ == '__main__':
+def train_main(args):
     context = mx.cpu() if args.gpus is None or args.gpus == '' else mx.gpu(int(args.gpus))
     data_train, bert_base, vocab = load_dataset(args.input_file, max_len=args.sent_size, ctx=context)
     report_fn = get_report_reconstruct_data_fn(vocab)

@@ -176,6 +176,7 @@ class InverseEmbed(HybridBlock):
     def set_temp(self, epoch, max_epochs):
         # temp ranges from 1.01 to 0.01
         self.temp = (max_epochs - epoch) / max_epochs + 0.01
+        return self.temp
         
 
     def hybrid_forward(self, F, x):

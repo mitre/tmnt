@@ -33,13 +33,11 @@ class BertTransVAE(Block):
         #self.bert.word_embed.collect_params.setattr('grad_req', 'null')  ## force embedding weights to stay fixed
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units=n_latent, activation='tanh')
-            #self.lv_encoder = gluon.nn.HybridSequential(prefix=prefix)
-            #self.lv_encoder.add(gluon.nn.Dense(units=n_latent, activation='softrelu'))  ## logvar term should be non-negative
+            self.lv_encoder = gluon.nn.Dense(units=n_latent, activation='softrelu')  ## logvar term should be non-negative
         #self.decoder = Decoder3Fixed(output_dim=wd_embed_dim, n_latent=n_latent, sent_size = max_sent_len,
         #                              num_filters=num_filters, batch_size=batch_size)
-        ## we only use an inverse embedding here on the decoding side ...
-        ## use the BERT embeddings ... and invert
-            self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len, batch_size = batch_size, ctx = ctx)
+            self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
+                                              batch_size = batch_size, ctx = ctx)
             self.vocab_size = self.bert.word_embed[0].params.get('weight').shape[0]
             self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
             self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
@@ -50,19 +48,16 @@ class BertTransVAE(Block):
 
     def forward(self, wp_toks, tok_types, valid_length=None):
         _, pooler_out_bert = self.bert(wp_toks, tok_types, valid_length)
-        #enc_out = self.encoder(pooler_out_bert)
-        #print("Encoder out size = {}".format(enc_out.shape))
         #mu_lv = mx.nd.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
         
         mu = self.mu_encoder(pooler_out_bert)
-        #lv = self.lv_encoder(pooler_out_bert)
+        lv = self.lv_encoder(pooler_out_bert)
 
-        #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
-        z = mu # + mx.nd.exp(0.5*lv)*eps
+        eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
+        z = mu + mx.nd.exp(0.5*lv)*eps
         y = self.decoder(z)
 
-        #KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
-        
+        KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
         
         y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
         rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
@@ -82,7 +77,7 @@ class BertTransVAE(Block):
         ## serves to project a reasonable sized embedding back to BERT vocabulary
         prob_logits = self.inv_embed(rec_y)
         log_prob = mx.nd.log_softmax(prob_logits)
-        loss = self.ce_loss_fn(log_prob, wp_toks) # - (KL * self.kld_wt)
+        loss = self.ce_loss_fn(log_prob, wp_toks) - (KL * self.kld_wt)
         return loss, log_prob
         
 
