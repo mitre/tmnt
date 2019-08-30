@@ -143,10 +143,10 @@ def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=Non
             step_recon_ls += recon_ls.mean().asscalar()
             step_kl_ls += kl_ls.mean().asscalar()
             if (batch_id + 1) % (args.log_interval) == 0:
-                logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, gen_lr={:.7f}'
+                logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, args.epochs, batch_id + 1, len(bert_dataloader),
                                      step_loss / args.log_interval, step_recon_ls / args.log_interval, step_kl_ls / args.log_interval,
-                                     gen_trainer.learning_rate, gen_trainer.learning_rate))
+                                     gen_trainer.learning_rate))
                 step_loss = 0
                 step_recon_ls = 0
                 step_kl_ls = 0
