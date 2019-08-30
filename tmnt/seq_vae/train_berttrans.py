@@ -119,9 +119,7 @@ def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=Non
     for epoch_id in range(args.epochs):
         step_loss = 0
         ntmp = model.inv_embed.set_temp(epoch_id, args.epochs) # adjust temp parameter based on current epoch
-        kld_wt = model.set_kl_weight(epoch_id, args.epochs)
         logging.info(">>> Setting Inverse Embedding temp to {}".format(ntmp))
-        logging.info(">>> Setting KL divergence loss weight to {}".format(kld_wt))
         for batch_id, seqs in enumerate(bert_dataloader):
             step_num += 1
             if step_num < num_warmup_steps:
