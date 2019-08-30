@@ -60,6 +60,16 @@ class BertTransVAE(Block):
     def __call__(self, wp_toks, tok_types, valid_length=None):
         return super(BertTransVAE, self).__call__(wp_toks, tok_types, valid_length)
 
+    def set_kl_weight(self, epoch, max_epochs):
+        burn_in = int(max_epochs / 10)
+        eps = 1e-6
+        if epoch > burn_in:
+            self.kld_wt = ((epochs - burn_in) / (max_epochs - burn_in)) + eps
+        else:
+            self.kld_wt = eps
+        return self.kld_wt
+
+
     def forward(self, wp_toks, tok_types, valid_length=None):
         _, pooler_out_bert = self.bert(wp_toks, tok_types, valid_length)
         
