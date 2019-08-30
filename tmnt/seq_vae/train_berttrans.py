@@ -140,8 +140,8 @@ def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=Non
             #gluon.utils.clip_global_norm(grads, 1)
             gen_trainer.step(1) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
-            step_recon_ls += recon_ls.asscalar()
-            step_kl_ls += kl_ls.asscalar()
+            step_recon_ls += recon_ls.mean().asscalar()
+            step_kl_ls += kl_ls.mean().asscalar()
             if (batch_id + 1) % (args.log_interval) == 0:
                 logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, args.epochs, batch_id + 1, len(bert_dataloader),
