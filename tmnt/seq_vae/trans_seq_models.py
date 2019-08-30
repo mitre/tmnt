@@ -46,8 +46,8 @@ class BertTransVAE(Block):
                 self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
-            self.mu_encoder = gluon.nn.Dense(units=n_latent, activation='tanh')
-            self.lv_encoder = gluon.nn.Dense(units=n_latent, activation='softrelu')  ## logvar term should be non-negative
+            #self.mu_encoder = gluon.nn.Dense(units=n_latent, activation='tanh')
+            #self.lv_encoder = gluon.nn.Dense(units=n_latent, activation='softrelu')  ## logvar term should be non-negative
         #self.decoder = Decoder3Fixed(output_dim=wd_embed_dim, n_latent=n_latent, sent_size = max_sent_len,
         #                              num_filters=num_filters, batch_size=batch_size)
             self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
