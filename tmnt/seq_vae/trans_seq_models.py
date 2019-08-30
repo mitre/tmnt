@@ -20,7 +20,9 @@ from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLaten
 
 class BertTransVAE(Block):
     def __init__(self, bert_base, latent_distrib='vmf',
-                 wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6, batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
+                 wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6,
+                 kappa = 100.0,
+                 batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
                  increasing=True, decreasing=False,
                  prefix=None, params=None):
         super(BertTransVAE, self).__init__(prefix=prefix, params=params)
