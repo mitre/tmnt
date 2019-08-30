@@ -54,7 +54,7 @@ def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=Non
                          kld=args.kld_wt, ctx=ctx)
     #model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
     #model.lv_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
-    model.latent_distrib.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
+    model.latent_dist.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
     model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
     model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
     model.inv_embed.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
