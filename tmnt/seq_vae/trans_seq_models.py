@@ -41,7 +41,7 @@ class BertTransVAE(Block):
             elif latent_distrib == 'vmf':
                 self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
-                self.latent_dist = GaussianLatentDistribution(n_latent, enc_dim, ctx)
+                self.latent_dist = GaussianLatentDistribution(n_latent, ctx)
             elif latent_distrib == 'gaussian_unitvar':
                 self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
             else:
