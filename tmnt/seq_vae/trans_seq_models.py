@@ -64,7 +64,7 @@ class BertTransVAE(Block):
         burn_in = int(max_epochs / 10)
         eps = 1e-6
         if epoch > burn_in:
-            self.kld_wt = ((epochs - burn_in) / (max_epochs - burn_in)) + eps
+            self.kld_wt = ((epoch - burn_in) / (max_epochs - burn_in)) + eps
         else:
             self.kld_wt = eps
         return self.kld_wt
