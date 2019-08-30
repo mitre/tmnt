@@ -173,9 +173,10 @@ class InverseEmbed(HybridBlock):
         return super(InverseEmbed, self).__call__(x)
 
 
-    def get_weights(self):
-        return self.collect_params().get('weight').data()
-    
+    def set_temp(self, epoch, max_epochs):
+        # temp ranges from 1.01 to 0.01
+        self.temp = (max_epochs - epoch) / max_epochs + 0.01
+        
 
     def hybrid_forward(self, F, x):
         if F is mx.ndarray:
