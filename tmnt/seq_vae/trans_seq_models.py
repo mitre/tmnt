@@ -15,11 +15,12 @@ from mxnet.gluon.loss import L2Loss
 from mxnet.gluon.block import HybridBlock, Block
 from gluonnlp.model import TransformerEncoderCell, TransformerEncoder
 from tmnt.seq_vae.seq_models import InverseEmbed
-
+from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
 
 
 class BertTransVAE(Block):
-    def __init__(self, bert_base, wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6, batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
+    def __init__(self, bert_base, latent_distrib='vmf',
+                 wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6, batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
                  increasing=True, decreasing=False,
                  prefix=None, params=None):
         super(BertTransVAE, self).__init__(prefix=prefix, params=params)
@@ -30,8 +31,19 @@ class BertTransVAE(Block):
         self.max_sent_len = max_sent_len
         self.batch_size = batch_size
         self.wd_embed_dim = wd_embed_dim
+        self.latent_distrib = latent_distrib
         #self.bert.word_embed.collect_params.setattr('grad_req', 'null')  ## force embedding weights to stay fixed
         with self.name_scope():
+            if latent_distrib == 'logistic_gaussian':
+                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
+            elif latent_distrib == 'vmf':
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
+            elif latent_distrib == 'gaussian':
+                self.latent_dist = GaussianLatentDistribution(n_latent, enc_dim, ctx)
+            elif latent_distrib == 'gaussian_unitvar':
+                self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
+            else:
+                raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.mu_encoder = gluon.nn.Dense(units=n_latent, activation='tanh')
             self.lv_encoder = gluon.nn.Dense(units=n_latent, activation='softrelu')  ## logvar term should be non-negative
         #self.decoder = Decoder3Fixed(output_dim=wd_embed_dim, n_latent=n_latent, sent_size = max_sent_len,
@@ -48,16 +60,15 @@ class BertTransVAE(Block):
 
     def forward(self, wp_toks, tok_types, valid_length=None):
         _, pooler_out_bert = self.bert(wp_toks, tok_types, valid_length)
-        #mu_lv = mx.nd.split(enc_out, axis=1, num_outputs=2) ## split in half along final dimension
         
-        mu = self.mu_encoder(pooler_out_bert)
-        lv = self.lv_encoder(pooler_out_bert)
-
-        eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
-        z = mu + mx.nd.exp(0.5*lv)*eps
+        #mu = self.mu_encoder(pooler_out_bert)
+        #lv = self.lv_encoder(pooler_out_bert)
+        #eps = mx.nd.random_normal(loc=0, scale=1, shape=(self.batch_size, self.n_latent), ctx=self.model_ctx)
+        #z = mu + mx.nd.exp(0.5*lv)*eps
+        #KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
+        
+        z, KL = self.latent_dist(pooler_out_bert, self.batch_size)
         y = self.decoder(z)
-
-        KL = 0.5 * mx.nd.sum(1+lv-mu*mu - mx.nd.exp(lv),axis=1)
         
         y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
         rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
