@@ -100,8 +100,10 @@ class BertTransVAE(Block):
         ## serves to project a reasonable sized embedding back to BERT vocabulary
         prob_logits = self.inv_embed(rec_y)
         log_prob = mx.nd.log_softmax(prob_logits)
-        loss = self.ce_loss_fn(log_prob, wp_toks) + (KL * self.kld_wt)
-        return loss, log_prob
+        recon_loss = self.ce_loss_fn(log_prob, wp_toks)
+        kl_loss = (KL * self.kld_wt)
+        loss = recon_loss + kl_loss
+        return loss, recon_loss, kl_loss, log_prob
         
 
 

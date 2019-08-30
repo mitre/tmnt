@@ -118,6 +118,8 @@ def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=Non
     
     for epoch_id in range(args.epochs):
         step_loss = 0
+        step_recon_ls = 0
+        step_kl_ls = 0
         ntmp = model.inv_embed.set_temp(epoch_id, args.epochs) # adjust temp parameter based on current epoch
         logging.info(">>> Setting Inverse Embedding temp to {}".format(ntmp))
         for batch_id, seqs in enumerate(bert_dataloader):
@@ -130,7 +132,7 @@ def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=Non
             gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 input_ids, valid_length, type_ids = seqs
-                ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
+                ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
                                 valid_length.astype('float32').as_in_context(ctx))
                 ls = ls.mean()
             ls.backward()
@@ -138,12 +140,16 @@ def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=Non
             #gluon.utils.clip_global_norm(grads, 1)
             gen_trainer.step(1) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
+            step_recon_ls += recon_ls.asscalar()
+            step_kl_ls += kl_ls.asscalar()
             if (batch_id + 1) % (args.log_interval) == 0:
                 logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, args.epochs, batch_id + 1, len(bert_dataloader),
-                                     step_loss / args.log_interval,
+                                     step_loss / args.log_interval, step_recon_ls / args.log_interval, step_kl_ls / args.log_interval,
                                      gen_trainer.learning_rate, gen_trainer.learning_rate))
                 step_loss = 0
+                step_recon_ls = 0
+                step_kl_ls = 0
             if (batch_id + 1) % args.log_interval == 0:
                 if report_fn:
                     mx.nd.waitall()
