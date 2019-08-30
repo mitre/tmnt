@@ -47,7 +47,7 @@ def load_dataset(sent_file, max_len=64, ctx=mx.cpu()):
     return data_train, bert_base, vocab
 
 
-def train_berttrans_vae(data_train, bert_base, ctx=mx.cpu(), report_fn=None):
+def train_berttrans_vae(args, data_train, bert_base, ctx=mx.cpu(), report_fn=None):
     model = BertTransVAE(bert_base, wd_embed_dim=args.wd_embed_dim, n_latent=args.latent_dim, max_sent_len=args.sent_size, batch_size=args.batch_size,
                        kld=args.kld_wt, ctx=ctx)
     model.mu_encoder.initialize(init=mx.init.Normal(0.1), ctx=ctx)
@@ -170,5 +170,5 @@ def train_main(args):
     context = mx.cpu() if args.gpus is None or args.gpus == '' else mx.gpu(int(args.gpus))
     data_train, bert_base, vocab = load_dataset(args.input_file, max_len=args.sent_size, ctx=context)
     report_fn = get_report_reconstruct_data_fn(vocab)
-    train_berttrans_vae(data_train, bert_base, context, report_fn)
+    train_berttrans_vae(args, data_train, bert_base, context, report_fn)
         
