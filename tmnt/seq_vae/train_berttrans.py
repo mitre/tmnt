@@ -162,6 +162,11 @@ def get_report_reconstruct_data_fn(vocab, pad_id=0):
         
 
 def train_main(args):
+    i_dt = datetime.datetime.now()
+    train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
+    print("Set logging config to {}".format(train_out_dir))
+    logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_console=False)
+    logging.info(args)
     context = mx.cpu() if args.gpus is None or args.gpus == '' else mx.gpu(int(args.gpus))
     data_train, bert_base, vocab = load_dataset(args.input_file, max_len=args.sent_size, ctx=context)
     report_fn = get_report_reconstruct_data_fn(vocab)

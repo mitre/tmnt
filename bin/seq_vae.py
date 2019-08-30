@@ -3,7 +3,7 @@
 import os, sys
 import argparse
 
-from tmnt.seq_vae.train_berttrans import train
+from tmnt.seq_vae.train_berttrans import train_main
 
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational AutoEncoder on Context-aware Encodings')
 
@@ -30,9 +30,6 @@ parser.add_argument('--wd_temp', type=float, help='Temperature coefficient for o
 
 
 args = parser.parse_args()
-i_dt = datetime.datetime.now()
-train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
-print("Set logging config to {}".format(train_out_dir))
-logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_console=False)
-logging.info(args)
+
+train_main(args)
 
