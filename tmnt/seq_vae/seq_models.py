@@ -203,6 +203,6 @@ class InverseEmbed(HybridBlock):
         #rec_x   = F.reshape(rec_x_1, (self.batch_size, self.max_sent_len, self.emb_size)) 
         
         mm = F.broadcast_axes(w_norm, axis=0, size=self.batch_size)
-        prob_logits = F.linalg_gemm2(x, mm) / self.temp ## temperature param that should be an argument
+        prob_logits = F.linalg_gemm2(x_norm, mm) / self.temp ## temperature param that should be an argument
         return prob_logits
     
