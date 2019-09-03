@@ -139,9 +139,9 @@ def train_trans_vae(args, data_train, model, ctx=mx.cpu(), report_fn=None):
         v.wd_mult = 0.0
 
     ## change to only do this for BERT parameters - will clip the gradients
-    for p in model.bert.collect_params().values():
-        if p.grad_req != 'null':
-            differentiable_params.append(p)
+    #for p in model.bert.collect_params().values():
+    #    if p.grad_req != 'null':
+    #        differentiable_params.append(p)
 
     lr = args.gen_lr
     
