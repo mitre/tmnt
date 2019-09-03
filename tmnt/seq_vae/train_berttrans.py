@@ -166,7 +166,8 @@ def train_trans_vae(args, data_train, model, ctx=mx.cpu(), report_fn=None, use_b
                     ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
                                 valid_length.astype('float32').as_in_context(ctx))
                 else:
-                    ls, recon_ls, kl_ls, predictions = model(seqs.as_in_context(ctx))
+                    input_ids = seqs
+                    ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx))
                 ls = ls.mean()
             ls.backward()
             #grads = [p.grad(ctx) for p in differentiable_params]
