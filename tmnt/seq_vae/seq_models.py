@@ -187,11 +187,11 @@ class InverseEmbed(HybridBlock):
         ## Must ensure that both the embedding weights and the inputs here are normalized
         ## Warning: this assumes x has been normalized already
         w = F.expand_dims(F.transpose(psym), 0)
-        w_norm = F.norm(w, axis=-1, keepdims=True)
+        w_norm = F.norm(w, axis=1, keepdims=True)
         w_norm = F.broadcast_div(w, w_norm)
         print("Shape w_norm = {}, x_norm = {}".format(w_norm.shape, x.shape))
-        print("Dim sums W = {}".format(w_norm.sum(axis=-1, exclude=True)))
-        print("Dim sums X = {}".format(x.sum(axis=-1, exclude=True)))
+        print("Dim sums W = {}".format(F.norm(w_norm, axis=1)))
+        print("Dim sums X = {}".format(F.norm(x, axis=-1)))
 
         #x_norm  = F.norm(x, axis=-1, keepdims=True) 
         #rec_x_1 = F.broadcast_div(x, x_norm) 
