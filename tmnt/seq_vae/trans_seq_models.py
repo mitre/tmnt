@@ -20,7 +20,7 @@ from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLaten
 class PureTransformerVAE(Block):
 
     def __init__(self, vocabulary, latent_distrib='vmf',
-                 wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6,
+                 n_latent=256, max_sent_len=64, dec_layers=6,
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
                  increasing=True, decreasing=False,
@@ -32,7 +32,7 @@ class PureTransformerVAE(Block):
         self.max_sent_len = max_sent_len
         self.vocabulary = vocabulary
         self.batch_size = batch_size
-        self.wd_embed_dim = wd_embed_dim
+        self.wd_embed_dim = len(vocabulary.embedding.idx_to_vec[0]) # word embedding length
         self.latent_distrib = latent_distrib
         with self.name_scope():
             if latent_distrib == 'logistic_gaussian':
