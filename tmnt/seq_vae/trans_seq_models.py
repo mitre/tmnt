@@ -97,7 +97,7 @@ class PureTransformerVAE(Block):
         prob_logits = self.inv_embed(rec_y)
         log_prob = mx.nd.log_softmax(prob_logits)
         ## reconstruction loss is weighted combo of cross entropy over vocab and cosine loss over embeddings
-        recon_loss = 0.1 * self.ce_loss_fn(log_prob, wp_toks)  + cosine_loss 
+        recon_loss = 0.1 * self.ce_loss_fn(log_prob, toks)  + cosine_loss 
         kl_loss = (KL * self.kld_wt)
         loss = recon_loss + kl_loss
         return loss, recon_loss, kl_loss, log_prob
