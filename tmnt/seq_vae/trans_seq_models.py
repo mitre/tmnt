@@ -267,7 +267,7 @@ class TransformerDecoder(HybridBlock):
 
 class TransformerEncoder(HybridBlock):
     def __init__(self, wd_embed_dim, num_heads=2, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
-        super(TransformerDecoder, self).__init__()
+        super(TransformerEncoder, self).__init__()
         self._batch_size = batch_size
         self._sent_size = sent_size
         self._n_latent = n_latent
