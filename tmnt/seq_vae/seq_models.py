@@ -192,17 +192,18 @@ class InverseEmbed(HybridBlock):
         eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.model_ctx)
         w_norm = F.broadcast_div(w, F.broadcast_maximum(w_norm, eps_arr))
 
-        x_norm = F.norm(x, axis=-1, keepdims=True)
-        x_norm = F.broadcast_div(x, F.broadcast_maximum(x_norm, eps_arr))
+        #x_norm = F.norm(x, axis=-1, keepdims=True)
+        #x_norm = F.broadcast_div(x, F.broadcast_maximum(x_norm, eps_arr))
         print("Shape w_norm = {}, x_norm = {}".format(w_norm.shape, x_norm.shape))
         print("Dim sums W = {}".format(F.norm(w_norm, axis=1)))
-        print("Dim sums X = {}".format(F.norm(x_norm, axis=-1)))
+        print("Dim sums X = {}".format(F.norm(x, axis=-1)))
 
         #x_norm  = F.norm(x, axis=-1, keepdims=True) 
         #rec_x_1 = F.broadcast_div(x, x_norm) 
         #rec_x   = F.reshape(rec_x_1, (self.batch_size, self.max_sent_len, self.emb_size)) 
-        
+
         mm = F.broadcast_axes(w_norm, axis=0, size=self.batch_size)
+        x_norm = x        
         prob_logits = F.linalg_gemm2(x_norm, mm) / self.temp ## temperature param that should be an argument
         return prob_logits
     
