@@ -214,6 +214,7 @@ def train_main(args):
     else:
         emb = nlp.embedding.create('glove', source = args.embedding_source)
         vocab = nlp.Vocab(nlp.data.Counter(emb.idx_to_token))
+        vocab.set_embedding(emb)
         data_train = load_dataset_basic(args.input_file, vocab, max_len=args.sent_size, ctx=context)
         model = get_basic_model(args, vocab, context)
         report_fn = get_report_reconstruct_data_fn(vocab)
