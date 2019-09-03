@@ -33,6 +33,7 @@ class PureTransformerVAE(Block):
         self.vocabulary = vocabulary
         self.batch_size = batch_size
         self.wd_embed_dim = len(vocabulary.embedding.idx_to_vec[0]) # word embedding length
+        self.vocab_size = len(vocabulary.embedding.idx_to_token)
         self.latent_distrib = latent_distrib
         with self.name_scope():
             if latent_distrib == 'logistic_gaussian':
@@ -45,13 +46,13 @@ class PureTransformerVAE(Block):
                 self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
-            self.embedding = nn.Embedding(len(vocabulary.embedding.idx_to_token), len(vocabulary.embedding.idx_to_vec[0]))
-            self.encoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
+            self.embedding = nn.Embedding(self.vocab_size, self.wd_embed_dim)
+            self.encoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
-            self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
+            self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
-            self.out_embedding = gluon.nn.Embedding(input_dim=len(vocabulary.embedding.idx_to_token),
-                                                    output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
+            self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size,
+                                                    output_dim=self.wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
             self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
