@@ -54,7 +54,7 @@ class PureTransformerVAE(Block):
                                                     output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
             self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
-        self.embedding.initialize(mx.init.Xavier(magnitude=2.34, ctx=ctx))
+        self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         self.embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
         self.embedding.collect_params.setattr('grad_req', 'null')  ## force embedding weights to stay fixed
         
