@@ -74,7 +74,7 @@ def get_bert_model(args, bert_base, ctx):
     return model
 
 def get_basic_model(args, vocab, ctx):
-    model = PureTransformerVAE(vocab, args.latent_dist, wd_embed_dim=args.wd_embed_dim, n_latent=args.latent_dim, max_sent_len=args.sent_size,
+    model = PureTransformerVAE(vocab, args.latent_dist, n_latent=args.latent_dim, max_sent_len=args.sent_size,
                          kappa = args.kappa, 
                          batch_size=args.batch_size,
                          kld=args.kld_wt, ctx=ctx)
