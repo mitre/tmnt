@@ -73,9 +73,9 @@ class PureTransformerVAE(Block):
         return self.kld_wt
 
 
-    def forward(self, wp_toks):
-
-        enc = self.encoder(wp_toks)
+    def forward(self, toks):
+        embedded = self.embedding(toks)
+        enc = self.encoder(embedded)
         
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
