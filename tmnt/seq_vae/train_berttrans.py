@@ -148,7 +148,7 @@ def train_trans_vae(args, data_train, model, ctx=mx.cpu(), report_fn=None, use_b
         step_loss = 0
         step_recon_ls = 0
         step_kl_ls = 0
-        ntmp = model.inv_embed.set_temp(epoch_id, args.epochs) # adjust temp parameter based on current epoch
+        ntmp = model.inv_embed.set_temp(args.epochs, args.epochs) # adjust temp parameter based on current epoch
         logging.info(">>> Setting Inverse Embedding temp to {}".format(ntmp))
         for batch_id, seqs in enumerate(bert_dataloader):
             step_num += 1

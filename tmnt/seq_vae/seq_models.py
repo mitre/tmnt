@@ -189,6 +189,8 @@ class InverseEmbed(HybridBlock):
         w = F.expand_dims(F.transpose(psym), 0)
         w_norm = F.norm(w, axis=-1, keepdims=True)
         w_norm = F.broadcast_div(w, w_norm)
+        print("Shape w_norm = {}, x_norm = {}".format(w_norm.shape, x.shape))
+        print("Mean of col sums = {}".format(w_norm.sum(axis=1, exclude=True)))
 
         #x_norm  = F.norm(x, axis=-1, keepdims=True) 
         #rec_x_1 = F.broadcast_div(x, x_norm) 
