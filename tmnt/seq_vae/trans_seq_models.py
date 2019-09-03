@@ -25,7 +25,7 @@ class PureTransformerVAE(Block):
                  batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
                  increasing=True, decreasing=False,
                  prefix=None, params=None):
-        super(BertTransVAE, self).__init__(prefix=prefix, params=params)
+        super(PureTransformerVAE, self).__init__(prefix=prefix, params=params)
         self.kld_wt = kld
         self.bert = bert_base
         self.n_latent = n_latent
