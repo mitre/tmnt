@@ -48,6 +48,7 @@ class PureTransformerVAE(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.embedding = nn.Embedding(self.vocab_size, self.wd_embed_dim)
+            #self.projection = gluon.nn.Dense(
             self.encoder = TransformerEncoder(self.num_units, n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
             self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, num_units=self.num_units,
@@ -244,12 +245,13 @@ class TransformerDecoder(HybridBlock):
 
 
 class TransformerEncoder(HybridBlock):
-    def __init__(self, num_units, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
+    def __init__(self, wd_embed_dim, num_units, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
         super(TransformerEncoder, self).__init__()
         self._batch_size = batch_size
         self._sent_size = sent_size
         self._n_latent = n_latent
         with self.name_scope():
+            self.in_projection = nn.Dense(in_units = wd_embed_dim, units = num_units)
             self.trans_block = TransformerBlock(
                 attention_cell = 'multi_head',
                 num_layers = n_layers,
@@ -269,7 +271,7 @@ class TransformerEncoder(HybridBlock):
 
     def hybrid_forward(self, F, x):
         ## x is shape (N, sent_size, wd_embed_dim)
-        print("Shape x = {}".format(x.shape))
+        x = self.in_projection(x, flatten=False)
         y, _ = self.trans_block(x)
         first = y[:,0,:]
         encoding = self.projection(first)
