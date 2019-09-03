@@ -194,7 +194,7 @@ class InverseEmbed(HybridBlock):
 
         #x_norm = F.norm(x, axis=-1, keepdims=True)
         #x_norm = F.broadcast_div(x, F.broadcast_maximum(x_norm, eps_arr))
-        print("Shape w_norm = {}, x_norm = {}".format(w_norm.shape, x_norm.shape))
+        print("Shape w_norm = {}, x_norm = {}".format(w_norm.shape, x.shape))
         print("Dim sums W = {}".format(F.norm(w_norm, axis=1)))
         print("Dim sums X = {}".format(F.norm(x, axis=-1)))
 
