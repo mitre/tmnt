@@ -47,9 +47,17 @@ def load_dataset_bert(sent_file, max_len=64, ctx=mx.cpu()):
     return data_train, bert_base, vocab
 
 
-def load_dataset_basic(sent_file, vocab, max_len=64, ctx=mx.cpu()):
+def load_dataset_basic(sent_file, vocab=None, max_len=64, ctx=mx.cpu()):
     train_arr = []
     tokenizer = BasicTokenizer(do_lower_case=True)
+    if not vocab:        
+        counter = None
+        with io.open(sent_file, 'r', encoding='utf-8') as fp:
+            for line in fp:
+                if len(line.split(' ')) > 4:
+                    toks = tokenizer.tokenize(line)[:(max_len-2)]
+                    counter = nlp.data.count_tokens(toks, counter = counter)
+        vocab = nlp.Vocab()
     pad_id = vocab[vocab.padding_token]
     with io.open(sent_file, 'r', encoding='utf-8') as fp:
         for line in fp:
@@ -60,7 +68,7 @@ def load_dataset_basic(sent_file, vocab, max_len=64, ctx=mx.cpu()):
                 padded_ids = ids[:max_len] if len(ids) >= max_len else ids + pad_id * (max_len - len(ids))
                 train_arr.append(padded_ids)
     data_train = gluon.data.SimpleDataset(train_arr)
-    return data_train
+    return data_train, vocab
 
 
 def get_bert_model(args, bert_base, ctx):
@@ -216,9 +224,15 @@ def train_main(args):
         train_trans_vae(args, data_train, model, context, report_fn, use_bert=True)
     else:
         emb = nlp.embedding.create('glove', source = args.embedding_source)
-        vocab = nlp.Vocab(nlp.data.Counter(emb.idx_to_token))
+        #vocab = nlp.Vocab(nlp.data.Counter(emb.idx_to_token))
+        data_train, vocab = load_dataset_basic(args.input_file, vocab=None, max_len=args.sent_size, ctx=context)
         vocab.set_embedding(emb)
-        data_train = load_dataset_basic(args.input_file, vocab, max_len=args.sent_size, ctx=context)
+        oov_items = 0
+        for word in vocab.embedding._idx_to_token:
+            if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                oov_items += 1
+                vocab.embedding[word] = mx.nd.random.normal(0.0, 0.1, emb_size)
+        logging.info("** There are {} out of vocab items **".format(oov_items))
         model = get_basic_model(args, vocab, context)
         report_fn = get_report_reconstruct_data_fn(vocab)
         train_trans_vae(args, data_train, model, context, report_fn, use_bert=False)
