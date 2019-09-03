@@ -85,7 +85,7 @@ class PureTransformerVAE(Block):
         rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
 
         ## Let's move to cosine embedding loss over last dimension
-        x = self.embedding(wp_toks)
+        x = self.embedding(toks)
         y = rec_y
         x_norm = mx.nd.norm(x, axis=-1)
         y_norm = mx.nd.norm(y, axis=-1)
