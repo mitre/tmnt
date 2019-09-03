@@ -47,7 +47,7 @@ class PureTransformerVAE(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.embedding = nn.Embedding(self.vocab_size, self.wd_embed_dim)
-            self.encoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
+            self.encoder = TransformerEncoder(wd_embed_dim=self.wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
             self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
@@ -74,6 +74,7 @@ class PureTransformerVAE(Block):
 
 
     def forward(self, wp_toks):
+
         enc = self.encoder(wp_toks)
         
         z, KL = self.latent_dist(enc, self.batch_size)
@@ -262,6 +263,39 @@ class TransformerDecoder(HybridBlock):
         x = F.broadcast_to(x, (self._batch_size, self._sent_size, self._wd_embed_dim))
         y, _ = self.trans_block(x)
         return y
+
+
+class TransformerEncoder(HybridBlock):
+    def __init__(self, wd_embed_dim, num_heads=2, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
+        super(TransformerDecoder, self).__init__()
+        self._batch_size = batch_size
+        self._sent_size = sent_size
+        self._n_latent = n_latent
+        self._wd_embed_dim = wd_embed_dim
+        with self.name_scope():
+            self.trans_block = TransformerBlock(
+                attention_cell = 'multi_head',
+                num_layers = n_layers,
+                units = wd_embed_dim,  
+                hidden_size = 512,
+                max_length = sent_size,
+                num_heads = num_heads,
+                scaled = True,
+                dropout = 0.0,
+                use_residual=True, output_attention=False,
+                ctx = ctx)
+            self.projection = nn.Dense(in_units = wd_embed_dim, units = n_latent)
+
+    def __call__(self, x):
+        return super(TransformerDecoder, self).__call__(x)
+
+
+    def hybrid_forward(self, F, x):
+        ## x is shape (N, n_latent)
+        y, _ = self.trans_block(x)
+        first = y[:,0,:]
+        encoding = self.projection(first)
+        return encoding
     
 
 def _position_encoding_init(max_length, dim):

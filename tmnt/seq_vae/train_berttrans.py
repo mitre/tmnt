@@ -54,7 +54,8 @@ def load_dataset_basic(sent_file, vocab, max_len=64, ctx=mx.cpu()):
     with io.open(sent_file, 'r', encoding='utf-8') as fp:
         for line in fp:
             if len(line.split(' ')) > 4:
-                toks = tokenizer.tokenize(line)
+                toks = tokenizer.tokenize(line)[:(max_len-2)]
+                toks = ['<bos>'] + toks + ['<eos>']
                 ids = [vocab[t] for t in toks]
                 padded_ids = ids[:max_len] if len(ids) >= max_len else ids + pad_id * (max_len - len(ids))
                 train_arr.append(padded_ids)
