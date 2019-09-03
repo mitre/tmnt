@@ -231,7 +231,7 @@ class Decoder3Fixed(HybridBlock):
 
 
 class TransformerDecoder(HybridBlock):
-    def __init__(self, wd_embed_dim, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
+    def __init__(self, wd_embed_dim, num_heads=2, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
         super(TransformerDecoder, self).__init__()
         self._batch_size = batch_size
         self._sent_size = sent_size
@@ -241,11 +241,11 @@ class TransformerDecoder(HybridBlock):
             self.projection = nn.Dense(in_units = n_latent, units = wd_embed_dim)
             self.trans_block = TransformerBlock(
                 attention_cell = 'multi_head',
-                num_layers = 6,
+                num_layers = n_layers,
                 units = wd_embed_dim,  
                 hidden_size = 512,
                 max_length = sent_size,
-                num_heads = 4,
+                num_heads = num_heads,
                 scaled = True,
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
