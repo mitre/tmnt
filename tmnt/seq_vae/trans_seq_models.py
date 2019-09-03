@@ -220,7 +220,7 @@ class TransformerDecoder(HybridBlock):
             self.trans_block = TransformerBlock(
                 attention_cell = 'multi_head',
                 num_layers = n_layers,
-                units = wd_embed_dim,  
+                units = num_units,  
                 hidden_size = 512,
                 max_length = sent_size,
                 num_heads = num_heads,
