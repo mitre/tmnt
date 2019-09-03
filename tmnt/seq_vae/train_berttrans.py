@@ -227,6 +227,7 @@ def train_main(args):
         #vocab = nlp.Vocab(nlp.data.Counter(emb.idx_to_token))
         data_train, vocab = load_dataset_basic(args.input_file, vocab=None, max_len=args.sent_size, ctx=context)
         vocab.set_embedding(emb)
+        _, emb_size = vocab.embedding.idx_to_vec.shape
         oov_items = 0
         for word in vocab.embedding._idx_to_token:
             if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
