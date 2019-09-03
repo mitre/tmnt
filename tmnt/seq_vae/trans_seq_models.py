@@ -228,7 +228,7 @@ class TransformerDecoder(HybridBlock):
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
                 ctx = ctx)
-            self.out_projection = nn.Dense(in_units = num_units, units = wd_embed_dim)
+            self.out_projection = nn.Dense(in_units = num_units, units = wd_embed_dim, flatten=False)
 
     def __call__(self, x):
         return super(TransformerDecoder, self).__call__(x)
@@ -240,7 +240,7 @@ class TransformerDecoder(HybridBlock):
         x = F.expand_dims(x, 1) ## (N, 1, wd_embed_dim)
         x = F.broadcast_to(x, (self._batch_size, self._sent_size, self._wd_embed_dim))
         y, _ = self.trans_block(x)
-        yp = self.out_projection(y, flatten=False)
+        yp = self.out_projection(y)
         return yp
 
 
@@ -251,7 +251,7 @@ class TransformerEncoder(HybridBlock):
         self._sent_size = sent_size
         self._n_latent = n_latent
         with self.name_scope():
-            self.in_projection = nn.Dense(in_units = wd_embed_dim, units = num_units)
+            self.in_projection = nn.Dense(in_units = wd_embed_dim, units = num_units, flatten=False)
             self.trans_block = TransformerBlock(
                 attention_cell = 'multi_head',
                 num_layers = n_layers,
@@ -271,7 +271,7 @@ class TransformerEncoder(HybridBlock):
 
     def hybrid_forward(self, F, x):
         ## x is shape (N, sent_size, wd_embed_dim)
-        x = self.in_projection(x, flatten=False)
+        x = self.in_projection(x)
         y, _ = self.trans_block(x)
         first = y[:,0,:]
         encoding = self.projection(first)
