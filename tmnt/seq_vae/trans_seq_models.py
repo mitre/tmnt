@@ -215,6 +215,7 @@ class TransformerDecoder(HybridBlock):
         self._sent_size = sent_size
         self._n_latent = n_latent
         self._wd_embed_dim = wd_embed_dim
+        self._num_units = num_units
         with self.name_scope():
             self.projection = nn.Dense(in_units = n_latent, units = num_units)
             self.trans_block = TransformerBlock(
@@ -238,7 +239,7 @@ class TransformerDecoder(HybridBlock):
         ## x is shape (N, n_latent)
         x = self.projection(x)  ## Map n_latent ==> wd_embed_dim
         x = F.expand_dims(x, 1) ## (N, 1, wd_embed_dim)
-        x = F.broadcast_to(x, (self._batch_size, self._sent_size, self._wd_embed_dim))
+        x = F.broadcast_to(x, (self._batch_size, self._sent_size, self._num_units))
         y, _ = self.trans_block(x)
         yp = self.out_projection(y)
         return yp
