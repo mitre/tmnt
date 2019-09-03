@@ -57,7 +57,7 @@ def load_dataset_basic(sent_file, vocab=None, max_len=64, ctx=mx.cpu()):
                 if len(line.split(' ')) > 4:
                     toks = tokenizer.tokenize(line)[:(max_len-2)]
                     counter = nlp.data.count_tokens(toks, counter = counter)
-        vocab = nlp.Vocab()
+        vocab = nlp.Vocab(counter)
     pad_id = vocab[vocab.padding_token]
     with io.open(sent_file, 'r', encoding='utf-8') as fp:
         for line in fp:
