@@ -287,11 +287,11 @@ class TransformerEncoder(HybridBlock):
             self.projection = nn.Dense(in_units = wd_embed_dim, units = n_latent)
 
     def __call__(self, x):
-        return super(TransformerDecoder, self).__call__(x)
+        return super(TransformerEncoder, self).__call__(x)
 
 
     def hybrid_forward(self, F, x):
-        ## x is shape (N, n_latent)
+        ## x is shape (N, sent_size, wd_embed_dim)
         y, _ = self.trans_block(x)
         first = y[:,0,:]
         encoding = self.projection(first)
