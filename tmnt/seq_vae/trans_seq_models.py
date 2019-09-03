@@ -51,13 +51,13 @@ class PureTransformerVAE(Block):
                                               batch_size = batch_size, ctx = ctx)
             self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
-            self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size,
-                                                    output_dim=self.wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
-            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
+            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
+        self.inv_embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         self.embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
         self.embedding.collect_params().setattr('grad_req', 'null')  ## force embedding weights to stay fixed
+        self.inv_embedding.collect_params().setattr('grad_req', 'null')  ## force embedding weights to stay fixed
         
 
     def __call__(self, wp_toks):
@@ -84,20 +84,10 @@ class PureTransformerVAE(Block):
         rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
         rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
 
-        ## Let's move to cosine embedding loss over last dimension
-        x = self.embedding(toks)
-        y = rec_y
-        x_norm = mx.nd.norm(x, axis=-1)
-        y_norm = mx.nd.norm(y, axis=-1)
-        x_dot_y = mx.nd.sum(x*y, axis=-1)
-        eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.model_ctx)
-        ## sum over all distances in each height or channel dim
-        cosine_loss = mx.nd.sum(1 - (x_dot_y / mx.nd.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
-        
         prob_logits = self.inv_embed(rec_y)
         log_prob = mx.nd.log_softmax(prob_logits)
         ## reconstruction loss is weighted combo of cross entropy over vocab and cosine loss over embeddings
-        recon_loss = 0.1 * self.ce_loss_fn(log_prob, toks)  + cosine_loss 
+        recon_loss = self.ce_loss_fn(log_prob, toks)
         kl_loss = (KL * self.kld_wt)
         loss = recon_loss + kl_loss
         return loss, recon_loss, kl_loss, log_prob

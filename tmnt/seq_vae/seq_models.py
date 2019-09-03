@@ -185,15 +185,16 @@ class InverseEmbed(HybridBlock):
         else:
             psym = self.params.get('weight').var()
         ## Must ensure that both the embedding weights and the inputs here are normalized
+        ## Warning: this assumes x has been normalized already
         w = F.expand_dims(F.transpose(psym), 0)
-        #w_norm = F.norm(w, axis=-1, keepdims=True)
-        #w_norm = F.broadcast_div(w, w_norm)
+        w_norm = F.norm(w, axis=-1, keepdims=True)
+        w_norm = F.broadcast_div(w, w_norm)
 
         #x_norm  = F.norm(x, axis=-1, keepdims=True) 
         #rec_x_1 = F.broadcast_div(x, x_norm) 
         #rec_x   = F.reshape(rec_x_1, (self.batch_size, self.max_sent_len, self.emb_size)) 
         
-        mm = F.broadcast_axes(w, axis=0, size=self.batch_size)
+        mm = F.broadcast_axes(w_norm, axis=0, size=self.batch_size)
         prob_logits = F.linalg_gemm2(x, mm) / self.temp ## temperature param that should be an argument
         return prob_logits
     
