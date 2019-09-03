@@ -56,7 +56,7 @@ class PureTransformerVAE(Block):
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         self.embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
-        self.embedding.collect_params.setattr('grad_req', 'null')  ## force embedding weights to stay fixed
+        self.embedding.collect_params().setattr('grad_req', 'null')  ## force embedding weights to stay fixed
         
 
     def __call__(self, wp_toks):
