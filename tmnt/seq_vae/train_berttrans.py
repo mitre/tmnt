@@ -19,7 +19,7 @@ from mxnet.gluon import nn
 from mxnet import autograd as ag
 from tmnt.seq_vae.trans_seq_models import BertTransVAE
 from tmnt.utils.log_utils import logging_config
-from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform
+from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform, BasicTokenizer
 
 
 trans_table = str.maketrans(dict.fromkeys(string.punctuation))
