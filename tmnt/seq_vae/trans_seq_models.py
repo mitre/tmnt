@@ -269,6 +269,7 @@ class TransformerEncoder(HybridBlock):
 
     def hybrid_forward(self, F, x):
         ## x is shape (N, sent_size, wd_embed_dim)
+        print("Shape x = {}".format(x.shape))
         y, _ = self.trans_block(x)
         first = y[:,0,:]
         encoding = self.projection(first)
