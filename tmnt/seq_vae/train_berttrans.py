@@ -17,7 +17,7 @@ import mxnet.ndarray as F
 from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet import autograd as ag
-from tmnt.seq_vae.trans_seq_models import BertTransVAE
+from tmnt.seq_vae.trans_seq_models import BertTransVAE, PureTransformerVAE
 from tmnt.utils.log_utils import logging_config
 from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform, BasicTokenizer
 
