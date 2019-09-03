@@ -141,7 +141,6 @@ class HyperSphericalLatentDistribution(LatentDistribution):
                 return w
 
     def _get_orthonormal_batch(self, F, mu, batch_size):
-        dim = self.n_latent
         mu_1       = F.expand_dims(mu, axis=1)
         rv         = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent, 1), ctx=self.model_ctx)
         rescaled_1 = F.squeeze(F.linalg.gemm2(mu_1, rv), axis=2)

@@ -29,6 +29,8 @@ parser.add_argument('--min_lr', type=float, default=1e-7)
 parser.add_argument('--wd_temp', type=float, help='Temperature coefficient for output embedding' ,default=0.01)
 parser.add_argument('--latent_dist', type=str, help='Latent distribution', default='vmf')
 parser.add_argument('--kappa', type=float, help='vMF distribution kappa (concentration) parameter', default=100.0)
+parser.add_argument('--use_bert', action='store_true', help='Use BERT base as the encoder (and fine-tune)')
+parser.add_argument('--embedding_source', type=str, help='Word embedding source to use (if not using BERT)', default='glove.6B.50d')
 
 
 args = parser.parse_args()

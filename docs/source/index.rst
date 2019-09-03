@@ -18,7 +18,8 @@ Welcome to TMNT's documentation!
    model_selection.rst
    evaluation.rst
    hpc.rst
-   guided.rst   
+   guided.rst
+   sequence_vae.rst
 
 
 Indices and tables

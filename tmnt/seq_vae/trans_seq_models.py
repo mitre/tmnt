@@ -17,6 +17,89 @@ from gluonnlp.model import TransformerEncoderCell, TransformerEncoder
 from tmnt.seq_vae.seq_models import InverseEmbed
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
 
+class PureTransformerVAE(Block):
+
+    def __init__(self, vocabulary, latent_distrib='vmf',
+                 wd_embed_dim=300, n_latent=256, max_sent_len=64, dec_layers=6,
+                 kappa = 100.0,
+                 batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
+                 increasing=True, decreasing=False,
+                 prefix=None, params=None):
+        super(BertTransVAE, self).__init__(prefix=prefix, params=params)
+        self.kld_wt = kld
+        self.bert = bert_base
+        self.n_latent = n_latent
+        self.model_ctx = ctx
+        self.max_sent_len = max_sent_len
+        self.vocabulary = vocabulary
+        self.batch_size = batch_size
+        self.wd_embed_dim = wd_embed_dim
+        self.latent_distrib = latent_distrib
+        with self.name_scope():
+            if latent_distrib == 'logistic_gaussian':
+                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
+            elif latent_distrib == 'vmf':
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
+            elif latent_distrib == 'gaussian':
+                self.latent_dist = GaussianLatentDistribution(n_latent, ctx)
+            elif latent_distrib == 'gaussian_unitvar':
+                self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
+            else:
+                raise Exception("Invalid distribution ==> {}".format(latent_distrib))
+            self.embedding = nn.Embedding(len(vocabulary.embedding.idx_to_token), len(vocabulary.embedding.idx_to_vec[0]))
+            self.encoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
+                                              batch_size = batch_size, ctx = ctx)
+            self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
+                                              batch_size = batch_size, ctx = ctx)
+            self.vocab_size = self.bert.word_embed[0].params.get('weight').shape[0]
+            self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
+            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
+            self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
+        self.embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
+        self.embedding.collect_params.setattr('grad_req', 'null')  ## force embedding weights to stay fixed
+        
+
+    def __call__(self, wp_toks):
+        return super(PureTransformerVAE, self).__call__(wp_toks)
+
+    def set_kl_weight(self, epoch, max_epochs):
+        burn_in = int(max_epochs / 10)
+        eps = 1e-6
+        if epoch > burn_in:
+            self.kld_wt = ((epoch - burn_in) / (max_epochs - burn_in)) + eps
+        else:
+            self.kld_wt = eps
+        return self.kld_wt
+
+
+    def forward(self, wp_toks):
+        enc = self.encoder(wp_toks)
+        
+        z, KL = self.latent_dist(enc, self.batch_size)
+        y = self.decoder(z)
+        
+        y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
+        rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
+        rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
+
+        ## Let's move to cosine embedding loss over last dimension
+        x = self.embedding(wp_toks)
+        y = rec_y
+        x_norm = mx.nd.norm(x, axis=-1)
+        y_norm = mx.nd.norm(y, axis=-1)
+        x_dot_y = mx.nd.sum(x*y, axis=-1)
+        eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.model_ctx)
+        ## sum over all distances in each height or channel dim
+        cosine_loss = mx.nd.sum(1 - (x_dot_y / mx.nd.broadcast_maximum(x_norm * y_norm, eps_arr)), axis=0, exclude=True)
+        
+        prob_logits = self.inv_embed(rec_y)
+        log_prob = mx.nd.log_softmax(prob_logits)
+        ## reconstruction loss is weighted combo of cross entropy over vocab and cosine loss over embeddings
+        recon_loss = 0.1 * self.ce_loss_fn(log_prob, wp_toks)  + cosine_loss 
+        kl_loss = (KL * self.kld_wt)
+        loss = recon_loss + kl_loss
+        return loss, recon_loss, kl_loss, log_prob
+    
 
 class BertTransVAE(Block):
     def __init__(self, bert_base, latent_distrib='vmf',
