@@ -86,7 +86,7 @@ def get_basic_model(args, vocab, ctx):
     return model
 
 
-def train_trans_vae(args, data_train, model, ctx=mx.cpu(), report_fn=None):
+def train_trans_vae(args, data_train, model, ctx=mx.cpu(), report_fn=None, use_bert=False):
     
     #model.hybridize(static_alloc=True)
 
@@ -160,9 +160,12 @@ def train_trans_vae(args, data_train, model, ctx=mx.cpu(), report_fn=None):
                 new_lr = max(lr - offset, args.min_lr)
             gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
-                input_ids, valid_length, type_ids = seqs
-                ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
+                if use_bert:
+                    input_ids, valid_length, type_ids = seqs
+                    ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
                                 valid_length.astype('float32').as_in_context(ctx))
+                else:
+                    ls, recon_ls, kl_ls, predictions = model(seqs.as_in_context(ctx))
                 ls = ls.mean()
             ls.backward()
             #grads = [p.grad(ctx) for p in differentiable_params]
@@ -210,7 +213,7 @@ def train_main(args):
         data_train, bert_base, vocab = load_dataset_bert(args.input_file, max_len=args.sent_size, ctx=context)
         model = get_bert_model(args, bert_base, context)
         report_fn = get_report_reconstruct_data_fn(vocab)
-        train_trans_vae(args, data_train, model, context, report_fn)
+        train_trans_vae(args, data_train, model, context, report_fn, use_bert=True)
     else:
         emb = nlp.embedding.create('glove', source = args.embedding_source)
         vocab = nlp.Vocab(nlp.data.Counter(emb.idx_to_token))
@@ -218,5 +221,5 @@ def train_main(args):
         data_train = load_dataset_basic(args.input_file, vocab, max_len=args.sent_size, ctx=context)
         model = get_basic_model(args, vocab, context)
         report_fn = get_report_reconstruct_data_fn(vocab)
-        train_trans_vae(args, data_train, model, context, report_fn)
+        train_trans_vae(args, data_train, model, context, report_fn, use_bert=False)
         
