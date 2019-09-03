@@ -161,11 +161,12 @@ class DecoderBlock(HybridBlock):
 
 
 class InverseEmbed(HybridBlock):
-    def __init__(self, batch_size, sent_len, emb_size, temp=0.01, prefix=None, params=None):
+    def __init__(self, batch_size, sent_len, emb_size, temp=0.01, ctx=mx.cpu(), prefix=None, params=None):
         self.batch_size = batch_size
         self.max_sent_len = sent_len
         self.emb_size = emb_size
         self.temp = temp
+        self.model_ctx = ctx
         super(InverseEmbed, self).__init__(prefix=prefix, params=params)
 
 

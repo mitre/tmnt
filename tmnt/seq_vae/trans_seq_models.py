@@ -51,7 +51,7 @@ class PureTransformerVAE(Block):
                                               batch_size = batch_size, ctx = ctx)
             self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, n_layers=dec_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
-            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.embedding.params)
+            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, ctx=self.model_ctx, params = self.embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         self.inv_embed.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
@@ -129,7 +129,7 @@ class BertTransVAE(Block):
                                               batch_size = batch_size, ctx = ctx)
             self.vocab_size = self.bert.word_embed[0].params.get('weight').shape[0]
             self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=wd_embed_dim, weight_initializer=mx.init.Uniform(0.1))
-            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, params = self.out_embedding.params)
+            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, ctx=self.model_ctx, params = self.out_embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
 
     def __call__(self, wp_toks, tok_types, valid_length=None):
