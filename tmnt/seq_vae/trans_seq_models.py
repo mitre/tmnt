@@ -49,7 +49,7 @@ class PureTransformerVAE(Block):
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.embedding = nn.Embedding(self.vocab_size, self.wd_embed_dim)
             #self.projection = gluon.nn.Dense(
-            self.encoder = TransformerEncoder(self.num_units, n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
+            self.encoder = TransformerEncoder(self.wd_embed_dim, self.num_units, n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
             self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, num_units=self.num_units,
                                               n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
