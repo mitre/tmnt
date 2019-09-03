@@ -80,11 +80,11 @@ class PureTransformerVAE(Block):
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
         
-        y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
-        rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
-        rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
+        #y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
+        #rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
+        #rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
 
-        prob_logits = self.inv_embed(rec_y)
+        prob_logits = self.inv_embed(y)
         log_prob = mx.nd.log_softmax(prob_logits)
         ## reconstruction loss is weighted combo of cross entropy over vocab and cosine loss over embeddings
         recon_loss = self.ce_loss_fn(log_prob, toks)
