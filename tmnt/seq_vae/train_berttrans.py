@@ -72,7 +72,9 @@ def load_dataset_basic(sent_file, vocab=None, max_len=64, ctx=mx.cpu()):
 
 
 def get_bert_model(args, bert_base, ctx):
-    model = BertTransVAE(bert_base, args.latent_dist, wd_embed_dim=args.wd_embed_dim, n_latent=args.latent_dim, max_sent_len=args.sent_size,
+    model = BertTransVAE(bert_base, args.latent_dist, wd_embed_dim=args.wd_embed_dim, num_units=args.num_units,
+                         transformer_layers=args.transformer_layers,
+                         n_latent=args.latent_dim, max_sent_len=args.sent_size,
                          kappa = args.kappa, 
                          batch_size=args.batch_size,
                          kld=args.kld_wt, ctx=ctx)
@@ -83,10 +85,11 @@ def get_bert_model(args, bert_base, ctx):
     return model
 
 def get_basic_model(args, vocab, ctx):
-    model = PureTransformerVAE(vocab, args.latent_dist, n_latent=args.latent_dim, max_sent_len=args.sent_size,
-                         kappa = args.kappa, 
-                         batch_size=args.batch_size,
-                         kld=args.kld_wt, ctx=ctx)
+    model = PureTransformerVAE(vocab, args.latent_dist, num_units=args.num_units, n_latent=args.latent_dim, max_sent_len=args.sent_size,
+                               transformer_layers=args.transformer_layers,
+                               kappa = args.kappa, 
+                               batch_size=args.batch_size,
+                               kld=args.kld_wt, ctx=ctx)
     model.latent_dist.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
     model.encoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
     model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
@@ -108,7 +111,6 @@ def train_trans_vae(args, data_train, model, ctx=mx.cpu(), report_fn=None, use_b
     num_warmup_steps = int(num_train_steps * warmup_ratio)
     step_num = 0
     differentiable_params = []
-
 
     gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
