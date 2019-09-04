@@ -1,91 +1,114 @@
 # codeing: utf-8
 
-import argparse
-import logging
-import mxnet as mx
+import argparse, tarfile
+import math
+import os
 import numpy as np
+import logging
+import json
+import datetime
+import io
+import gluonnlp as nlp
+import string
+import re
+
+import mxnet as mx
+import mxnet.ndarray as F
 from mxnet import gluon
 from mxnet.gluon import nn
-from mxnet import autograd
-from mxnet.gluon.data import DataLoader
-import gluonnlp as nlp
-import datetime
-from tmnt.seq_vae.seq_data_loader import load_dataset, BasicTransform
-from tmnt.seq_vae.seq_models import SeqVAE
+from mxnet import autograd as ag
+from tmnt.seq_vae.trans_seq_models import BertTransVAE, PureTransformerVAE
 from tmnt.utils.log_utils import logging_config
+from tmnt.seq_vae.seq_data_loader import load_dataset_bert, load_dataset_basic
 
 
-parser = argparse.ArgumentParser(description='Train a Convolutional Variational AutoEncoder on Context-aware Encodings')
-
-parser.add_argument('--train_file', type=str, help='Directory containing a RecordIO file representing the input data')
-parser.add_argument('--val_file', type=str, help='Directory containing a RecordIO file representing the validation data')
-parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
-parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
-parser.add_argument('--lr',type=float, help='Learning rate', default=0.00001)
-parser.add_argument('--gpu',type=int, help='GPU device ids', default=-1)
-parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='cvae_model_out')
-parser.add_argument('--batch_size',type=int, help='Training batch size', default=8)
-parser.add_argument('--num_filters',type=int, help='Number of filters in first layer (each subsequent layer uses x2 filters)', default=64)
-parser.add_argument('--decrease_filters', action='store_true')
-parser.add_argument('--increase_filters', action='store_true')
-parser.add_argument('--latent_dim',type=int, help='Encoder dimensionality', default=256)
-parser.add_argument('--kld_wt',type=float, help='Weight of the KL divergence term in variational loss', default=1.0)
-parser.add_argument('--sent_size',type=int, help='Fixed/max length of sentence (zero padded); should be power of 2', default=16)
-parser.add_argument('--batch_report_freq', type=int, help='Frequency to report batch stats during training', default=100)
-parser.add_argument('--save_model_freq', type=int, help='Number of epochs to save intermediate model', default=100)
-parser.add_argument('--use_hotel_data', action='store_true', help='Special test using hotel review data')
-parser.add_argument('--embedding_source', type=str, default='glove.twitter.27B.100d', help='Pre-trained embedding source name')
-#parser.add_argument('--learn_embedding', action='store_true', help='Assume straight token input and learn embeddings via training')
-parser.add_argument('--ngram_buckets', type=int, help='Number of ngram buckets in the pre-embedding file')
-
-args = parser.parse_args()
-i_dt = datetime.datetime.now()
-train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
-logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_console=False)
-logging.info(args)
-
-
-def get_model(emb_dim, vocab_dim, ctx):
-    model = SeqVAE(emb_dim, vocab_dim, n_latent=64, model_ctx=ctx)
+def get_bert_model(args, bert_base, ctx):
+    model = BertTransVAE(bert_base, args.latent_dist, wd_embed_dim=args.wd_embed_dim, num_units=args.num_units,
+                         transformer_layers=args.transformer_layers,
+                         n_latent=args.latent_dim, max_sent_len=args.sent_size,
+                         kappa = args.kappa, 
+                         batch_size=args.batch_size,
+                         kld=args.kld_wt, ctx=ctx)
+    model.latent_dist.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
+    model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
+    model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
+    model.inv_embed.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
     return model
+
+def get_basic_model(args, vocab, ctx):
+    model = PureTransformerVAE(vocab, args.latent_dist, num_units=args.num_units, n_latent=args.latent_dim, max_sent_len=args.sent_size,
+                               transformer_layers=args.transformer_layers,
+                               kappa = args.kappa, 
+                               batch_size=args.batch_size,
+                               kld=args.kld_wt, ctx=ctx)
+    model.latent_dist.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
+    model.encoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
+    model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
+    return model
+
+
+def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), report_fn=None, use_bert=False):
     
+    dataloader = mx.gluon.data.DataLoader(data_train, batch_size=args.batch_size,
+                                           shuffle=True, last_batch='rollover')
+    if data_test:
+        dataloader_test = mx.gluon.data.DataLoader(data_test, batch_size=args.batch_size,
+                                               shuffle=False) if data_test else None
 
-def train_cvae(vocabulary, data_transform, data_train, data_val, report_fn, ctx=mx.cpu()):
+    num_train_examples = len(data_train)
+    num_train_steps = int(num_train_examples / args.batch_size * args.epochs)
+    warmup_ratio = args.warmup_ratio
+    num_warmup_steps = int(num_train_steps * warmup_ratio)
+    step_num = 0
+    differentiable_params = []
 
-    data_train = gluon.data.SimpleDataset(data_train).transform(data_transform)
-    #data_val   = gluon.data.SimpleDataset(data_val).transform(data_transform)
+    gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
+                            {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
 
-    train_dataloader = mx.gluon.data.DataLoader(data_train, batch_size=args.batch_size, shuffle=True)
-    #val_dataloader   = mx.gluon.data.DataLoader(data_val, batch_size=args.batch_size, shuffle=False)
+    # Do not apply weight decay on LayerNorm and bias terms
+    for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
+        v.wd_mult = 0.0
 
-    vocab_dim, emb_dim = vocabulary.embedding.idx_to_vec.shape
-    model = get_model(emb_dim, vocab_dim, ctx)
-    model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)  ## initialize model parameters on the context ctx
-
-    model.embedding.weight.set_data(vocab.embedding.idx_to_vec) ## set the embedding layer parameters to pre-trained embedding
-
-    trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
-
-    for epoch in range(args.epochs):
-        epoch_loss = 0
-        for i, data in enumerate(train_dataloader):
-            data = data.as_in_context(ctx)
+    lr = args.gen_lr
+    
+    for epoch_id in range(args.epochs):
+        step_loss = 0
+        step_recon_ls = 0
+        step_kl_ls = 0
+        for batch_id, seqs in enumerate(dataloader):
+            step_num += 1
+            if step_num < num_warmup_steps:
+                new_lr = lr * step_num / num_warmup_steps
+            else:
+                offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
+                new_lr = max(lr - offset, args.min_lr)
+            gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
-                loss, predictions = model(data)
-                loss.backward()
-            ls = loss.sum()
-            trainer.step(data.shape[0])
-            epoch_loss += ls.asscalar()
-            if i % 20 == 0:
+                if use_bert:
+                    input_ids, valid_length, type_ids = seqs
+                    ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
+                                valid_length.astype('float32').as_in_context(ctx))
+                else:
+                    input_ids = seqs
+                    ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx))
+                ls = ls.mean()
+            ls.backward()
+            gen_trainer.step(1) # step of 1 since we averaged loss over batch
+            step_loss += ls.asscalar()
+            step_recon_ls += recon_ls.mean().asscalar()
+            step_kl_ls += kl_ls.mean().asscalar()
+            if (batch_id + 1) % (args.log_interval) == 0:
+                logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, gen_lr={:.7f}'
+                             .format(epoch_id, args.epochs, batch_id + 1, len(dataloader),
+                                     step_loss / args.log_interval, step_recon_ls / args.log_interval, step_kl_ls / args.log_interval,
+                                     gen_trainer.learning_rate))
+                step_loss = 0
+                step_recon_ls = 0
+                step_kl_ls = 0
+            if (batch_id + 1) % args.log_interval == 0:
                 if report_fn:
                     mx.nd.waitall()
-                    report_fn(data, predictions)
-        logging.info("Epoch loss = {}".format(epoch_loss))
-        if report_fn:
-            mx.nd.waitall()
-            report_fn(data, predictions)
-
-
+                    report_fn(input_ids, predictions)
 
 
 def get_report_reconstruct_data_fn(vocab, pad_id=0):
@@ -100,32 +123,32 @@ def get_report_reconstruct_data_fn(vocab, pad_id=0):
         logging.info("Input = {}".format(' '.join(in_sent)))
         logging.info("Reconstructed = {}".format(' '.join(rec_sent)))
     return report_reconstruct_data_fn
+        
 
-
-if __name__ == '__main__':
-
-    train_dataset, val_dataset, vocab = load_dataset(args.train_file, args.val_file, max_len=32)
-
-    glove_twitter = nlp.embedding.create('glove', source=args.embedding_source)
-    vocab.set_embedding(glove_twitter)
-
-    _, emb_size = vocab.embedding.idx_to_vec.shape
-    pad_id = vocab['<pad>']
-
-    transform = BasicTransform(max_len=32, pad_id=pad_id)
-
-    ## set embeddings to random for out of vocab items
-    oov_items = 0
-    for word in vocab.embedding._idx_to_token:
-        if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-            oov_items += 1
-            vocab.embedding[word] = mx.nd.random.normal(0.0, 0.1, emb_size)
-
-    report_fn = get_report_reconstruct_data_fn(vocab, pad_id)
-    logging.info("** There are {} out of vocab items **".format(oov_items))
-    ctx = mx.gpu(args.gpu) if args.gpu >= 0 else mx.cpu() 
-    train_cvae(vocab, transform, train_dataset, None, report_fn, ctx)
-
-
-    
-    
+def train_main(args):
+    i_dt = datetime.datetime.now()
+    train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
+    print("Set logging config to {}".format(train_out_dir))
+    logging_config(folder=train_out_dir, name='train_cvae', level=logging.INFO, no_console=False)
+    logging.info(args)
+    context = mx.cpu() if args.gpus is None or args.gpus == '' else mx.gpu(int(args.gpus))
+    if args.use_bert:
+        data_train, bert_base, vocab = load_dataset_bert(args.input_file, max_len=args.sent_size, ctx=context)
+        model = get_bert_model(args, bert_base, context)
+        report_fn = get_report_reconstruct_data_fn(vocab)
+        train_trans_vae(args, data_train, model, context, report_fn, use_bert=True)
+    else:
+        emb = nlp.embedding.create('glove', source = args.embedding_source)
+        data_train, vocab = load_dataset_basic(args.input_file, vocab=None, max_len=args.sent_size, ctx=context)
+        vocab.set_embedding(emb)
+        _, emb_size = vocab.embedding.idx_to_vec.shape
+        oov_items = 0
+        for word in vocab.embedding._idx_to_token:
+            if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                oov_items += 1
+                vocab.embedding[word] = mx.nd.random.normal(0.0, 0.1, emb_size)
+        logging.info("** There are {} out of vocab items **".format(oov_items))
+        model = get_basic_model(args, vocab, context)
+        report_fn = get_report_reconstruct_data_fn(vocab)
+        train_trans_vae(args, data_train, model, context, report_fn, use_bert=False)
+        

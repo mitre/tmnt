@@ -10,11 +10,8 @@ import gluonnlp as nlp
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import nn
-from mxnet import autograd as ag
-from mxnet.gluon.loss import L2Loss
 from mxnet.gluon.block import HybridBlock, Block
 from gluonnlp.model import TransformerEncoderCell, TransformerEncoder
-from tmnt.seq_vae.seq_models import InverseEmbed
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
 
 class PureTransformerVAE(Block):
@@ -48,7 +45,6 @@ class PureTransformerVAE(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.embedding = nn.Embedding(self.vocab_size, self.wd_embed_dim)
-            #self.projection = gluon.nn.Dense(
             self.encoder = TransformerEncoder(self.wd_embed_dim, self.num_units, n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
             self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, num_units=self.num_units,
@@ -454,4 +450,42 @@ class TransformerBlock(HybridBlock):
             return outputs, additional_outputs
     
 
+    
+class InverseEmbed(HybridBlock):
+    def __init__(self, batch_size, sent_len, emb_size, temp=0.01, ctx=mx.cpu(), prefix=None, params=None):
+        self.batch_size = batch_size
+        self.max_sent_len = sent_len
+        self.emb_size = emb_size
+        self.temp = temp
+        self.model_ctx = ctx
+        super(InverseEmbed, self).__init__(prefix=prefix, params=params)
+
+
+    def __call__(self, x):
+        return super(InverseEmbed, self).__call__(x)
+
+
+    def set_temp(self, epoch, max_epochs):
+        # temp ranges from 1.01 to 0.01
+        self.temp = (max_epochs - epoch) / max_epochs + 0.01
+        return self.temp
+        
+
+    def hybrid_forward(self, F, x):
+        if F is mx.ndarray:
+            psym = self.params.get('weight').data()
+        else:
+            psym = self.params.get('weight').var()
+        ## Must ensure that both the embedding weights and the inputs here are normalized
+        w = F.expand_dims(F.transpose(psym), 0)
+        eps_arr = mx.nd.full((1, 1), 1e-12, ctx=self.model_ctx)        
+        w_norm = F.norm(w, axis=1, keepdims=True)
+        w_norm = F.broadcast_div(w, F.broadcast_maximum(w_norm, eps_arr))
+
+        x_norm = F.norm(x, axis=-1, keepdims=True)
+        x_norm = F.broadcast_div(x, F.broadcast_maximum(x_norm, eps_arr))
+
+        mm = F.broadcast_axes(w_norm, axis=0, size=self.batch_size)
+        prob_logits = F.linalg_gemm2(x_norm, mm) / self.temp ## temperature param that should be an argument
+        return prob_logits
     
