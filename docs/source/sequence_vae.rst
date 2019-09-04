@@ -27,7 +27,7 @@ for variable-length inputs.
 ++++++++++++++++++++++++++++++++++++++++++++++++
 
 Assuming TMNT has been installed and tested following the instructions in Installation and Quick Start,
-TMNT can be used to train a transformer-based VAE (using BERT base pre-trained as the encoder), with
+TMNT can be used to train a transformer-based VAE, with
 an invocation such as::
 
   python bin/seq_vae.py --input_file hotel_reviews.900.txt --gpus 0 --gen_lr 1e-3 --min_lr 0.000001 \\
@@ -37,7 +37,7 @@ an invocation such as::
 The input file should consist of a simple text file with each individual sentence/passage of text on a separate line.
 Logging output will appear in a sub-directory inside the directory path specified by ``save_dir``.
 
-The options for ``seq_vae.py`` are described below
+The options for ``seq_vae.py`` are described below.
 
 ===================  ===========    =================================================================================
 Option               Type           Description
@@ -57,7 +57,7 @@ transformer_layers   integer        Number of transformer layers in the decoder 
 wd_embed_dim         integer        Number of units in output embedding (for BERT encoder)
 latent_dim           integer        Dimensionality of the latent distribution
 latent_dist          string         Latent distribution type (``gaussian``, ``logistic_gaussian``, ``vmf``)
-kappa                float          Concentration parameter when using von Mises Fisher (vmf) distribution
+kappa                float          Concentration parameter when using ``vmf`` distribution; lower values increase regularization
 kld_wt               float          Coefficient to weight the KL divergence loss term
 log_interval         integer        Number of batches to process before outputing loss (and example reconstruction)
 save_model_freq      integer        Number of epochs between each model save
