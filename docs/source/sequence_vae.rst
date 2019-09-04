@@ -33,7 +33,11 @@ an invocation such as::
   mkdir _exps ## make a directory for experiment logging/outputs
   python bin/seq_vae.py --input_file data/seq_vae/hotel_reviews.900.txt --gpus 0 --gen_lr 1e-3 --min_lr 0.000001 \\
   --batch_size 300 --sent_size 42 --epochs 200 --latent_dim 50 --log_interval 3 --transformer_layers 6 \\
-  --save_dir ./_exps --kld_wt 0.01 --latent_dist vmf --embedding_source 'glove.6B.300d' --optimizer adam --num_units 512
+  --save_dir ./_exps --kld_wt 0.01 --latent_dist vmf --embedding_source 'glove.6B.300d' --optimizer adam \\
+  --num_units 512 --num_heads 4
+
+In contrast to the bag-of-words VAE, it is strongly recommended to use GPUs to accelerate training with batch
+sizes as large as memory will allow. 
 
 The input file should consist of a simple text file with each individual sentence/passage of text on a separate line.
 Logging output will appear in a sub-directory inside the directory path specified by ``save_dir``.
