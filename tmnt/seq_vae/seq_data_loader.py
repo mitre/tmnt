@@ -36,7 +36,7 @@ def load_dataset_bert(sent_file, max_len=64, ctx=mx.cpu()):
     return data_train, bert_base, vocab
 
 
-def load_dataset_basic(sent_file, vocab=None, max_len=64, ctx=mx.cpu()):
+def load_dataset_basic(sent_file, vocab=None, max_len=64, max_vocab_size=20000, ctx=mx.cpu()):
     train_arr = []
     tokenizer = BasicTokenizer(do_lower_case=True)
     if not vocab:        
@@ -46,7 +46,7 @@ def load_dataset_basic(sent_file, vocab=None, max_len=64, ctx=mx.cpu()):
                 if len(line.split(' ')) > 4:
                     toks = tokenizer.tokenize(line)[:(max_len-2)]
                     counter = nlp.data.count_tokens(toks, counter = counter)
-        vocab = nlp.Vocab(counter)
+        vocab = nlp.Vocab(counter, max_size=max_vocab_size)
     pad_id = vocab[vocab.padding_token]
     logging.info("Vocabulary established from data file {} with ===> {} vocabulary items".format(sent_file, len(vocab.idx_to_token)))
     with io.open(sent_file, 'r', encoding='utf-8') as fp:
@@ -54,7 +54,12 @@ def load_dataset_basic(sent_file, vocab=None, max_len=64, ctx=mx.cpu()):
             if len(line.split(' ')) > 4:
                 toks = tokenizer.tokenize(line)[:(max_len-2)]
                 toks = ['<bos>'] + toks + ['<eos>']
-                ids = [vocab[t] for t in toks]
+                ids = []
+                for t in toks:
+                    try:
+                        ids.append(vocab[t])
+                    except:
+                        ids.append(vocab['<unk>'])
                 padded_ids = ids[:max_len] if len(ids) >= max_len else ids + pad_id * (max_len - len(ids))
                 train_arr.append(padded_ids)
     data_train = gluon.data.SimpleDataset(train_arr)
