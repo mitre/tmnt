@@ -39,9 +39,9 @@ Logging output will appear in a sub-directory inside the directory path specifie
 
 The options for ``seq_vae.py`` are described below
 
-===================  ===========    =================================================================
+===================  ===========    =================================================================================
 Option               Type           Description
-===================  ===========    =================================================================
+===================  ===========    =================================================================================
 input_file           string         Path to input file (single sequence/sentence per line)
 batch_size           integer        Batch size (usually ranges between 32 to 64; larger is better)
 epochs               integer        Number of passes over entire training set
@@ -55,12 +55,13 @@ num_units            integer        Number of units in transformer blocks
 transformer_layers   integer        Number of transformer layers in the decoder and encoder (if not BERT)
 wd_embed_dim         integer        Number of units in output embedding (for BERT encoder)
 latent_dim           integer        Dimensionality of the latent distribution
-latent_dist          string         Latent distribution type (``gaussian``, ``logistic_gaussian``, ``vmf``, ``gaussian_unitvar``)
+latent_dist          string         Latent distribution type (``gaussian``, ``logistic_gaussian``, ``vmf``)
 kappa                float          Concentration parameter when using von Mises Fisher (vmf) distribution
-kld_wt               float          Coefficient to weight the KL divergence loss term (usually ranges from 0.1 to 1)
+kld_wt               float          Coefficient to weight the KL divergence loss term
 log_interval         integer        Number of batches to process before outputing loss (and example reconstruction)
 save_model_freq      integer        Number of epochs between each model save
 weight_decay         float          Standard weight decay for optimizer
 warmup_ratio         float          Percentage of training steps after which decay begins (default 0.1)
 use_bert             boolean        Use BERT (base) as the encoder instead of non-pre-trained transformer
 embedding_source     string         GluonNLP embedding source to use (when not using BERT encoder)
+===================  ===========    =================================================================================
