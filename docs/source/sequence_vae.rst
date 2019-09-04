@@ -30,7 +30,8 @@ Assuming TMNT has been installed and tested following the instructions in Instal
 TMNT can be used to train a transformer-based VAE, with
 an invocation such as::
 
-  python bin/seq_vae.py --input_file hotel_reviews.900.txt --gpus 0 --gen_lr 1e-3 --min_lr 0.000001 \\
+  mkdir _exps ## make a directory for experiment logging/outputs
+  python bin/seq_vae.py --input_file data/seq_vae/hotel_reviews.900.txt --gpus 0 --gen_lr 1e-3 --min_lr 0.000001 \\
   --batch_size 300 --sent_size 42 --epochs 200 --latent_dim 50 --log_interval 3 --transformer_layers 6 \\
   --save_dir ./_exps --kld_wt 0.01 --latent_dist vmf --embedding_source 'glove.6B.300d' --optimizer adam --num_units 512
 
