@@ -138,16 +138,19 @@ def train_main(args):
         report_fn = get_report_reconstruct_data_fn(vocab)
         train_trans_vae(args, model, data_train, data_test=None, ctx=context, report_fn=report_fn, use_bert=True)
     else:
-        emb = nlp.embedding.create('glove', source = args.embedding_source)
+        emb = nlp.embedding.create('glove', source = args.embedding_source) if args.embedding_source else None
         data_train, vocab = load_dataset_basic(args.input_file, vocab=None, max_len=args.sent_size, ctx=context)
-        vocab.set_embedding(emb)
-        _, emb_size = vocab.embedding.idx_to_vec.shape
-        oov_items = 0
-        for word in vocab.embedding._idx_to_token:
-            if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                oov_items += 1
-                vocab.embedding[word] = mx.nd.random.normal(0.0, 0.1, emb_size)
-        logging.info("** There are {} out of vocab items **".format(oov_items))
+        if emb:
+            vocab.set_embedding(emb)
+            _, emb_size = vocab.embedding.idx_to_vec.shape
+            oov_items = 0
+            for word in vocab.embedding._idx_to_token:
+                if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                    oov_items += 1
+                    vocab.embedding[word] = mx.nd.random.normal(0.0, 0.1, emb_size)
+            logging.info("** There are {} out of vocab items **".format(oov_items))
+        else:
+            logging.info("** No pre-trained embedding provided, learning embedding weights from scratch **")
         model = get_basic_model(args, vocab, context)
         report_fn = get_report_reconstruct_data_fn(vocab)
         train_trans_vae(args, model, data_train, data_test=None, ctx=context, report_fn=report_fn, use_bert=False)

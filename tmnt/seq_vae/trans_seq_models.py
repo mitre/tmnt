@@ -56,10 +56,9 @@ class PureTransformerVAE(Block):
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         self.out_embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)        
         self.inv_embed.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
-        self.out_embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
-        self.embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
-        #self.embedding.collect_params().setattr('grad_req', 'null')  ## force embedding weights to stay fixed
-        #self.inv_embed.collect_params().setattr('grad_req', 'null')  ## force embedding weights to stay fixed
+        if self.vocabulary.embedding:
+            self.out_embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
+            self.embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
         
 
     def __call__(self, wp_toks):

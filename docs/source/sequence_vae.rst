@@ -28,9 +28,11 @@ for variable-length inputs.
 
 Assuming TMNT has been installed and tested following the instructions in Installation and Quick Start,
 TMNT can be used to train a transformer-based VAE (using BERT base pre-trained as the encoder), with
-the following invocation::
+an invocation such as::
 
-  python bin/seq_vae.py --input_file hotel_reviews.txt --gpus 0 --gen_lr 1e-4 --min_lr 0.0000005 --batch_size 64 --offset_factor 1.0 --sent_size 48 --epochs 50 --latent_dim 50 --log_interval 50 --wd_embed_dim 256 --dec_layers 4 --save_dir . --kld_wt 0.1 --latent_dist vmf
+  python bin/seq_vae.py --input_file hotel_reviews.900.txt --gpus 0 --gen_lr 1e-3 --min_lr 0.000001 \\
+  --batch_size 300 --sent_size 42 --epochs 200 --latent_dim 50 --log_interval 3 --transformer_layers 6 \\
+  --save_dir ./_exps --kld_wt 0.01 --latent_dist vmf --embedding_source 'glove.6B.300d' --optimizer adam --num_units 512
 
 The input file should consist of a simple text file with each individual sentence/passage of text on a separate line.
 Logging output will appear in a sub-directory inside the directory path specified by ``save_dir``.
@@ -62,5 +64,3 @@ weight_decay         float          Standard weight decay for optimizer
 warmup_ratio         float          Percentage of training steps after which decay begins (default 0.1)
 use_bert             boolean        Use BERT (base) as the encoder instead of non-pre-trained transformer
 embedding_source     string         GluonNLP embedding source to use (when not using BERT encoder)
-
-
