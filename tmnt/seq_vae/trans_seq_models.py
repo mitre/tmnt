@@ -78,13 +78,10 @@ class PureTransformerVAE(Block):
     def forward(self, toks):
         embedded = self.embedding(toks)
         enc = self.encoder(embedded)
-        
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
-        
         prob_logits = self.inv_embed(y)
         log_prob = mx.nd.log_softmax(prob_logits)
-        ## reconstruction loss is weighted combo of cross entropy over vocab and cosine loss over embeddings
         recon_loss = self.ce_loss_fn(log_prob, toks)
         kl_loss = (KL * self.kld_wt)
         loss = recon_loss + kl_loss

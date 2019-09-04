@@ -48,6 +48,7 @@ def load_dataset_basic(sent_file, vocab=None, max_len=64, ctx=mx.cpu()):
                     counter = nlp.data.count_tokens(toks, counter = counter)
         vocab = nlp.Vocab(counter)
     pad_id = vocab[vocab.padding_token]
+    logging.info("Vocabulary established from data file {} with ===> {} vocabulary items".format(sent_file, len(vocab.idx_to_token)))
     with io.open(sent_file, 'r', encoding='utf-8') as fp:
         for line in fp:
             if len(line.split(' ')) > 4:
