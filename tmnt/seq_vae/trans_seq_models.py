@@ -16,7 +16,7 @@ from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLaten
 
 class PureTransformerVAE(Block):
 
-    def __init__(self, vocabulary, latent_distrib='vmf', num_units=512,
+    def __init__(self, vocabulary, latent_distrib='vmf', num_units=512, num_heads=4,
                  n_latent=256, max_sent_len=64, transformer_layers=6,
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
@@ -45,9 +45,10 @@ class PureTransformerVAE(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.embedding = nn.Embedding(self.vocab_size, self.wd_embed_dim)
-            self.encoder = TransformerEncoder(self.wd_embed_dim, self.num_units, n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
+            self.encoder = TransformerEncoder(self.wd_embed_dim, self.num_units, num_heads=num_heads,
+                                              n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
-            self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, num_units=self.num_units,
+            self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, num_units=self.num_units, num_heads=num_heads,
                                               n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
             self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=self.wd_embed_dim)
@@ -81,10 +82,6 @@ class PureTransformerVAE(Block):
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
         
-        #y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
-        #rec_y = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
-        #rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
-
         prob_logits = self.inv_embed(y)
         log_prob = mx.nd.log_softmax(prob_logits)
         ## reconstruction loss is weighted combo of cross entropy over vocab and cosine loss over embeddings
@@ -121,8 +118,6 @@ class BertTransVAE(Block):
                 self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
-        #self.decoder = Decoder3Fixed(output_dim=wd_embed_dim, n_latent=n_latent, sent_size = max_sent_len,
-        #                              num_filters=num_filters, batch_size=batch_size)
             self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, num_units=num_units,
                                               n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
@@ -150,10 +145,6 @@ class BertTransVAE(Block):
         z, KL = self.latent_dist(pooler_out_bert, self.batch_size)
         y = self.decoder(z)
         
-        #y_norm = mx.nd.norm(y, axis=-1, keepdims=True)   # so we can normalize by this norm
-        #rec_y_1 = mx.nd.broadcast_div(y, y_norm) ## y / y_norm
-        #rec_y = mx.nd.reshape(rec_y_1, (self.batch_size, self.max_sent_len, self.wd_embed_dim))
-        
         ## does a matrix mult: rec_y = (32, 64, 300), shape mm = (32, 300, 25002)
         prob_logits = self.inv_embed(y)
         log_prob = mx.nd.log_softmax(prob_logits)
@@ -162,46 +153,6 @@ class BertTransVAE(Block):
         loss = recon_loss + kl_loss
         return loss, recon_loss, kl_loss, log_prob
         
-
-
-class Decoder3Fixed(HybridBlock):
-
-    def __init__(self, output_dim, n_latent=256, sent_size = 42, filter_size=4, num_filters=64, batch_size=8,
-                 embed_dim=1024,
-                 activation='relu'):
-        super(Decoder3Fixed, self).__init__()
-        
-        t1 = sent_size + 2 * (filter_size - 1)
-        t2 = int(math.floor((t1 - filter_size) / 2) + 1)
-        t3 = int(math.floor((t2 - filter_size) / 2) + 1) - 2
-        self._batch_size = batch_size
-        self._n_latent = n_latent
-        self._sent_size = sent_size
-        self.dec_layers = nn.HybridSequential()
-        with self.dec_layers.name_scope():
-            self.dec_layers.add(
-                gluon.nn.Conv2DTranspose(num_filters*2, (t3,1), strides=(2,1), output_padding=(1,0),
-                                   in_channels=n_latent, activation=None))
-            self.dec_layers.add(gluon.nn.BatchNorm(axis=1, center=True, scale=True, in_channels=num_filters*2))
-            self.dec_layers.add(gluon.nn.Activation(activation='relu'))
-            self.dec_layers.add(
-                gluon.nn.Conv2DTranspose(num_filters, (filter_size,1), strides=(2,1), 
-                                   in_channels=num_filters*2, activation=None))
-            self.dec_layers.add(gluon.nn.BatchNorm(axis=1, center=True, scale=True, in_channels=num_filters))
-            self.dec_layers.add(gluon.nn.Activation(activation='relu'))
-            self.dec_layers.add(
-                gluon.nn.Conv2DTranspose(1, (filter_size,output_dim), strides=(2,1),
-                                   in_channels=num_filters, activation='relu'))
-
-
-                    
-    def __call__(self, x):
-        return super(Decoder3Fixed, self).__call__(x)
-
-    def hybrid_forward(self, F, x):
-        x = F.reshape(x, (self._batch_size, self._n_latent, 1, 1)) ## back to rank 4 tensor for conv operations
-        return self.dec_layers(x)
-
 
 class TransformerDecoder(HybridBlock):
     def __init__(self, wd_embed_dim, num_units, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):

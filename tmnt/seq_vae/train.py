@@ -23,7 +23,7 @@ from tmnt.seq_vae.seq_data_loader import load_dataset_bert, load_dataset_basic
 
 
 def get_bert_model(args, bert_base, ctx):
-    model = BertTransVAE(bert_base, args.latent_dist, wd_embed_dim=args.wd_embed_dim, num_units=args.num_units,
+    model = BertTransVAE(bert_base, args.latent_dist, wd_embed_dim=args.wd_embed_dim, num_units=args.num_units, num_heads=args.num_heads,
                          transformer_layers=args.transformer_layers,
                          n_latent=args.latent_dim, max_sent_len=args.sent_size,
                          kappa = args.kappa, 
@@ -36,7 +36,8 @@ def get_bert_model(args, bert_base, ctx):
     return model
 
 def get_basic_model(args, vocab, ctx):
-    model = PureTransformerVAE(vocab, args.latent_dist, num_units=args.num_units, n_latent=args.latent_dim, max_sent_len=args.sent_size,
+    model = PureTransformerVAE(vocab, args.latent_dist, num_units=args.num_units, num_heads=args.num_heads,
+                               n_latent=args.latent_dim, max_sent_len=args.sent_size,
                                transformer_layers=args.transformer_layers,
                                kappa = args.kappa, 
                                batch_size=args.batch_size,

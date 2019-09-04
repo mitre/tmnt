@@ -52,6 +52,7 @@ min_lr               float          Minimum learning rate (after decay, reached 
 offset_factor        float          Shifts the cosine schedule/phase left/right for learning rate
 sent_size            integer        Maximum sentence/sequence lengths for inputs
 num_units            integer        Number of units in transformer blocks
+num_heads            integer        Number of heads in transformer self-attention
 transformer_layers   integer        Number of transformer layers in the decoder and encoder (if not BERT)
 wd_embed_dim         integer        Number of units in output embedding (for BERT encoder)
 latent_dim           integer        Dimensionality of the latent distribution
