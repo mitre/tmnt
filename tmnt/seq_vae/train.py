@@ -136,7 +136,7 @@ def train_main(args):
         data_train, bert_base, vocab = load_dataset_bert(args.input_file, max_len=args.sent_size, ctx=context)
         model = get_bert_model(args, bert_base, context)
         report_fn = get_report_reconstruct_data_fn(vocab)
-        train_trans_vae(args, data_train, model, context, report_fn, use_bert=True)
+        train_trans_vae(args, model, data_train, data_test=None, ctx=context, report_fn=report_fn, use_bert=True)
     else:
         emb = nlp.embedding.create('glove', source = args.embedding_source)
         data_train, vocab = load_dataset_basic(args.input_file, vocab=None, max_len=args.sent_size, ctx=context)
@@ -150,5 +150,5 @@ def train_main(args):
         logging.info("** There are {} out of vocab items **".format(oov_items))
         model = get_basic_model(args, vocab, context)
         report_fn = get_report_reconstruct_data_fn(vocab)
-        train_trans_vae(args, data_train, model, context, report_fn, use_bert=False)
+        train_trans_vae(args, model, data_train, data_test=None, ctx=context, report_fn=report_fn, use_bert=False)
         
