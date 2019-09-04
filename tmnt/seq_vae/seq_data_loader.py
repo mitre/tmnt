@@ -5,6 +5,7 @@ import logging
 
 import gluonnlp as nlp
 import mxnet as mx
+from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet import autograd as ag
 import string
