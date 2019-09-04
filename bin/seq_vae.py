@@ -3,7 +3,7 @@
 import os, sys
 import argparse
 
-from tmnt.seq_vae.train_berttrans import train_main
+from tmnt.seq_vae.train import train_main
 
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational AutoEncoder on Context-aware Encodings')
 
@@ -14,7 +14,6 @@ parser.add_argument('--gen_lr', type=float, help='General learning rate', defaul
 parser.add_argument('--gpus',type=str, help='GPU device ids', default='')
 parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='cvae_model_out')
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=8)
-parser.add_argument('--num_filters',type=int, help='Number of filters in first layer (each subsequent layer uses x2 filters)', default=64)
 parser.add_argument('--latent_dim',type=int, help='Encoder dimensionality', default=256)
 parser.add_argument('--num_units', type=int, help='Hidden dimensions in Transformer Decoder', default=200)
 parser.add_argument('--transformer_layers',type=int, help='Decoder transformer layers', default=6)
