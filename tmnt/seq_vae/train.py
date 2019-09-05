@@ -70,6 +70,13 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
         v.wd_mult = 0.0
 
+    for p in model.collect_params().values():
+        if p.grad_req != 'null':
+            differentiable_params.append(p)
+    #for p in model.decoder.collect_params().values():
+    #    if p.grad_req != 'null':
+    #        differentiable_params.append(p)
+
     lr = args.gen_lr
     
     for epoch_id in range(args.epochs):
@@ -94,6 +101,8 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
                     ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx))
                 ls = ls.mean()
             ls.backward()
+            grads = [p.grad(ctx) for p in differentiable_params]
+            gluon.utils.clip_global_norm(grads, 1)
             gen_trainer.step(1) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
             step_recon_ls += recon_ls.mean().asscalar()

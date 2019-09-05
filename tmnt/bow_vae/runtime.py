@@ -108,6 +108,10 @@ class BowNTMInference(object):
             topic_terms.append(top_k)
         return topic_terms
 
+    def get_top_k_words_per_topic_per_covariate(self, k):
+        #w = self.model
+
+
     def _test_inference_on_directory(self, directory, file_pattern=None):
         """
         Temporary test method to demonstrate use of inference on a set of files in a directory

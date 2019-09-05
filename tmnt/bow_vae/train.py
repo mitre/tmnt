@@ -69,8 +69,10 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
     return perplexity
 
 
-def compute_coherence(model, k, test_data, log_terms=False):
+def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False):
     w = model.decoder.collect_params().get('weight').data()
+    if covariate_interactions:
+        logging.info("Rendering interactions not supported yet")
     num_topics = model.n_latent
     sorted_ids = w.argsort(axis=0, is_ascend=False)
     num_topics = min(num_topics, sorted_ids.shape[-1])

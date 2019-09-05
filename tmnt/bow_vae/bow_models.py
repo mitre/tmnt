@@ -223,7 +223,7 @@ class CovariateModel(HybridBlock):
         if self.interactions:
             td_rsh = F.expand_dims(topic_distrib, 2)
             cov_rsh = F.expand_dims(covars, 1)
-            cov_interactions = td_rsh * cov_rsh
+            cov_interactions = td_rsh * cov_rsh   ## shape (N, Topics, Covariates) -- outer product
             batch_size = cov_interactions.shape[0] if F is mx.ndarray else self.batch_size
             cov_interactions_rsh = F.reshape(cov_interactions, (batch_size, self.n_topics * self.n_covars))
             score_CI = self.cov_inter_decoder(cov_interactions_rsh)
