@@ -44,7 +44,6 @@ def read_vector_file(file):
             docs.append(list(map(lambda t: int(t.split(":")[0]), words)))
     return labels, docs
 
-
 def evaluate(inference, data_loader, total_words, ctx=mx.cpu()):
     total_rec_loss = 0
     for i, (data,_) in enumerate(data_loader):

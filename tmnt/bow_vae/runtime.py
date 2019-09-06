@@ -109,7 +109,7 @@ class BowNTMInference(object):
         return topic_terms
 
     def get_top_k_words_per_topic_per_covariate(self, k):
-        #w = self.model
+        return ""
 
 
     def _test_inference_on_directory(self, directory, file_pattern=None):
