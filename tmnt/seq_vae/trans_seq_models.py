@@ -106,13 +106,13 @@ class BertTransVAE(Block):
         self.latent_distrib = latent_distrib
         with self.name_scope():
             if latent_distrib == 'logistic_gaussian':
-                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
+                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, dr=0.0)
             elif latent_distrib == 'vmf':
-                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, dr=0.0, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
-                self.latent_dist = GaussianLatentDistribution(n_latent, ctx)
+                self.latent_dist = GaussianLatentDistribution(n_latent, ctx, dr=0.0)
             elif latent_distrib == 'gaussian_unitvar':
-                self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
+                self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx, dr=0.0)
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.decoder = TransformerDecoder(wd_embed_dim=wd_embed_dim, num_units=num_units,
