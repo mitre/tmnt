@@ -73,7 +73,7 @@ def load_dataset_basic(sent_file, vocab=None, json_text_key=None, max_len=64, ma
                         ids.append(vocab[t])
                     except:
                         ids.append(vocab['<unk>'])
-                padded_ids = ids[:max_len] if len(ids) >= max_len else ids + pad_id * (max_len - len(ids))
+                padded_ids = ids[:max_len] if len(ids) >= max_len else ids + [pad_id] * (max_len - len(ids))
                 train_arr.append(padded_ids)
     data_train = gluon.data.SimpleDataset(train_arr)
     return data_train, vocab
