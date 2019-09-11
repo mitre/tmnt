@@ -48,10 +48,10 @@ def load_dataset_basic(sent_file, vocab=None, json_text_key=None, max_len=64, ma
     if not vocab:        
         counter = None
         with io.open(sent_file, 'r', encoding='utf-8') as fp:
-            if json_text_key:
-                js = json.loads(line)
-                line = js[json_text_key]
             for line in fp:
+                if json_text_key:
+                    js = json.loads(line)
+                    line = js[json_text_key]
                 if len(line.split(' ')) > 4:
                     toks = tokenizer.tokenize(line)[:(max_len-2)]
                     counter = nlp.data.count_tokens(toks, counter = counter)
