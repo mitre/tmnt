@@ -1,3 +1,7 @@
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 import random
 
 import mxnet as mx

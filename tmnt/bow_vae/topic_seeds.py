@@ -1,4 +1,7 @@
 # coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
 
 import json
 import mxnet as mx

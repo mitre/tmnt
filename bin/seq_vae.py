@@ -33,6 +33,7 @@ parser.add_argument('--kappa', type=float, help='vMF distribution kappa (concent
 parser.add_argument('--use_bert', action='store_true', help='Use BERT base as the encoder (and fine-tune)')
 parser.add_argument('--embedding_source', type=str, help='Word embedding source to use (if not using BERT)', default='glove.6B.50d')
 parser.add_argument('--max_vocab_size', type=int, help='Maximum size of vocabulary (if not using BERT)', default=20000)
+parser.add_argument('--json_text_key', type=str, help='Assume json list format and select text using this key', default=None)
 
 
 args = parser.parse_args()

@@ -1,3 +1,7 @@
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 from collections import Counter
 
 from itertools import combinations as C

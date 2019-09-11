@@ -1,4 +1,8 @@
 # coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 
 import io
 import json
@@ -6,6 +10,8 @@ import gluonnlp as nlp
 import glob
 from gluonnlp.data import Counter
 from multiprocessing import Pool, cpu_count
+from mantichora import mantichora
+from atpbar import atpbar
 import threading
 
 from tmnt.preprocess import BasicTokenizer
@@ -29,6 +35,19 @@ class Vectorizer(object):
                           bos_token=None, eos_token=None, min_freq=5, max_size=size)
         return vocab
 
+
+    def chunks(self, l, n):
+        """Yield successive n-sized chunks from l."""
+        for i in range(0, len(l), n):
+            yield l[i:i + n]
+
+    def task_vec_fn(self, name, files):
+        sp_vecs = []
+        for i in atpbar(range(len(files)), name=name):
+            sp_vecs.append(self.vectorize_fn(files[i]))
+        return sp_vecs
+
+
     def get_sparse_vecs(self, sp_out_file, vocab_out_file, data_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None, pat='*.json'):
         files = glob.glob(data_dir + '/' + pat)
         if i_vocab is None:
@@ -37,9 +56,15 @@ class Vectorizer(object):
         else:
             vocab = i_vocab
         files_and_vocab = [(f,vocab) for f in files]
-        if len(files) > 2:
-            p = Pool(cpu_count())
-            sp_vecs = p.map(self.vectorize_fn, files_and_vocab)
+        if len(files_and_vocab) > 2:
+            file_batches = list(self.chunks(files_and_vocab, min(cpu_count(), len(files_and_vocab))))
+            with mantichora() as mcore:
+                for i in range(len(file_batches)):
+                    mcore.run(self.task_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i])
+                sp_vecs = mcore.returns()
+            sp_vecs = [ item for sl in sp_vecs for item in sl ]
+            #p = Pool(cpu_count())
+            #sp_vecs = p.map(self.vectorize_fn, files_and_vocab)
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
         with io.open(sp_out_file, 'w') as fp:
@@ -71,12 +96,13 @@ class Vectorizer(object):
 
 class JsonVectorizer(Vectorizer):
 
-    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6):
+    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6, label_prefix=-1):
         super(JsonVectorizer, self).__init__(custom_stop_word_file)
         self.text_key = text_key
         self.label_key = label_key
+        self.label_prefix = label_prefix
         self.min_doc_size = min_doc_size
-        self.label_map = {}
+
     
     def get_counter_file(self, json_file):
         counter = None
@@ -87,11 +113,23 @@ class JsonVectorizer(Vectorizer):
                 counter = nlp.data.count_tokens(self.tokenizer.tokenize(txt), counter = counter)
         return counter
 
+    def task(self, name, files):
+        counters = []
+        for i in atpbar(range(len(files)), name=name):
+            counters.append(self.get_counter_file(files[i]))
+        return counters
+
     def get_counter_dir_parallel(self, data_dir, pat):
         files = glob.glob(data_dir + '/' + pat)
         if len(files) > 2:
-            p = Pool(cpu_count())
-            counters = p.map(self.get_counter_file, files)
+            file_batches = list(self.chunks(files, min(cpu_count(), len(files))))
+            with mantichora() as mcore:
+                for i in range(len(file_batches)):
+                    mcore.run(self.task,"Counting Vocab Items Batch {}".format(i), file_batches[i])
+                counter_cs = mcore.returns()
+            #p = Pool(cpu_count())
+            #counters = p.map(self.get_counter_file, files)
+            counters = [ item for sl in counter_cs for item in sl ]
         else:
             counters = map(self.get_counter_file, files)
         return sum(counters, Counter())
@@ -104,18 +142,17 @@ class JsonVectorizer(Vectorizer):
                 js = json.loads(l)
                 toks = self.tokenizer.tokenize(js[self.text_key])
                 try:
-                    label_str = js[self.label_key]
-                    try:
-                        label = self.label_map[label_str]
-                    except:
-                        label = len(self.label_map) + 1
-                        self.label_map[label_str] = label
-                except:
-                    label = -1
+                    lstr = js[self.label_key]
+                    if self.label_prefix > 0:
+                        label_str = lstr[:self.label_prefix]
+                    else:
+                        label_str = lstr
+                except KeyError:
+                    label_str = "<unk>"
                 tok_ids = [vocab[token] for token in toks if token in vocab]
                 if (len(tok_ids) >= self.min_doc_size):
                     cnts = nlp.data.count_tokens(tok_ids)
-                    sp_vecs.append((sorted(cnts.items()), label))
+                    sp_vecs.append((sorted(cnts.items()), label_str))
             print('.', end='')
         return sp_vecs
 
@@ -126,6 +163,13 @@ class TextVectorizer(Vectorizer):
         super(TextVectorizer, self).__init__(custom_stop_word_file)
         self.min_doc_size = min_doc_size
 
+        
+    def task(self, name, files):
+        counters = []
+        for i in atpbar(range(len(files)), name=name):
+            counters.append(self.get_counter_file_batch(files[i]))
+        return counters
+
 
     def get_counter_dir_parallel(self, txt_dir, pat='*.txt'):
         def batches(l, n):
@@ -135,8 +179,13 @@ class TextVectorizer(Vectorizer):
         batch_size = max(1, int(len(files) / 20))
         file_batches = list(batches(files, batch_size))
         if len(file_batches) > 2:
-            p = Pool(cpu_count())
-            counters = p.map(self.get_counter_file_batch, file_batches)        
+            file_batch_batches = list(self.chunks(file_batches, min(cpu_count(), len(files))))
+            with mantichora() as mcore:
+                for i in range(len(file_batch_batches)):
+                    mcore.run(self.task,"Batch {}".format(i), file_batch_batches[i])
+                counter_cs = mcore.returns()
+            #p = Pool(cpu_count())
+            counters = [ item for sl in counter_cs for item in sl ]
         else:
             counters = map(self.get_counter_file_batch, file_batches)    
         return sum(counters, Counter())

@@ -1,3 +1,8 @@
+# coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 from math import log10
 from collections import Counter
 

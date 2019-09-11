@@ -1,4 +1,8 @@
 # coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 
 from .log_utils import *
 from .mat_utils import *

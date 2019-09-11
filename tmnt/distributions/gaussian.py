@@ -1,4 +1,8 @@
 #coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 
 from mxnet import gluon
 from tmnt.distributions import LatentDistribution

@@ -1,13 +1,17 @@
 # coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
 
 import json
 import mxnet as mx
 import gluonnlp as nlp
 import io
-from tmnt.bow_vae.bow_models import BowNTM
+from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
 from tmnt.preprocess.tokenizer import BasicTokenizer
 from multiprocessing import Pool
+
 
 class BowNTMInference(object):
 
@@ -23,17 +27,25 @@ class BowNTMInference(object):
         enc_dim = specs['enc_hidden_dim']
         lat_distrib = specs['latent_distribution']
         emb_size = specs['embedding_size']
-        self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
+        if 'n_covars' in specs:
+            self.covar_model = True
+            self.n_covars = specs['n_covars']
+            self.label_map = specs['l_map']            
+            self.model = MetaDataBowNTM(self.label_map, self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
+        else:
+            self.covar_model = False
+            self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
         self.model.load_parameters(str(param_file), allow_missing=False)
 
 
     def get_model_details(self, sp_vec_file):
-        data_csr, _, labels = file_to_sp_vec(sp_vec_file, len(self.vocab))        
+        data_csr, _, labels, _ = file_to_sp_vec(sp_vec_file, len(self.vocab))        
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
         w_pr = mx.nd.softmax(w, axis=1)
         ## 2) D x K matrix over the test data of topic probabilities
-        dt_matrix = self.encode_csr(data_csr, use_probs=True)
+        covars = labels if self.covar_model else None
+        dt_matrix = self.encode_csr(data_csr, covars, use_probs=True)
         ## 3) D-length vector of document sizes
         doc_lengths = mx.nd.sum(data_csr, axis=1)
         ## 4) vocab (in same order as W columns)
@@ -68,30 +80,39 @@ class BowNTMInference(object):
         return self.encode_text_stream(strm)
 
     def encode_vec_file(self, sp_vec_file):
-        data_csr, _, labels = file_to_sp_vec(sp_vec_file, len(self.vocab))
-        return self.encode_csr(data_csr), labels
+        data_csr, _, labels, _ = file_to_sp_vec(sp_vec_file, len(self.vocab))
+        return self.encode_csr(data_csr, labels), labels
 
     def encode_text_stream(self, strm):
         csr, _, _ = collect_stream_as_sparse_matrix(strm, pre_vocab=self.vocab)
-        return self.encode_csr(csr)
+        return self.encode_csr(csr,None)
 
-    def encode_csr(self, csr, use_probs=False):
+    def encode_csr(self, csr, labels, use_probs=False):
         batch_size = min(csr.shape[0], self.max_batch_size)
-        last_batch_size = csr.shape[0] % batch_size        
-        infer_iter = DataIterLoader(mx.io.NDArrayIter(csr[:-last_batch_size], None, batch_size, last_batch_handle='discard', shuffle=False))
+        last_batch_size = csr.shape[0] % batch_size
+        covars = mx.nd.one_hot(mx.nd.array(labels, dtype='int'), self.n_covars) if self.covar_model and labels[:-last_batch_size] is not None else None
+        infer_iter = DataIterLoader(mx.io.NDArrayIter(csr[:-last_batch_size], covars,
+                                                      batch_size, last_batch_handle='discard', shuffle=False))
         encodings = []
-        for _, (data,_) in enumerate(infer_iter):
+        for _, (data,labels) in enumerate(infer_iter):
             data = data.as_in_context(self.ctx)
-            encs = self.model.encode_data(data)
+            if self.covar_model and labels is not None:
+                labels = labels.as_in_context(self.ctx)
+                encs = self.model.encode_data_with_covariates(data, labels)
+            else:
+                encs = self.model.encode_data(data)
             if use_probs:
-                #norm = mx.nd.norm(encs, axis=1, keepdims=True)
                 e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
                 encs = mx.nd.softmax(e1 ** 0.5)
             encodings.extend(encs)
         ## handle the last batch explicitly as NDArrayIter doesn't do that for us
         if last_batch_size > 0:
             data = csr[-last_batch_size:].as_in_context(self.ctx)
-            encs = self.model.encode_data(data)
+            if self.covar_model and labels is not None:
+                labels = mx.nd.one_hot(mx.nd.array(labels[-last_batch_size:], dtype='int'), self.n_covars).as_in_context(self.ctx)
+                encs = self.model.encode_data_with_covariates(data, labels)
+            else:
+                encs = self.model.encode_data(data)
             if use_probs:
                 #norm = mx.nd.norm(encs, axis=1, keepdims=True)
                 e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
@@ -109,7 +130,19 @@ class BowNTMInference(object):
         return topic_terms
 
     def get_top_k_words_per_topic_per_covariate(self, k):
-        return ""
+        n_topics = self.n_latent
+        w = self.model.cov_decoder.cov_inter_decoder.collect_params().get('weight').data()
+        n_covars = int(w.shape[1] / n_topics)
+        topic_terms = []
+        for i in range(n_covars):
+            cv_i_slice = w[:, (i * n_topics):((i+1) * n_topics)]
+            sorted_ids = cv_i_slice.argsort(axis=0, is_ascend=False)
+            cv_i_terms = []
+            for t in range(n_topics):
+                top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]
+                cv_i_terms.append(top_k)
+            topic_terms.append(cv_i_terms)
+        return topic_terms
 
 
     def _test_inference_on_directory(self, directory, file_pattern=None):

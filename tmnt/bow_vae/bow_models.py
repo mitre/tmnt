@@ -1,9 +1,15 @@
 # coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
 
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import HybridBlock
-from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution, GaussianUnitVarLatentDistribution
+from tmnt.distributions import LogisticGaussianLatentDistribution
+from tmnt.distributions import GaussianLatentDistribution
+from tmnt.distributions import HyperSphericalLatentDistribution
+from tmnt.distributions import GaussianUnitVarLatentDistribution
 
 __all__ = ['BowNTM', 'MetaDataBowNTM']
 
@@ -79,9 +85,7 @@ class BowNTM(HybridBlock):
         """
         Encode data to the mean of the latent distribution defined by the input `data`
         """
-        mu = self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
-        #norm = mx.nd.norm(mu, axis=1, keepdims=True)
-        return mu # / norm
+        return self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
     
     def get_l1_penalty_term(self, F, l1_pen_const, batch_size):
         if F is mx.ndarray:
@@ -179,19 +183,28 @@ class BowNTM(HybridBlock):
 
 class MetaDataBowNTM(BowNTM):
 
-    def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
+    def __init__(self, l_map, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
-                                             coherence_reg_penalty, kappa, 0.0, batch_size, wd_freqs, seed_mat, n_covars, ctx)
-        self.n_covars = n_covars
+                                             coherence_reg_penalty, kappa, 0.0, batch_size, wd_freqs, seed_mat, len(l_map), ctx)
+        self.n_covars = len(l_map)
+        self.label_map = l_map
         with self.name_scope():
             self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size, batch_size=self.batch_size, interactions=True)
 
 
+    def encode_data_with_covariates(self, data, labels):
+        """
+        Encode data to the mean of the latent distribution defined by the input `data`
+        """
+        emb_out = self.embedding(data)
+        enc_out = self.encoder(mx.nd.concat(emb_out, labels))
+        return self.latent_dist.mu_encoder(enc_out)
+            
+
     def hybrid_forward(self, F, data, labels, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
-        n_in = F.concat(emb_out, labels)
         z, KL = self.run_encode(F, F.concat(emb_out, labels), batch_size)
         dec_out = self.decoder(z)
         cov_dec_out = self.cov_decoder(z, labels)
@@ -221,14 +234,13 @@ class CovariateModel(HybridBlock):
     def hybrid_forward(self, F, topic_distrib, covars):
         score_C = self.cov_decoder(covars)
         if self.interactions:
-            td_rsh = F.expand_dims(topic_distrib, 2)
-            cov_rsh = F.expand_dims(covars, 1)
-            print("Shape of cov mat = {}".format(cov_rsh))
-            cov_interactions = td_rsh * cov_rsh   ## shape (N, Topics, Covariates) -- outer product
+            td_rsh = F.expand_dims(topic_distrib, 1)
+            cov_rsh = F.expand_dims(covars, 2)
+            cov_interactions = cov_rsh * td_rsh    ## shape (N, Topics, Covariates) -- outer product
             batch_size = cov_interactions.shape[0] if F is mx.ndarray else self.batch_size
             cov_interactions_rsh = F.reshape(cov_interactions, (batch_size, self.n_topics * self.n_covars))
             score_CI = self.cov_inter_decoder(cov_interactions_rsh)
-            return score_C + score_CI
+            return score_CI + score_C
         else:
             return score_C
             

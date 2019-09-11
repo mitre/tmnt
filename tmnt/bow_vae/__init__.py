@@ -1,4 +1,8 @@
 # coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 
 from .bow_doc_loader import *
 from .bow_models import *

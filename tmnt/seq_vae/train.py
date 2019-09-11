@@ -1,4 +1,8 @@
 # codeing: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 
 import argparse, tarfile
 import math
@@ -149,7 +153,7 @@ def train_main(args):
         train_trans_vae(args, model, data_train, data_test=None, ctx=context, report_fn=report_fn, use_bert=True)
     else:
         emb = nlp.embedding.create('glove', source = args.embedding_source) if args.embedding_source else None
-        data_train, vocab = load_dataset_basic(args.input_file, vocab=None, max_len=args.sent_size,
+        data_train, vocab = load_dataset_basic(args.input_file, vocab=None, json_text_key=args.json_text_key, max_len=args.sent_size,
                                                max_vocab_size=args.max_vocab_size, ctx=context)
         if emb:
             vocab.set_embedding(emb)

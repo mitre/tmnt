@@ -1,3 +1,6 @@
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
 import os
 import logging
 

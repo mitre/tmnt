@@ -1,6 +1,8 @@
 # coding: utf-8
 
 """
+Copyright (c) 2019 The MITRE Corporation.
+
 File/module contains routines for loading in text documents to sparse matrix representations
 for efficient neural variational model training.
 """
@@ -154,7 +156,7 @@ def load_vocab(vocab_file):
     counter = nlp.data.Counter(w_dict)
     return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 
-def file_to_sp_vec(sp_file, voc_size):
+def file_to_sp_vec(sp_file, voc_size, label_map=None):
     labels = []
     indices = []
     values = []
@@ -162,11 +164,21 @@ def file_to_sp_vec(sp_file, voc_size):
     cumulative = 0
     total_num_words = 0
     ndocs = 0
+    lm = label_map if label_map else {}
     with io.open(sp_file, 'r') as fp:
         for line in fp:
             ndocs += 1
             els = line.split(' ')
-            labels.append(int(els[0]))
+            lstr = els[0]
+            try:
+                label = lm[lstr]
+            except KeyError:
+                if label_map is None:
+                    label = len(lm)
+                    lm[lstr] = label
+                else:
+                    label = -1
+            labels.append(label)
             els_sp = list(map(lambda e: e.split(':'), els))
             pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp[1:] ] )
             inds, vs = zip(*pairs)
@@ -176,19 +188,19 @@ def file_to_sp_vec(sp_file, voc_size):
             values.extend(vs)
             indices.extend(inds)
     csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, voc_size))
-    return csr_mat, total_num_words, labels
+    return csr_mat, total_num_words, labels, lm
                 
 
 def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None):
     vocab = load_vocab(vocab_file)
-    tr_mat, total_tr, tr_labels_li = file_to_sp_vec(sp_vec_file, len(vocab))
-    tr_labels = mx.nd.array(tr_labels_li, dtype='int') - 1
+    tr_mat, total_tr, tr_labels_li, label_map = file_to_sp_vec(sp_vec_file, len(vocab))
+    tr_labels = mx.nd.array(tr_labels_li, dtype='int')
     if sp_vec_test_file:
-        tst_mat, total_tst, tst_labels_li = file_to_sp_vec(sp_vec_test_file, len(vocab))
-        tst_labels = mx.nd.array(tst_labels_li, dtype='int') - 1
+        tst_mat, total_tst, tst_labels_li, _ = file_to_sp_vec(sp_vec_test_file, len(vocab), label_map=label_map)
+        tst_labels = mx.nd.array(tst_labels_li, dtype='int')
     else:
         tst_mat = None
         tst_labels = None
         total_tst = 0    
-    return vocab, tr_mat, total_tr, tst_mat, total_tst, tr_labels, tst_labels
+    return vocab, tr_mat, total_tr, tst_mat, total_tst, tr_labels, tst_labels, label_map
     

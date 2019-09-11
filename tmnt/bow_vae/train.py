@@ -1,4 +1,8 @@
 # coding: utf-8
+"""
+Copyright (c) 2019 The MITRE Corporation.
+"""
+
 
 import math
 import logging
@@ -123,7 +127,7 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
 
 class BowVAEWorker(Worker):
     def __init__(self, c_args, vocabulary, data_train_csr, total_tr_words,
-                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, ctx=mx.cpu(), max_budget=27, **kwargs):
+                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, ctx=mx.cpu(), max_budget=27, **kwargs):
         super().__init__(**kwargs)
         self.c_args = c_args
         self.total_tr_words = total_tr_words
@@ -136,7 +140,7 @@ class BowVAEWorker(Worker):
         self.test_labels = test_labels
         self.data_train_csr = data_train_csr
         self.data_test_csr = data_test_csr
-        
+        self.label_map = label_map
         self.search_mode = False
         
         self.wd_freqs = get_wd_freqs(data_train_csr)
@@ -238,11 +242,11 @@ class BowVAEWorker(Worker):
         vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
         
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
-            n_covars = mx.nd.max(self.train_labels).asscalar() + 1
+            n_covars = len(self.label_map)
             self.train_labels = mx.nd.one_hot(self.train_labels, n_covars)
             self.test_labels = mx.nd.one_hot(self.test_labels, n_covars) if self.test_labels is not None else None
             model = \
-                MetaDataBowNTM(n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
+                MetaDataBowNTM(self.label_map, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa,
                                init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, 
                                batch_size=batch_size, wd_freqs=self.wd_freqs, ctx=self.ctx)
@@ -320,7 +324,7 @@ class BowVAEWorker(Worker):
                 details['tr_size'] += data.shape[0]
                 if labels is None or labels.size == 0:
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                    labels = labels.as_in_context(self.ctx)
+                labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
                 with autograd.record():
                     elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, _ = \
@@ -404,6 +408,9 @@ def write_model(m, config, budget, args):
         if m.vocabulary.embedding:
             config['embedding_size'] = len(m.vocabulary.embedding.idx_to_vec[0])
         config['training_epochs'] = int(budget)
+        if isinstance(m, MetaDataBowNTM):
+            config['n_covars'] = int(m.n_covars)
+            config['l_map'] = m.label_map
         specs = json.dumps(config)
         with open(sp_file, 'w') as f:
             f.write(specs)
@@ -426,13 +433,13 @@ def get_worker(args, budget, id_str, ns_port):
             sp_vec_data = True
     if sp_vec_data:
         logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
-        vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels = \
+        vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map = \
             collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file)
     else:
         raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
     ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
-    worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, ctx=ctx,
+    worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map, ctx=ctx,
                               max_budget=budget,
                               nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
     return worker, train_out_dir
