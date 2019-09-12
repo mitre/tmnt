@@ -70,13 +70,13 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     decayed_updates = int(num_train_steps * 0.75)
     
     if not args.use_bert:
-        optimizer = mx.optimizer.Adam(learning_rate=args.lr,
+        optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
                                       clip_gradient=5.0,
                                       lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
-                                                                               args.lr,
+                                                                               args.gen_lr,
                                                                                args.min_lr,
                                                                                warmup_steps=int(decayed_updates * args.warmup_ratio),
-                                                                               warmup_begin_lr=(args.lr / 10),
+                                                                               warmup_begin_lr=(args.gen_lr / 10),
                                                                                warmup_mode='linear'
                                                                                ))
         gen_trainer = gluon.Trainer(model.collect_params(), optimizer)
