@@ -69,7 +69,7 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     lr = args.gen_lr
     decayed_updates = int(num_train_steps * 0.75)
     
-    if not args.use_bert:
+    if False:
         optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
                                       lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
                                                                                args.gen_lr,
@@ -101,7 +101,7 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
         step_recon_ls = 0
         step_kl_ls = 0
         for batch_id, seqs in enumerate(dataloader):
-            if args.use_bert:
+            if True:
                 step_num += 1
                 if step_num < num_warmup_steps:
                     new_lr = max(lr * step_num / num_warmup_steps, args.min_lr)
