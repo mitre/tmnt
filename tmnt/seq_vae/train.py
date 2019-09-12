@@ -65,8 +65,23 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     num_warmup_steps = int(num_train_steps * warmup_ratio)
     step_num = 0
     differentiable_params = []
-
-    gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
+    
+    lr = args.gen_lr
+    decayed_updates = int(num_train_steps * 0.75)
+    
+    if not args.use_bert:
+        optimizer = mx.optimizer.Adam(learning_rate=args.lr,
+                                      clip_gradient=5.0,
+                                      lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
+                                                                               args.lr,
+                                                                               args.min_lr,
+                                                                               warmup_steps=int(decayed_updates * args.warmup_ratio),
+                                                                               warmup_begin_lr=(args.lr / 10),
+                                                                               warmup_mode='linear'
+                                                                               ))
+        gen_trainer = gluon.Trainer(model.collect_params(), optimizer)
+    else:
+        gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
 
     # Do not apply weight decay on LayerNorm and bias terms
@@ -79,24 +94,22 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     for p in model.decoder.collect_params().values():
         if p.grad_req != 'null':
             differentiable_params.append(p)
-    #for p in model.decoder.collect_params().values():
-    #    if p.grad_req != 'null':
-    #        differentiable_params.append(p)
 
-    lr = args.gen_lr
+
     
     for epoch_id in range(args.epochs):
         step_loss = 0
         step_recon_ls = 0
         step_kl_ls = 0
         for batch_id, seqs in enumerate(dataloader):
-            step_num += 1
-            if step_num < num_warmup_steps:
-                new_lr = lr * step_num / num_warmup_steps
-            else:
-                offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
-                new_lr = max(lr - offset, args.min_lr)
-            gen_trainer.set_learning_rate(new_lr)
+            if args.use_bert:
+                step_num += 1
+                if step_num < num_warmup_steps:
+                    new_lr = max(lr * step_num / num_warmup_steps, args.min_lr)
+                else:
+                    offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
+                    new_lr = max(lr - offset, args.min_lr)
+                gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 if use_bert:
                     input_ids, valid_length, type_ids = seqs
@@ -151,7 +164,8 @@ def train_main(args):
     if args.use_bert:
         data_train, bert_base, vocab = load_dataset_bert(args.input_file, max_len=args.sent_size, ctx=context)
         model = get_bert_model(args, bert_base, context)
-        report_fn = get_report_reconstruct_data_fn(vocab)
+        pad_id = vocab[vocab.padding_token]
+        report_fn = get_report_reconstruct_data_fn(vocab, pad_id=pad_id)
         train_trans_vae(args, model, data_train, data_test=None, ctx=context, report_fn=report_fn, use_bert=True)
     else:
         emb = nlp.embedding.create('glove', source = args.embedding_source) if args.embedding_source else None
@@ -169,6 +183,7 @@ def train_main(args):
         else:
             logging.info("** No pre-trained embedding provided, learning embedding weights from scratch **")
         model = get_basic_model(args, vocab, context)
-        report_fn = get_report_reconstruct_data_fn(vocab)
+        pad_id = vocab[vocab.padding_token]
+        report_fn = get_report_reconstruct_data_fn(vocab, pad_id=pad_id)
         train_trans_vae(args, model, data_train, data_test=None, ctx=context, report_fn=report_fn, use_bert=False)
         
