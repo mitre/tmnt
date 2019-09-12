@@ -71,7 +71,6 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     
     if not args.use_bert:
         optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
-                                      clip_gradient=5.0,
                                       lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
                                                                                args.gen_lr,
                                                                                args.min_lr,
