@@ -42,8 +42,8 @@ take the same file as for trainin (via the ``--tr_vec_file`` option).
 The sparse vector representation for a corpus can be obtained from two different input formats:
 1) json objects with one document per json object or 2) plain text documents (one document per file) 
 
-There are two input formats (currently).  The first assumes a single JSON object per line in a file.  The value of the key ``text`` will
-be used as the document string.  All other fields are ignored. So, for example::
+Using the JSON input format, the value of the key ``text`` will be used as the document string.
+All other fields are ignored. So, for example::
 
 
   {"id": "1052322266514673664", "text": "This is the text of one of the documents in the corpus."}
@@ -59,7 +59,7 @@ An example invocation::
   python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.json' --tr_input_dir ./train-json-files/ --tst_input_dir ./test-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec 
 
 
-Another input format assumes directories for training and test sets, where each file is a separate plain text document. This should be
+The plain text input format assumes directories for training and test sets, where each file is a separate plain text document. This should be
 invoked by adding the ``--txt_mode`` option::
 
 
@@ -68,4 +68,5 @@ invoked by adding the ``--txt_mode`` option::
 
 TMNT does its own rudimentary pre-processing of the text and includes a built-in stop-word list for English
 to remove certain common terms that tend to act as distractors for the purposes of generating coherent topics.
-This pre-processing is implemented in Python and relatively unoptimized.  
+Custom stop-word lists can also be provided. 
+
