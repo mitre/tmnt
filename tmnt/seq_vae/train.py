@@ -35,8 +35,7 @@ def get_bert_model(args, bert_base, ctx):
                          kld=args.kld_wt, ctx=ctx)
     model.latent_dist.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
     model.decoder.initialize(init=mx.init.Xavier(magnitude=2.34), ctx=ctx)
-    model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
-    model.inv_embed.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
+    #model.out_embedding.initialize(init=mx.init.Uniform(0.1), ctx=ctx)
     return model
 
 def get_basic_model(args, vocab, ctx):
