@@ -68,9 +68,9 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     differentiable_params = []
     
     lr = args.gen_lr
-    decayed_updates = int(num_train_steps * 0.75)
     
     if False:
+        decayed_updates = int(num_train_steps * 0.75)
         optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
                                       lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
                                                                                args.gen_lr,

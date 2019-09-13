@@ -64,7 +64,7 @@ class PureTransformerVAE(Block):
         self.out_embedding.initialize(mx.init.Uniform(0.1), ctx=ctx)        
         #self.inv_embed.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         if self.vocabulary.embedding:
-            #self.out_embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
+            self.out_embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
             self.embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
         
 
