@@ -89,8 +89,8 @@ class HyperSphericalLatentDistribution(LatentDistribution):
     @staticmethod
     def _vmf_kld(k, d):
         return np.array([(k * ((sp.iv(d / 2.0 + 1.0, k) + sp.iv(d / 2.0, k) * d / (2.0 * k)) / sp.iv(d / 2.0, k) - d / (2.0 * k))
-               + d * np.log(k) / 2.0 - np.log(sp.iv(d / 2.0, k))
-               - sp.loggamma(d / 2 + 1) - d * np.log(2) / 2).real])
+                          + d * np.log(k) / 2.0 - np.log(sp.iv(d / 2.0, k))
+                          - sp.loggamma(d / 2 + 1) - d * np.log(2) / 2).real])
 
     def _get_weight_from_cache(self, F, batch_size, vmf_samples):
         to_select = F.random.randint(low=0, high=self.num_samples, shape=(batch_size,))
