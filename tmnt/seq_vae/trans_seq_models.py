@@ -86,7 +86,7 @@ class PureTransformerVAE(Block):
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
         prob_logits = self.inv_embed(y)
-        #log_prob = mx.nd.log_softmax(prob_logits)
+        log_prob = mx.nd.log_softmax(prob_logits)
         soft_toks = self.label_smoothing(toks)
         recon_loss = self.ce_loss_fn(prob_logits, soft_toks)
         kl_loss = (KL * self.kld_wt)
@@ -150,7 +150,7 @@ class BertTransVAE(Block):
         
         ## does a matrix mult: rec_y = (32, 64, 300), shape mm = (32, 300, 25002)
         prob_logits = self.inv_embed(y)
-        #log_prob = mx.nd.log_softmax(prob_logits)
+        log_prob = mx.nd.log_softmax(prob_logits)
         recon_loss = self.ce_loss_fn(prob_logits, wp_toks)
         kl_loss = (KL * self.kld_wt)
         loss = recon_loss + kl_loss
