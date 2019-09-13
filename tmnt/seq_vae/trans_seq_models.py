@@ -19,7 +19,7 @@ from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLaten
 
 class PureTransformerVAE(Block):
 
-    def __init__(self, vocabulary, latent_distrib='vmf', num_units=512, num_heads=4,
+    def __init__(self, vocabulary, latent_distrib='vmf', num_units=512, hidden_size=512, num_heads=4,
                  n_latent=256, max_sent_len=64, transformer_layers=6,
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
@@ -48,17 +48,17 @@ class PureTransformerVAE(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.embedding = nn.Embedding(self.vocab_size, self.wd_embed_dim)
-            self.encoder = TransformerEncoder(self.wd_embed_dim, self.num_units, num_heads=num_heads,
+            self.encoder = TransformerEncoder(self.wd_embed_dim, self.num_units, hidden_size=hidden_size, num_heads=num_heads,
                                               n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
-            self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, num_units=self.num_units, num_heads=num_heads,
+            self.decoder = TransformerDecoder(wd_embed_dim=self.wd_embed_dim, num_units=self.num_units, hidden_size=hidden_size, num_heads=num_heads,
                                               n_layers=transformer_layers, n_latent=n_latent, sent_size = max_sent_len,
                                               batch_size = batch_size, ctx = ctx)
-            #self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=self.wd_embed_dim)
-            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, ctx=self.model_ctx, params = self.embedding.params)
+            self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=self.wd_embed_dim)
+            self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, ctx=self.model_ctx, params = self.out_embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
-        #self.out_embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)        
+        self.out_embedding.initialize(mx.init.Uniform(0.1), ctx=ctx)        
         #self.inv_embed.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         if self.vocabulary.embedding:
             #self.out_embedding.weight.set_data(self.vocabulary.embedding.idx_to_vec)
@@ -155,7 +155,7 @@ class BertTransVAE(Block):
         
 
 class TransformerDecoder(HybridBlock):
-    def __init__(self, wd_embed_dim, num_units, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
+    def __init__(self, wd_embed_dim, num_units, hidden_size=512, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
         super(TransformerDecoder, self).__init__()
         self._batch_size = batch_size
         self._sent_size = sent_size
@@ -168,7 +168,7 @@ class TransformerDecoder(HybridBlock):
                 attention_cell = 'multi_head',
                 num_layers = n_layers,
                 units = num_units,  
-                hidden_size = 512,
+                hidden_size = hidden_size,
                 max_length = sent_size,
                 num_heads = num_heads,
                 scaled = True,
@@ -192,7 +192,7 @@ class TransformerDecoder(HybridBlock):
 
 
 class TransformerEncoder(HybridBlock):
-    def __init__(self, wd_embed_dim, num_units, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
+    def __init__(self, wd_embed_dim, num_units, hidden_size=512, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
         super(TransformerEncoder, self).__init__()
         self._batch_size = batch_size
         self._sent_size = sent_size
@@ -203,7 +203,7 @@ class TransformerEncoder(HybridBlock):
                 attention_cell = 'multi_head',
                 num_layers = n_layers,
                 units = num_units,  
-                hidden_size = 512,
+                hidden_size = hidden_size,
                 max_length = sent_size,
                 num_heads = num_heads,
                 scaled = True,
