@@ -21,7 +21,7 @@ from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLaten
 class PureTransformerVAE(Block):
 
     def __init__(self, vocabulary, latent_distrib='vmf', num_units=512, hidden_size=512, num_heads=4,
-                 n_latent=256, max_sent_len=64, transformer_layers=6,
+                 n_latent=256, max_sent_len=64, transformer_layers=6, label_smoothing_epsilon=0.1,
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_temp=0.01,
                  ctx = mx.cpu(),
@@ -58,7 +58,7 @@ class PureTransformerVAE(Block):
             self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=self.wd_embed_dim)
             self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, ctx=self.model_ctx, params = self.out_embedding.params)
             self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True, sparse_label=False)
-            self.label_smoothing = LabelSmoothing(epsilon=0.1, units=self.vocab_size)
+            self.label_smoothing = LabelSmoothing(epsilon=label_smoothing_epsilon, units=self.vocab_size)
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         self.out_embedding.initialize(mx.init.Uniform(0.1), ctx=ctx)        
         #self.inv_embed.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
