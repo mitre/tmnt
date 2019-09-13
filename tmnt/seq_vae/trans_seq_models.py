@@ -37,6 +37,7 @@ class PureTransformerVAE(Block):
         self.vocab_size = len(vocabulary.embedding.idx_to_token)
         self.latent_distrib = latent_distrib
         self.num_units = num_units
+        self.label_smoothing_epsilon = label_smoothing_epsilon
         with self.name_scope():
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
@@ -87,8 +88,11 @@ class PureTransformerVAE(Block):
         y = self.decoder(z)
         prob_logits = self.inv_embed(y)
         log_prob = mx.nd.log_softmax(prob_logits)
-        soft_toks = self.label_smoothing(toks)
-        recon_loss = self.ce_loss_fn(log_prob, soft_toks)
+        if self.label_smoothing_epsilon > 0.0001:
+            soft_toks = self.label_smoothing(toks)
+            recon_loss = self.ce_loss_fn(log_prob, soft_toks)
+        else:
+            recon_loss = self.ce_loss_fn(log_prob, toks)
         kl_loss = (KL * self.kld_wt)
         loss = recon_loss + kl_loss
         return loss, recon_loss, kl_loss, log_prob
