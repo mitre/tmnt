@@ -69,34 +69,22 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     
     lr = args.gen_lr
     
-    if False:
-        decayed_updates = int(num_train_steps * 0.75)
-        optimizer = mx.optimizer.Adam(learning_rate=args.gen_lr,
-                                      lr_scheduler=mx.lr_scheduler.CosineScheduler(decayed_updates,
-                                                                               args.gen_lr,
-                                                                               args.min_lr,
-                                                                               warmup_steps=int(decayed_updates * args.warmup_ratio),
-                                                                               warmup_begin_lr=(args.gen_lr / 10),
-                                                                               warmup_mode='linear'
-                                                                               ))
-        gen_trainer = gluon.Trainer(model.collect_params(), optimizer)
-    else:
-        gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
+    gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
 
     # Do not apply weight decay on LayerNorm and bias terms
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
         v.wd_mult = 0.0
 
-    #for p in model.encoder.collect_params().values():
-    #    if p.grad_req != 'null':
-    #        differentiable_params.append(p)
-    #for p in model.decoder.collect_params().values():
-    #    if p.grad_req != 'null':
-    #        differentiable_params.append(p)
-    for p in model.collect_params().values():
+    for p in model.encoder.collect_params().values():
         if p.grad_req != 'null':
             differentiable_params.append(p)
+    for p in model.decoder.collect_params().values():
+        if p.grad_req != 'null':
+            differentiable_params.append(p)
+    #for p in model.collect_params().values():
+    #    if p.grad_req != 'null':
+    #        differentiable_params.append(p)
 
     
     for epoch_id in range(args.epochs):
@@ -104,14 +92,13 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
         step_recon_ls = 0
         step_kl_ls = 0
         for batch_id, seqs in enumerate(dataloader):
-            if True:
-                step_num += 1
-                if step_num < num_warmup_steps:
-                    new_lr = max(lr * step_num / num_warmup_steps, args.min_lr)
-                else:
-                    offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
-                    new_lr = max(lr - offset, args.min_lr)
-                gen_trainer.set_learning_rate(new_lr)
+            step_num += 1
+            if step_num < num_warmup_steps:
+                new_lr = lr * step_num / num_warmup_steps
+            else:
+                offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
+                new_lr = max(lr - offset, args.min_lr)
+            gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 if use_bert:
                     input_ids, valid_length, type_ids = seqs
