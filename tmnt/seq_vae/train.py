@@ -88,13 +88,15 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
         v.wd_mult = 0.0
 
-    for p in model.encoder.collect_params().values():
+    #for p in model.encoder.collect_params().values():
+    #    if p.grad_req != 'null':
+    #        differentiable_params.append(p)
+    #for p in model.decoder.collect_params().values():
+    #    if p.grad_req != 'null':
+    #        differentiable_params.append(p)
+    for p in model.collect_params().values():
         if p.grad_req != 'null':
             differentiable_params.append(p)
-    for p in model.decoder.collect_params().values():
-        if p.grad_req != 'null':
-            differentiable_params.append(p)
-
 
     
     for epoch_id in range(args.epochs):

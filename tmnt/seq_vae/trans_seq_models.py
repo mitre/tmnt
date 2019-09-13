@@ -15,6 +15,7 @@ from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet.gluon.block import HybridBlock, Block
 from gluonnlp.model import TransformerEncoderCell, TransformerEncoder
+from gluonnlp.loss import LabelSmoothing
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
 
 class PureTransformerVAE(Block):
@@ -22,8 +23,8 @@ class PureTransformerVAE(Block):
     def __init__(self, vocabulary, latent_distrib='vmf', num_units=512, hidden_size=512, num_heads=4,
                  n_latent=256, max_sent_len=64, transformer_layers=6,
                  kappa = 100.0,
-                 batch_size=16, kld=0.1, wd_temp=0.01, ctx = mx.cpu(),
-                 increasing=True, decreasing=False,
+                 batch_size=16, kld=0.1, wd_temp=0.01,
+                 ctx = mx.cpu(),
                  prefix=None, params=None):
         super(PureTransformerVAE, self).__init__(prefix=prefix, params=params)
         self.kld_wt = kld
@@ -56,7 +57,8 @@ class PureTransformerVAE(Block):
                                               batch_size = batch_size, ctx = ctx)
             self.out_embedding = gluon.nn.Embedding(input_dim=self.vocab_size, output_dim=self.wd_embed_dim)
             self.inv_embed = InverseEmbed(batch_size, max_sent_len, self.wd_embed_dim, temp=wd_temp, ctx=self.model_ctx, params = self.out_embedding.params)
-            self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True)
+            self.ce_loss_fn = mx.gluon.loss.SoftmaxCrossEntropyLoss(axis=-1, from_logits=True, sparse_label=False)
+            self.label_smoothing = LabelSmoothing(epsilon=0.1, units=self.vocab_size)
         self.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
         self.out_embedding.initialize(mx.init.Uniform(0.1), ctx=ctx)        
         #self.inv_embed.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx)
@@ -84,8 +86,9 @@ class PureTransformerVAE(Block):
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
         prob_logits = self.inv_embed(y)
-        log_prob = mx.nd.log_softmax(prob_logits)
-        recon_loss = self.ce_loss_fn(log_prob, toks)
+        #log_prob = mx.nd.log_softmax(prob_logits)
+        soft_toks = self.label_smoothing(toks)
+        recon_loss = self.ce_loss_fn(prob_logits, soft_toks)
         kl_loss = (KL * self.kld_wt)
         loss = recon_loss + kl_loss
         return loss, recon_loss, kl_loss, log_prob
@@ -147,8 +150,8 @@ class BertTransVAE(Block):
         
         ## does a matrix mult: rec_y = (32, 64, 300), shape mm = (32, 300, 25002)
         prob_logits = self.inv_embed(y)
-        log_prob = mx.nd.log_softmax(prob_logits)
-        recon_loss = self.ce_loss_fn(log_prob, wp_toks)
+        #log_prob = mx.nd.log_softmax(prob_logits)
+        recon_loss = self.ce_loss_fn(prob_logits, wp_toks)
         kl_loss = (KL * self.kld_wt)
         loss = recon_loss + kl_loss
         return loss, recon_loss, kl_loss, log_prob
