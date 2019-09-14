@@ -29,6 +29,6 @@ class GaussianUnitVarLatentDistribution(LatentDistribution):
     def hybrid_forward(self, F, data, batch_size):
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
-        z = self._get_unit_var_gaussian_sample(F, mu_bn, batch_size)
+        z = self._get_gaussian_sample(F, mu_bn, self.log_variance, batch_size)
         KL = self._get_kl_term(F, mu_bn)
         return self.post_sample_dr_o(z), KL
