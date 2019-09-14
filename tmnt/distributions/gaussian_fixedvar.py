@@ -15,7 +15,7 @@ class GaussianUnitVarLatentDistribution(LatentDistribution):
 
     def __init__(self, n_latent, ctx, dr=0.2, var=1.0):
         super(GaussianUnitVarLatentDistribution, self).__init__(n_latent, ctx)
-        self.variance = mx.nd.array([var])
+        self.variance = mx.nd.array([var], ctx=ctx)
         self.log_variance = mx.nd.log(self.variance)
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent)
