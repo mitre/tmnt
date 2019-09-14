@@ -17,6 +17,7 @@ from mxnet.gluon.block import HybridBlock, Block
 from gluonnlp.model import TransformerEncoderCell, TransformerEncoder
 from gluonnlp.loss import LabelSmoothing
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
+from tmnt.distributions import GaussianUnitVarLatentDistribution
 
 class PureTransformerVAE(Block):
 
