@@ -128,7 +128,7 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
                 if report_fn:
                     mx.nd.waitall()
                     report_fn(input_ids, predictions)
-        write_model(model, args)
+    write_model(model, args)
 
 
 def get_report_reconstruct_data_fn(vocab, pad_id=0):
