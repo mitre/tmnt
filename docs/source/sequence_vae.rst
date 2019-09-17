@@ -31,16 +31,27 @@ TMNT can be used to train a transformer-based VAE, with
 an invocation such as::
 
   mkdir _exps ## make a directory for experiment logging/outputs
-  python bin/seq_vae.py --input_file data/seq_vae/hotel_reviews.900.txt --gpus 0 --gen_lr 1e-3 --min_lr 0.000001 \\
-  --batch_size 300 --sent_size 42 --epochs 200 --latent_dim 50 --log_interval 3 --transformer_layers 6 \\
-  --save_dir ./_exps --kld_wt 0.01 --latent_dist vmf --embedding_source 'glove.6B.300d' --optimizer adam \\
-  --num_units 512 --num_heads 4
+  mkdir _model_seq_vae
+  python ~/tmnt/bin/seq_vae.py --input_file ./data/seq_vae/hotel_reviews.900.txt \\
+  --gpus 0 --gen_lr 1e-3 --min_lr 0.00002 --batch_size 450 --sent_size 64 --epochs 600 \\
+  --latent_dim 50 --log_interval 2 --transformer_layers 4 --save_dir ./_exps/ --kld_wt 0.1 \\
+  --latent_dist vmf --optimizer adam --num_units 512 --kappa 50.0 --num_heads 4 \\
+  --model_dir _model_seq_vae
+
 
 In contrast to the bag-of-words VAE, it is strongly recommended to use GPUs to accelerate training with batch
-sizes as large as memory will allow. 
+sizes as large as memory will allow.
+
+Note that the exact options to use will vary considerably from dataset to dataset.  The above invocation
+will converge (and likely overfit) on the small sample datset of 900 text inputs.  For larger training
+sets, reduce the number of epochs.  Learning rates may need to be tuned.  The ``kappa`` parameter
+controls the concentration (or variance) for the ``vmf`` distribution; lower values will
+prevent overfitting.  
 
 The input file should consist of a simple text file with each individual sentence/passage of text on a separate line.
 Logging output will appear in a sub-directory inside the directory path specified by ``save_dir``.
+An alternative input is a json list where a text field is encoded as json string with a key
+specified by the option ``json_text_key``.
 
 The options for ``seq_vae.py`` are described below.
 
@@ -66,11 +77,14 @@ latent_dist          string         Latent distribution type (``gaussian``, ``lo
 kappa                float          Concentration parameter when using ``vmf`` distribution; lower values increase regularization
 kld_wt               float          Coefficient to weight the KL divergence loss term
 log_interval         integer        Number of batches to process before outputing loss (and example reconstruction)
-model_dir            integer        Model directory to save final model parameters
+save_dir             string         Directory where experiment log will be saved
+model_dir            string         Model directory to save final model parameters
 weight_decay         float          Standard weight decay for optimizer
 warmup_ratio         float          Percentage of training steps after which decay begins (default 0.1)
 use_bert             boolean        Use BERT (base) as the encoder instead of non-pre-trained transformer
 embedding_source     string         GluonNLP embedding source to use (when not using BERT encoder)
+json_text_key        string         String key for a json text field to use as text input
+label_smoothing      float          Standard label smoothing parameter (NOT YET SUPPORTED)
 ===================  ===========    =================================================================================
 
 
