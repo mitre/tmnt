@@ -21,7 +21,7 @@ from tmnt.distributions import GaussianUnitVarLatentDistribution
 
 class PureTransformerVAE(Block):
 
-    def __init__(self, vocabulary, latent_distrib='vmf', num_units=512, hidden_size=512, num_heads=4,
+    def __init__(self, vocabulary, emb_dim, latent_distrib='vmf', num_units=512, hidden_size=512, num_heads=4,
                  n_latent=256, max_sent_len=64, transformer_layers=6, label_smoothing_epsilon=0.0,
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_temp=0.01,
@@ -34,11 +34,15 @@ class PureTransformerVAE(Block):
         self.max_sent_len = max_sent_len
         self.vocabulary = vocabulary
         self.batch_size = batch_size
-        self.wd_embed_dim = len(vocabulary.embedding.idx_to_vec[0]) # word embedding length
-        self.vocab_size = len(vocabulary.embedding.idx_to_token)
+        self.wd_embed_dim = emb_dim
+        self.vocab_size = len(vocabulary.idx_to_token)
         self.latent_distrib = latent_distrib
         self.num_units = num_units
+        self.hidden_size = hidden_size        
+        self.num_heads = num_heads
+        self.transformer_layers = transformer_layers
         self.label_smoothing_epsilon = label_smoothing_epsilon
+        self.kappa = kappa
         with self.name_scope():
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, dr=0.0)
@@ -301,7 +305,6 @@ class TransformerBlock(HybridBlock):
                  use_layer_norm_before_dropout=False, scale_embed=True, ctx=mx.cpu(),
                  prefix=None, params=None):
         super(TransformerBlock, self).__init__(prefix=prefix, params=params)
-        print("active = {}".format(self._active))
         assert units % num_heads == 0,\
             'In TransformerEncoder, The units should be divided exactly ' \
             'by the number of heads. Received units={}, num_heads={}' \

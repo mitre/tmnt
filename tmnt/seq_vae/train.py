@@ -39,7 +39,8 @@ def get_bert_model(args, bert_base, ctx):
     return model
 
 def get_basic_model(args, vocab, ctx):
-    model = PureTransformerVAE(vocab, args.latent_dist, num_units=args.num_units, hidden_size=args.hidden_size,
+    emb_dim = len(vocab.embedding.idx_to_vec[0])
+    model = PureTransformerVAE(vocab, emb_dim, args.latent_dist, num_units=args.num_units, hidden_size=args.hidden_size,
                                num_heads=args.num_heads,
                                n_latent=args.latent_dim, max_sent_len=args.sent_size,
                                transformer_layers=args.transformer_layers,
@@ -127,6 +128,7 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
                 if report_fn:
                     mx.nd.waitall()
                     report_fn(input_ids, predictions)
+        write_model(model, args)
 
 
 def get_report_reconstruct_data_fn(vocab, pad_id=0):
@@ -142,6 +144,29 @@ def get_report_reconstruct_data_fn(vocab, pad_id=0):
         logging.info("Reconstructed = {}".format(' '.join(rec_sent)))
     return report_reconstruct_data_fn
         
+
+def write_model(m, args):
+    if args.model_dir:
+        pfile = os.path.join(args.model_dir, 'model.params')
+        conf_file = os.path.join(args.model_dir, 'model.config')
+        vocab_file = os.path.join(args.model_dir, 'vocab.json')
+        m.save_parameters(pfile)
+        dd = {}
+        dd['latent_dist'] = m.latent_distrib
+        dd['num_units'] = m.num_units
+        dd['num_heads'] = m.num_heads        
+        dd['hidden_size'] = m.hidden_size
+        dd['n_latent'] = m.n_latent
+        dd['transformer_layers'] = m.transformer_layers
+        dd['kappa'] = m.kappa
+        dd['sent_size'] = m.max_sent_len
+        dd['embedding_size'] = m.wd_embed_dim
+        specs = json.dumps(dd)
+        with open(conf_file, 'w') as f:
+            f.write(specs)
+        with open(vocab_file, 'w') as f:
+            f.write(m.vocabulary.to_json())
+
 
 def train_main(args):
     i_dt = datetime.datetime.now()
