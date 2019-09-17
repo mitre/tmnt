@@ -49,7 +49,7 @@ class SeqVAEInference(object):
         return mx.nd.array(padded_ids, dtype='int').expand_dims(0)
 
 
-    def encode_text(self, txt):
+    def recode_text(self, txt):
         ids = self.prep_text(txt)
         _, _, _, predictions = self.model(ids)
         reconstructed_sent_ids = mx.nd.argmax(predictions[0],1).asnumpy()

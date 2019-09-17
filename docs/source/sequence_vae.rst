@@ -54,20 +54,38 @@ optimizer            string         Optimizer (adam, sgd, bertadam)
 gpus                 integer        Only single GPU supported currently
 gen_lr               float          Maximum learning rate (achieved after warmup of 10% of total updates)
 min_lr               float          Minimum learning rate (after decay, reached at 80% of total updates)
-offset_factor        float          Shifts the cosine schedule/phase left/right for learning rate
+offset_factor        float          Shifts the cosine schedule/phase left/right for learning rate (default 1.0 is usually fine)
 sent_size            integer        Maximum sentence/sequence lengths for inputs
 num_units            integer        Number of units in transformer blocks
 num_heads            integer        Number of heads in transformer self-attention
+hidden_size          integer        Size of the hidden dimensions in Transformer blocks
 transformer_layers   integer        Number of transformer layers in the decoder and encoder (if not BERT)
-wd_embed_dim         integer        Number of units in output embedding (for BERT encoder)
+wd_embed_dim         integer        Number of units in output embedding (for BERT encoder only)
 latent_dim           integer        Dimensionality of the latent distribution
-latent_dist          string         Latent distribution type (``gaussian``, ``logistic_gaussian``, ``vmf``)
+latent_dist          string         Latent distribution type (``gaussian``, ``logistic_gaussian``, ``vmf``, ``none``)
 kappa                float          Concentration parameter when using ``vmf`` distribution; lower values increase regularization
 kld_wt               float          Coefficient to weight the KL divergence loss term
 log_interval         integer        Number of batches to process before outputing loss (and example reconstruction)
-save_model_freq      integer        Number of epochs between each model save
+model_dir            integer        Model directory to save final model parameters
 weight_decay         float          Standard weight decay for optimizer
 warmup_ratio         float          Percentage of training steps after which decay begins (default 0.1)
 use_bert             boolean        Use BERT (base) as the encoder instead of non-pre-trained transformer
 embedding_source     string         GluonNLP embedding source to use (when not using BERT encoder)
 ===================  ===========    =================================================================================
+
+
+3. Sampling from a Trained Model
+++++++++++++++++++++++++++++++++
+
+Assuming TMNT has been installed a model has been trained (i.e. the files ``model.config``, ``model.params`` and
+``vocab.json`` exist), one can generate sampled reconstructions of an input text to test the model as follows using
+the method ``recode_text`` as follows::
+
+  >>> from tmnt.seq_vae.runtime import SeqVAEInference
+  >>> infer = SeqVAEInference('model.params', 'model.config', 'vocab.json')
+  >>> infer.recode_text('just will let you know that our recent trip to la to be on the tv show " dancing with the stars " was made complete by our outstanding 3 night stay at the custom hotel . nothing was very difficult for the staff .')
+
+The method will return a list of tokens representing the reconstructed text by running the text through the
+full variational autoencoder, *including the stochastic step of drawing a sample from the latent distribution
+before decoding the encoded input*.  This means the method is non-deterministic and may return different
+results on each invocation.
