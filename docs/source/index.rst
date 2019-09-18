@@ -7,16 +7,17 @@ Topic Modeling Neural Toolkit Documentation
 ===========================================
 
 .. toctree::
-   :maxdepth: 1
+   :maxdepth: 2
    :titlesonly:
 
    overview.rst
    installation.rst
    quickstart.rst
-   examples.rst
-   inference.rst
-   model_selection.rst
+   training.rst
+   config_options.rst
+   model_selection.rst   
    evaluation.rst
+   inference.rst   
    hpc.rst
    modeling_covariates.rst
    guided.rst
