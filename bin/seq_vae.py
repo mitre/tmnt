@@ -26,6 +26,7 @@ parser.add_argument('--model_dir', type=str, help='Directory for final saved mod
 parser.add_argument('--weight_decay', type=float, help='Learning weight decay', default=0.00001)
 parser.add_argument('--warmup_ratio', type=float, help='Percentage of training steps after which decay begins (default 0.1)', default=0.1)
 parser.add_argument('--log_interval', type=int, help='Number of batches after which loss and reconstruction examples will be logged', default=20)
+parser.add_argument('--save_interval', type=int, help='Number of EPOCHs after which model checkpoints will be saved', default=20)
 parser.add_argument('--offset_factor', type=float, help='Adjusts offset for LR decay; values < 1 are faster', default=1.0)
 parser.add_argument('--min_lr', type=float, help='Absolute minimum LR', default=1e-7)
 parser.add_argument('--wd_temp', type=float, help='Temperature coefficient for output embedding' ,default=0.01)

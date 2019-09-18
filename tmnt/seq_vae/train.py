@@ -128,6 +128,8 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
                 if report_fn:
                     mx.nd.waitall()
                     report_fn(input_ids, predictions)
+        if (epoch_id + 1) % args.save_interval == 0:
+            write_model(model, args, epoch_id)
     write_model(model, args)
 
 
@@ -145,11 +147,12 @@ def get_report_reconstruct_data_fn(vocab, pad_id=0):
     return report_reconstruct_data_fn
         
 
-def write_model(m, args):
+def write_model(m, args, epoch_id=0):
     if args.model_dir:
-        pfile = os.path.join(args.model_dir, 'model.params')
-        conf_file = os.path.join(args.model_dir, 'model.config')
-        vocab_file = os.path.join(args.model_dir, 'vocab.json')
+        suf = '_'+ str(epoch_id) if epoch_id > 0 else ''
+        pfile = os.path.join(args.model_dir, ('model.params' + suf))
+        conf_file = os.path.join(args.model_dir, ('model.config' + suf))
+        vocab_file = os.path.join(args.model_dir, ('vocab.json' + suf))
         m.save_parameters(pfile)
         dd = {}
         dd['latent_dist'] = m.latent_distrib
