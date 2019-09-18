@@ -25,8 +25,7 @@ and let :math:`d` denote the bias vector capturing background term frequencies.
 how each covariate value influences each term in the vocabulary (this is sort of
 a prior over terms for each co-variate value) and finally :math:`W^{Int}` captures
 interactions by conceptually providing a separate term-topic matrix for each
-co-variate value. The resulting term probabilities for an input are determined by
-the equation:
+co-variate value. The resulting term probabilities for an input are determined by:
 
 .. math::
 
@@ -36,7 +35,7 @@ the equation:
 Preparing a Corpus with Covariate Information
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The `prepare_corpus.py` script is used to generate labeled vector files for training
+The ``prepare_corpus.py`` script is used to generate labeled vector files for training
 with co-variates. Currently, only the json list format can be used. The flag
 ``--json_text_key`` should be used to indicate which json key has a value that corresponds
 to the document input text.  The ``--json_label_key`` flag is used to denote which key
@@ -52,6 +51,11 @@ value::
     --json_text_key text --json_label_key year --file_pat '*.json' --label_prefix_chars 3
 
 
+The addition of the option ``--label_prefix_chars 3`` would use just the first three
+characters/digits of the four digit year, capturing the decade instead of the
+exact year.
+
+
 Training a Co-variate Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -64,8 +68,8 @@ the user must include the flag ``--use_labels_as_covars``::
   --use_labels_as_covars --config ./model.config 
 
 
-Inpecting Resulting Topics
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Inspecting Resulting Topics
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
   
 Currently, a simple script is provided to inspect the word-deviation matrices. The script
 requires the resulting trained model along with a simple text file that includes the co-variate

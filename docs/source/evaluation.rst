@@ -28,7 +28,8 @@ This is less useful, but can still be helpful to see how documents are embedded 
 Note that when using the ``plot_file`` option to generate a UMAP plot on a Mac,
 typically Python must be installed as a Framework and ``pythonw`` used to interpret the program, e.g.::
 
-  pythonw bin/evaluate.py --test_file ./data/test.2.vec --vocab_file ./data/train.2.vocab --model_dir ./_model_dir/ --words_per_topic 10 \
+  pythonw bin/evaluate.py --test_file ./data/test.2.vec --vocab_file ./data/train.2.vocab \
+                          --model_dir ./_model_dir/ --words_per_topic 10 \
                           --plot_file 20news.plot.png
 
 Note that the argument to ``--vocab_file`` must be the original (non JSON) vocab file used as the input to ``bin/train_model.py``.

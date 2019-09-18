@@ -30,12 +30,12 @@ Assuming TMNT has been installed and tested following the instructions in Instal
 TMNT can be used to train a transformer-based VAE, with
 an invocation such as::
 
-  mkdir _exps ## make a directory for experiment logging/outputs
+  mkdir _exps 
   mkdir _model_seq_vae
-  python ~/tmnt/bin/seq_vae.py --input_file ./data/seq_vae/hotel_reviews.900.txt \\
-  --gpus 0 --gen_lr 1e-3 --min_lr 0.00002 --batch_size 450 --sent_size 64 --epochs 600 \\
-  --latent_dim 50 --log_interval 2 --transformer_layers 4 --save_dir ./_exps/ --kld_wt 0.1 \\
-  --latent_dist vmf --optimizer adam --num_units 512 --kappa 50.0 --num_heads 4 \\
+  python ~/tmnt/bin/seq_vae.py --input_file ./data/seq_vae/hotel_reviews.900.txt \
+  --gpus 0 --gen_lr 1e-3 --min_lr 0.00002 --batch_size 450 --sent_size 64 --epochs 600 \
+  --latent_dim 50 --log_interval 2 --transformer_layers 4 --save_dir ./_exps/ --kld_wt 0.1 \
+  --latent_dist vmf --optimizer adam --num_units 512 --kappa 50.0 --num_heads 4 \
   --model_dir _model_seq_vae
 
 

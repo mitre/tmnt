@@ -1,21 +1,27 @@
 What is TMNT?
 ~~~~~~~~~~~~~
 
-TMNT (Topic Modeling Neural Toolkit) implements a number of methods for
-training and applying neural network variational autoencoders (VAEs) to the problem of
-modeling latent topics in large documents collections. While various open source implementations
-of some of the algorithms in these recent papers are available, TMNT strives to include
-the best variations across the literature within a software package that is quick to use and
-deploy for applications.
+The Topic Modeling Neural Toolkit (TMNT) provides implementations for
+training and applying neural network variational autoencoders (VAEs) on text data in order to
+model latent topics in large documents collections.  The toolkit makes use of
+a number of approaches outlined in recent papers as well as some novel additions.
 
 A few highlights include:
 
-* Use of von Mises Fisher hyperspherical latent distribution
-
-* Ability to initialize the first embedding layer using pre-trained word embeddings
-
 * Use of HPBandster for Bayesian hyperparameter optimization
 
-* Ability to perform Guided Topic modeling through a novel regularization term
+* Ability to perform Guided Topic Modeling by explicitly adding topic terms and the
+  use of a novel regularization method
 
-  
+* Dynamic topic modeling (of topics over time) through the use of `covariates`
+
+* Multiple latent distributions, including the von Mises Fisher distribution 
+
+* Ability to use pre-trained word embeddings in the encoder
+
+* Use of the ``PyLDAvis`` library to visualize learned topics
+
+* Runtime/inference API to allow for easy deployment of learned topic models
+
+* Experimental Transformer-based Sequence Variational Auto-Encoder
+

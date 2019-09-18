@@ -46,8 +46,8 @@ Using the JSON input format, the value of the key ``text`` will be used as the d
 All other fields are ignored. So, for example::
 
 
-  {"id": "1052322266514673664", "text": "This is the text of one of the documents in the corpus."}
-  {"id": "1052322266514673665", "text": "This is the text of another of the documents in the corpus."}
+  {"id": "3664", "text": "This is the text of one of the documents in the corpus."}
+  {"id": "3665", "text": "This is the text of another document in the corpus."}
   ...
 
 Two directories of such files should be provided, one for training and one for test.  Assuming the files end with ``.json`` extensions, the
@@ -55,15 +55,17 @@ following example invocation would prepare the data for the training and test se
 size of 2000.  Note that this script uses the built in pre-processing which tokenizes, downcases and removes common English stopwords.
 An example invocation::
 
-
-  python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.json' --tr_input_dir ./train-json-files/ --tst_input_dir ./test-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec 
+  python bin/prepare_corpus.py --vocab_size 2000 --file_pat *.json --tr_input_dir ./train-json-files/ \
+  --tst_input_dir ./test-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec 
 
 
 The plain text input format assumes directories for training and test sets, where each file is a separate plain text document. This should be
 invoked by adding the ``--txt_mode`` option::
 
 
-  python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.txt' --tr_input_dir ./train-txt-files/ --tst_input_dir ./test-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec --txt_mode
+  python bin/prepare_corpus.py --vocab_size 2000 --file_pat *.txt --tr_input_dir ./train-txt-files/ \
+  --tst_input_dir ./test-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  \
+  --tst_vec_file ./test.2k.vec --txt_mode
    
 
 TMNT does its own rudimentary pre-processing of the text and includes a built-in stop-word list for English
