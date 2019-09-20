@@ -25,7 +25,9 @@ the ``tmnt.bow_vae.runtime`` module provides a simple API to encode documents::
   >>> from tmnt.bow_vae.runtime import BowNTMInference
   >>> infer = BowNTMInference('_model_dir/model.params','_model_dir/model.config', '_model_dir/vocab.json')
   >>> text_encoder = TextEncoder(infer)
-  >>> encodings = text_encoder.encode_batch(['Greater Armenia would stretch from Karabakh, to the Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.', 'I have two pairs of headphones I\'d like to sell.  These are excellent, and both in great condition'])
+  >>> encodings = text_encoder.encode_batch(['Greater Armenia would stretch from Karabakh, to the
+        Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.',
+        'I have two pairs of headphones I\'d like to sell.  These are excellent, and both in great condition'])
 
 The resulting ``encodings`` is an ``NDArray`` with shape ``(N,K)`` where ``N`` is the number of texts/documents encoded and ``K`` is the number of topics.
 

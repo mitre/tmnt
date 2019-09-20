@@ -4,7 +4,6 @@ Copyright (c) 2019 The MITRE Corporation.
 """
 
 
-import argparse, tarfile
 import math
 import os
 import numpy as np
