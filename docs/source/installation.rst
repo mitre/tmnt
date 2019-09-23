@@ -24,13 +24,11 @@ Once Conda is installed, install a new environment for TMNT as follows::
 
   conda create --name TMNT -c conda-forge python=3 pip numpy==1.17.0
 
+In some cases, the conda-forge versions will run into SSL timeouts. If the
+above command returns a HTTP 000 CONNECTION FAILED message, it is suggested
+to run the command again after disabling SSL as follows::
 
-For some platforms, it may be preferred or necessary to install the 
-C compiler/environment via conda by adding the ``gxx_linux-64``
-and ``gcc_linux-64`` targets.  If the ``conda create`` step above does
-not work, try the following::
-
-  conda create --name TMNT -c conda-forge python=3 pip gxx_linux-64 gcc_linux-64 numpy==1.17.0
+  conda config --set ssl_verify false
 
 Once the environment is setup, activate it and install TMNT-specific libraries::
 
