@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     if args.override_top_k_terms:
         top_k_words_per_topic = get_top_k_terms_from_file(args.override_top_k_terms)
-        _, _, _, tst_csr, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
+        _, _, _, tst_csr, _, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
         vocab = load_vocab(args.vocab_file)
         top_k_words_per_topic_ids = [ [ vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     top_k_words_per_topic_ids = [ [ inference_model.vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
 
     npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
-    _, _, _, tst_csr, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
+    _, _, _, tst_csr, _, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
     test_npmi = npmi_eval.evaluate_csr_mat(tst_csr)
     print("**** Test NPMI = {} *******".format(test_npmi))
     exit(0)
