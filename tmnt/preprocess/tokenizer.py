@@ -12,7 +12,8 @@ __all__ = ['BasicTokenizer']
 class BasicTokenizer(object):
     """Runs basic tokenization (punctuation splitting, lower casing, etc.)."""
 
-    def __init__(self, do_lower_case=True, use_stop_words=True, custom_stop_word_file=None):
+    def __init__(self, do_lower_case=True, use_stop_words=True, custom_stop_word_file=None, encoding='utf-8'):
+        self.encoding = encoding
         self.do_lower_case = do_lower_case
         self.use_stop_words = use_stop_words
         self.stop_word_set = get_stop_word_set(custom_stop_word_file) if custom_stop_word_file is not None else default_stop_words
@@ -21,7 +22,7 @@ class BasicTokenizer(object):
 
     def get_stop_word_set(f):
         wds = []
-        with io.open(f, 'r') as fp:
+        with io.open(f, 'r', encoding=self.encoding) as fp:
             for w in fp:
                 wds.append(w)
         return set(wds)

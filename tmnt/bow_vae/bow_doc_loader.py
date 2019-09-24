@@ -139,14 +139,14 @@ class NullSplitter(nlp.data.Splitter):
         return [s]
 
 
-def load_vocab(vocab_file):
+def load_vocab(vocab_file, encoding='utf-8'):
     """
     Load a pre-derived vocabulary, assumes format consisting of a single word on each line.
     Note: this is a bit of a hack to use a counter to sort the vocab items IN THE ORDER THEY ARE FOUND IN THE FILE.
     """
     w_dict = {}
     words = []
-    with io.open(vocab_file, 'r') as fp:
+    with io.open(vocab_file, 'r', encoding=encoding) as fp:
         for line in fp:
             els = line.split(' ')
             words.append(els[0].strip())
@@ -156,7 +156,7 @@ def load_vocab(vocab_file):
     counter = nlp.data.Counter(w_dict)
     return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 
-def file_to_sp_vec(sp_file, voc_size, label_map=None):
+def file_to_sp_vec(sp_file, voc_size, label_map=None, encoding=encoding):
     labels = []
     indices = []
     values = []
@@ -165,7 +165,7 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None):
     total_num_words = 0
     ndocs = 0
     lm = label_map if label_map else {}
-    with io.open(sp_file, 'r') as fp:
+    with io.open(sp_file, 'r', encoding=encoding) as fp:
         for line in fp:
             ndocs += 1
             els = line.split(' ')
@@ -191,12 +191,12 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None):
     return csr_mat, total_num_words, labels, lm
                 
 
-def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None):
-    vocab = load_vocab(vocab_file)
-    tr_mat, total_tr, tr_labels_li, label_map = file_to_sp_vec(sp_vec_file, len(vocab))
+def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, encoding=encoding):
+    vocab = load_vocab(vocab_file, encoding=encoding)
+    tr_mat, total_tr, tr_labels_li, label_map = file_to_sp_vec(sp_vec_file, len(vocab), encoding=encoding)
     tr_labels = mx.nd.array(tr_labels_li, dtype='int')
     if sp_vec_test_file:
-        tst_mat, total_tst, tst_labels_li, _ = file_to_sp_vec(sp_vec_test_file, len(vocab), label_map=label_map)
+        tst_mat, total_tst, tst_labels_li, _ = file_to_sp_vec(sp_vec_test_file, len(vocab), label_map=label_map, encoding=encoding)
         tst_labels = mx.nd.array(tst_labels_li, dtype='int')
     else:
         tst_mat = None

@@ -21,7 +21,8 @@ __all__ = ['JsonVectorizer', 'TextVectorizer']
 
 class Vectorizer(object):
 
-    def __init__(self, custom_stop_word_file=None):
+    def __init__(self, custom_stop_word_file=None, encoding='utf-8'):
+        self.encoding = encoding
         self.tokenizer = BasicTokenizer(use_stop_words=True)
 
     def get_counter_dir_parallel(self, data_dir, pat):
@@ -63,11 +64,9 @@ class Vectorizer(object):
                     mcore.run(self.task_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i])
                 sp_vecs = mcore.returns()
             sp_vecs = [ item for sl in sp_vecs for item in sl ]
-            #p = Pool(cpu_count())
-            #sp_vecs = p.map(self.vectorize_fn, files_and_vocab)
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
-        with io.open(sp_out_file, 'w') as fp:
+        with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
             for block in sp_vecs:
                 for (v,l) in block:
                     fp.write(str(l))  
@@ -78,12 +77,12 @@ class Vectorizer(object):
                         fp.write(str(c))
                     fp.write('\n')
         if i_vocab is None: ## print out vocab if we had to create it
-            with io.open(vocab_out_file, 'w') as fp:
+            with io.open(vocab_out_file, 'w', encoding=self.encoding) as fp:
                 for i in range(len(vocab.idx_to_token)):
                     fp.write(vocab.idx_to_token[i])
                     fp.write('\n')
         if full_histogram_file:
-            with io.open(full_histogram_file, 'w') as fp:
+            with io.open(full_histogram_file, 'w', encoding=self.encoding) as fp:
                 items = list(counter.items())
                 items.sort(key=lambda x: -x[1])
                 for k,v in items:
@@ -96,8 +95,9 @@ class Vectorizer(object):
 
 class JsonVectorizer(Vectorizer):
 
-    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6, label_prefix=-1):
+    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6, label_prefix=-1, encoding='utf-8'):
         super(JsonVectorizer, self).__init__(custom_stop_word_file)
+        self.encoding = encoding
         self.text_key = text_key
         self.label_key = label_key
         self.label_prefix = label_prefix
@@ -106,7 +106,7 @@ class JsonVectorizer(Vectorizer):
     
     def get_counter_file(self, json_file):
         counter = None
-        with io.open(json_file, 'r') as fp:
+        with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for l in fp:
                 js = json.loads(l)
                 txt = js[self.text_key] ## text field
@@ -127,8 +127,6 @@ class JsonVectorizer(Vectorizer):
                 for i in range(len(file_batches)):
                     mcore.run(self.task,"Counting Vocab Items Batch {}".format(i), file_batches[i])
                 counter_cs = mcore.returns()
-            #p = Pool(cpu_count())
-            #counters = p.map(self.get_counter_file, files)
             counters = [ item for sl in counter_cs for item in sl ]
         else:
             counters = map(self.get_counter_file, files)
@@ -137,7 +135,7 @@ class JsonVectorizer(Vectorizer):
     def vectorize_fn(self, file_and_vocab):
         json_file, vocab = file_and_vocab
         sp_vecs = []
-        with io.open(json_file, 'r') as fp:
+        with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for l in fp:
                 js = json.loads(l)
                 toks = self.tokenizer.tokenize(js[self.text_key])
@@ -153,7 +151,6 @@ class JsonVectorizer(Vectorizer):
                 if (len(tok_ids) >= self.min_doc_size):
                     cnts = nlp.data.count_tokens(tok_ids)
                     sp_vecs.append((sorted(cnts.items()), label_str))
-            print('.', end='')
         return sp_vecs
 
 
@@ -184,7 +181,6 @@ class TextVectorizer(Vectorizer):
                 for i in range(len(file_batch_batches)):
                     mcore.run(self.task,"Batch {}".format(i), file_batch_batches[i])
                 counter_cs = mcore.returns()
-            #p = Pool(cpu_count())
             counters = [ item for sl in counter_cs for item in sl ]
         else:
             counters = map(self.get_counter_file_batch, file_batches)    
@@ -194,7 +190,7 @@ class TextVectorizer(Vectorizer):
     def get_counter_file_batch(self, txt_file_batch):
         counter = Counter()
         for txt_file in txt_file_batch:
-            with io.open(txt_file, 'r') as fp:
+            with io.open(txt_file, 'r', encoding=self.encoding) as fp:
                 for txt in fp:
                     counter = nlp.data.count_tokens(self.tokenizer.tokenize(txt), counter = counter)
         return counter
@@ -203,14 +199,15 @@ class TextVectorizer(Vectorizer):
     def vectorize_fn(self, txt_file_and_vocab):
         txt_file, vocab = txt_file_and_vocab
         sp_vecs = []
-        with io.open(txt_file, 'r') as fp:
+        with io.open(txt_file, 'r', encoding=self.encoding) as fp:
             doc_tok_ids = []
             for txt in fp:
                 toks = self.tokenizer.tokenize(txt)
                 tok_ids = [vocab[token] for token in toks if token in vocab]
                 doc_tok_ids.extend(tok_ids)
-            cnts = nlp.data.count_tokens(doc_tok_ids)
-            sp_vecs.append((sorted(cnts.items()), -1))
+            if (len(tok_ids) >= self.min_doc_size):
+                cnts = nlp.data.count_tokens(doc_tok_ids)
+                sp_vecs.append((sorted(cnts.items()), -1))
         return sp_vecs
 
     

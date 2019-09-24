@@ -434,7 +434,7 @@ def get_worker(args, budget, id_str, ns_port):
     if sp_vec_data:
         logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
         vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map = \
-            collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file)
+            collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file, encoding=args.str_encoding)
     else:
         raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))

@@ -24,10 +24,15 @@ parser.add_argument('--label_prefix_chars', type=int, help='Use first N characte
 
 args = parser.parse_args()
 
-vectorizer = TextVectorizer(min_doc_size=args.min_doc_length) if args.txt_mode \
-    else JsonVectorizer(text_key=args.json_text_key, label_key=args.json_label_key, min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars)
-vocab = vectorizer.get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir,
+
+if __name__ == '__main__':
+    vectorizer = \
+        TextVectorizer(min_doc_size=args.min_doc_length) if args.txt_mode \
+        else JsonVectorizer(text_key=args.json_text_key, label_key=args.json_label_key,
+                            min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars)
+    vocab = vectorizer.get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir,
                                    args.vocab_size, full_histogram_file=args.full_vocab_histogram,
                                    pat=args.file_pat)
-if args.tst_input_dir and args.tst_vec_file:
-    _ = vectorizer.get_sparse_vecs(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab, pat=args.file_pat)
+
+    if args.tst_input_dir and args.tst_vec_file:
+        _ = vectorizer.get_sparse_vecs(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab, pat=args.file_pat)

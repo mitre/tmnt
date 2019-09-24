@@ -15,7 +15,7 @@ parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch,
 
 args = parser.parse_args()
 
-os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
-
-train_bow_vae(args)
+if __name__ == '__main__':
+    os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
+    train_bow_vae(args)
 

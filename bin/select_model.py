@@ -16,7 +16,8 @@ parser.add_argument('--ns_port', type=int, help='Force a specific port number fo
 
 args = parser.parse_args()
 
-os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
 
-model_select_bow_vae(args)
+if __name__ == '__main__':
+    os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
+    model_select_bow_vae(args)
 
