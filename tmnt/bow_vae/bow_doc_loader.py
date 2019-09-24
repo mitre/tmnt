@@ -138,7 +138,6 @@ class NullSplitter(nlp.data.Splitter):
     def __call__(self, s):
         return [s]
 
-
 def load_vocab(vocab_file, encoding='utf-8'):
     """
     Load a pre-derived vocabulary, assumes format consisting of a single word on each line.
@@ -156,7 +155,8 @@ def load_vocab(vocab_file, encoding='utf-8'):
     counter = nlp.data.Counter(w_dict)
     return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 
-def file_to_sp_vec(sp_file, voc_size, label_map=None, encoding=encoding):
+
+def file_to_sp_vec(sp_file, voc_size, label_map=None, encoding='utf-8'):
     labels = []
     indices = []
     values = []
@@ -191,7 +191,7 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None, encoding=encoding):
     return csr_mat, total_num_words, labels, lm
                 
 
-def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, encoding=encoding):
+def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, encoding='utf-8'):
     vocab = load_vocab(vocab_file, encoding=encoding)
     tr_mat, total_tr, tr_labels_li, label_map = file_to_sp_vec(sp_vec_file, len(vocab), encoding=encoding)
     tr_labels = mx.nd.array(tr_labels_li, dtype='int')

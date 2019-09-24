@@ -1,17 +1,9 @@
 Quickstart Guide
 ================
 
-.. toctree::
-    :hidden:
-    :maxdepth: 2
 
-.. contents::
-    :local:
-
-
-
-1. Training a Topic Model
-+++++++++++++++++++++++++
+1. Building the Test Model
+++++++++++++++++++++++++++
 
 Training a topic model requires both a training file containing sparse vector representations of documents
 along with a test/validation file in the same format. In addition, a vocabulary file is needed to
@@ -33,7 +25,7 @@ a model as follows::
 In general, TMNT assumes a test/validation corpus is available to determine the held out perplexity
 and coherence. If a separate held-out dataset is unavailable or not desired (testing on the training
 data is less of an issue for unsupervised algorithms), the ``--test_vec_file`` vector file can
-take the same file as for trainin (via the ``--tr_vec_file`` option).
+take the same file as for training (via the ``--tr_vec_file`` option).
 
 
 2. Preparing text data
