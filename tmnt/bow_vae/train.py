@@ -39,7 +39,6 @@ from hpbandster.optimizers import BOHB as BOHB
 
 __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
-
 def usedPort(port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result = True
