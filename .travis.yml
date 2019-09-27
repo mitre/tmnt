@@ -9,19 +9,19 @@ before_install:
 
   # Here we just install Miniconda, which you shouldn't have to change.
 
-  - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
-  - chmod +x miniconda.sh
-  - ./miniconda.sh -b
-  - export PATH=/home/travis/miniconda/bin:$PATH
-  - conda update --yes conda
+  # - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
+  # - chmod +x miniconda.sh
+  # - ./miniconda.sh -b
+  # - export PATH=/home/travis/miniconda/bin:$PATH
+  # - conda update --yes conda
 
 install:
 
   # We just set up a conda environment with the right Python version. This
   # should not need changing.
 
-  - conda create --yes -n docs python=$TRAVIS_PYTHON_VERSION
-  - source activate docs
+  # - conda create --yes -n docs python=$TRAVIS_PYTHON_VERSION
+  # - source activate docs
 
   # Below, include the dependencies you want to install with conda, optionally
   # specifying versions used in the matrix above. If you split this into
