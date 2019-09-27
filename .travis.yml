@@ -39,3 +39,12 @@ script:
   - make clean
   - make html
   - mv build/html ../public
+
+
+after_success:
+  - codecov
+
+
+env:
+  global:
+    - secure: "PASTE ENCRYPTED RESULT HERE"
