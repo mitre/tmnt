@@ -39,6 +39,11 @@ script:
   - make clean
   - make html
   - mv build/html ../public
+  - cd public
+  - git init
+  - git add .
+  - git commit -m "Deploy to Github Pages"
+  - git push --force --quiet "https://${GITHUB_TOKEN}@$github.com/${GITHUB_REPO}.git" gh-pages >& /dev/null 2>&1
 
 
 after_success:
@@ -47,4 +52,5 @@ after_success:
 
 env:
   global:
-    - secure: "PASTE ENCRYPTED RESULT HERE"
+    - GITHUB_REPO: "mitre/tmnt"
+    - secure: "BRuzokBuT5GufirruUe1KyNwPmOUubjcc61Wc+x+XbICkrVRxBfasJVlb3UgxQ6yWAGXhDIV9v+xj6m+hk9MmIKVRMoc2uiRDD+PMGGhPsYnKTZ1RKAgRV+gdx++HyTY/1cOoSmTMD7ywCW1vUY/Ggutaz340EaVk2HJW03KQ5iO062lJOGJuORjHVQPWtbInEzDdHoFYEo6L/mV+hzzMDhyWoEWgJlYihLsplAaZWVu7TtfxVXvIX4dls12fSZRUklhOwhclJFSjMLY3u/y/OOp/7/wZe9Cfwrhn9OkA7/ZDk8+0iRyd4ujDpSmhs/9tTrsGLEpGuHOY7IMAPhkS65WOtuk0R1pLmltbSxXuX/TDgvoDRmcn638ROBi+BtznqSymBH9oIcF0v4jS8bK+3y9NDjit5vLC/xN6dgAbBNvUxQtnz9kO52E2pwH61PrI4hcl2Unw/yrREU+PCF2VOkCLwgJsDTBrBJZSOngZPxwledKjRZO565o8EtwEvh0lm0QYI5HsEcKEqmjp8Fk4Rk0DOUM/kQPDwA9k1glNGtKltgaP9ZC2idpA9ha4pZ48NF9YUOWbY+DC73a68/QDacSEl/nz+ROorKndE1VU1tVL2m+ND9e40MJFP5bAjMi6MBKR/BIz9tupRfplTZ6NC6PZY6/p2RUgjoli6piIUk="
