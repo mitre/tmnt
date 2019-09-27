@@ -39,11 +39,6 @@ script:
   - make clean
   - make html
   - mv build/html ../public
-  - cd public
-  - git init
-  - git add .
-  - git commit -m "Deploy to Github Pages"
-  - git push --force --quiet "https://${GITHUB_TOKEN}@$github.com/${GITHUB_REPO}.git" gh-pages >& /dev/null 2>&1
 
 
 after_success:
