@@ -17,8 +17,8 @@ a model as follows::
   mkdir _experiments
   mkdir _model_dir
 
-  python bin/train_model.py --tr_vec_file ./data/train.2.vec \
-  --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab \
+  python bin/train_model.py --tr_vec_file ./data/train.vec \
+  --tst_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
   --save_dir ./_experiments/ --model_dir ./_model_dir/ \
   --config ./examples/train_model/model.config --trace_file ./TRACE.csv
 
