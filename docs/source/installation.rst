@@ -4,13 +4,14 @@ Installation
 1. Downloading TMNT
 +++++++++++++++++++
 
-TMNT can be obtained via GitLab::
+TMNT can be obtained via GitHub::
 
-  git clone https://gitlab.mitre.org/milu/tmnt.git
+  git clone https://github.com/mitre/tmnt.git
 
+or via SSH::
 
-Note that the test data provided in the TMNT archive uses ``git lfs``. See details for installing
-and setting up in your git environment here: https://git-lfs.github.com
+  git clone git@github.com:mitre/tmnt.git
+
 
 2. Dependencies and Environment
 +++++++++++++++++++++++++++++++
@@ -24,7 +25,7 @@ Once Conda is installed, install a new environment for TMNT as follows::
 
   conda create --name TMNT -c conda-forge python=3 pip numpy==1.17.0
 
-In some cases, the conda-forge versions will run into SSL timeouts. If the
+In some cases, the conda-forge versions may run into SSL timeouts. If the
 above command returns a HTTP 000 CONNECTION FAILED message, it is suggested
 to run the command again after disabling SSL as follows::
 

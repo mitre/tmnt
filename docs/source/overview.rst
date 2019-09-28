@@ -1,4 +1,4 @@
-What is TMNT?
+TMNT Overview
 ~~~~~~~~~~~~~
 
 The Topic Modeling Neural Toolkit (TMNT) provides implementations for
