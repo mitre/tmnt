@@ -68,7 +68,7 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
         _, kl_loss, rec_loss, _, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         total_rec_loss += rec_loss.sum().asscalar()
     perplexity = math.exp(total_rec_loss / total_words)
-    logging.info("TEST/VALIDATION Perplexity = {}".format(perplexity))
+    logging.info("TEST/VALIDATION Perplexity = {} [ Rec Loss = {} / Total test words = {}]".format(perplexity, total_rec_loss, total_words))
     return perplexity
 
 
