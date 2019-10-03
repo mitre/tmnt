@@ -85,6 +85,10 @@ class PureTransformerVAE(Block):
             self.kld_wt = eps
         return self.kld_wt
 
+    def encode(self, toks):
+        embedded = self.embedding(toks)
+        enc = self.encoder(embedded)
+        return self.latent_dist.mu_encoder(enc)
 
     def forward(self, toks):
         embedded = self.embedding(toks)

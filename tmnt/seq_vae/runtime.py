@@ -56,5 +56,9 @@ class SeqVAEInference(object):
         rec_sent = [self.vocab.idx_to_token[int(i)] for i in reconstructed_sent_ids if i != self.pad_id]   # remove <PAD> token from rendering
         return rec_sent
 
+    def encode_text(self, txt):
+        ids = self.prep_text(txt)
+        return mx.nd.squeeze(self.model.encode(ids))
+
         
                          
