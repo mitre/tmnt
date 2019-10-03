@@ -87,8 +87,21 @@ json_text_key        string         String key for a json text field to use as t
 label_smoothing      float          Standard label smoothing parameter (NOT YET SUPPORTED)
 ===================  ===========    =================================================================================
 
+3. Using the Trained Model as a sequence encoder
+++++++++++++++++++++++++++++++++++++++++++++++++
 
-3. Sampling from a Trained Model
+Assuming TMNT has been installed a model has been trained (i.e. the files ``model.config``, ``model.params`` and
+``vocab.json`` exist), text can be encoded using the
+the method ``encode_text`` as follows::
+
+  >>> from tmnt.seq_vae.runtime import SeqVAEInference
+  >>> infer = SeqVAEInference('model.params', 'model.config', 'vocab.json')
+  >>> infer.encode_text('just will let you know that our recent trip to la to be on the tv show " dancing with the stars " was made complete by our outstanding 3 night stay at the custom hotel . nothing was very difficult for the staff .')
+
+The result is a single vector with size ``latent_dim``.
+
+
+4. Sampling from a Trained Model
 ++++++++++++++++++++++++++++++++
 
 Assuming TMNT has been installed a model has been trained (i.e. the files ``model.config``, ``model.params`` and
