@@ -58,8 +58,9 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
     return sums
 
 
-def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
+def evaluate(model, data_loader, total_words, args, ctx=mx.cpu()):
     total_rec_loss = 0
+    total_kl_loss  = 0
     for i, (data,labels) in enumerate(data_loader):
         if labels is None:            
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
@@ -67,8 +68,10 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu(), debug=False):
         data = data.as_in_context(ctx)
         _, kl_loss, rec_loss, _, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         total_rec_loss += rec_loss.sum().asscalar()
-    perplexity = math.exp(total_rec_loss / total_words)
-    logging.info("TEST/VALIDATION Perplexity = {} [ Rec Loss = {} / Total test words = {}]".format(perplexity, total_rec_loss, total_words))
+        total_kl_loss += kl_loss.sum().asscalar()
+    perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
+    logging.info("TEST/VALIDATION Perplexity = {} [ Rec Loss = {} + KL loss = {} / Total test words = {}]".
+                 format(perplexity, total_rec_loss, total_kl_loss, total_words))
     return perplexity
 
 
@@ -481,6 +484,8 @@ def model_select_bow_vae(args):
         fp.write(specs)
     if args.model_dir:
         worker.retrain_best_config(inc_config, inc_run.budget)
+    dd_finish = datetime.datetime.now()
+    logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
     NS.shutdown()
 
 def train_bow_vae(args):
@@ -491,4 +496,7 @@ def train_bow_vae(args):
     ns_port = get_port()
     worker, log_dir = get_worker(args, int(config['training_epochs']), id_str, ns_port)
     worker.retrain_best_config(config, int(config['training_epochs']))
+    dd_finish = datetime.datetime.now()
+    logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
+
 
