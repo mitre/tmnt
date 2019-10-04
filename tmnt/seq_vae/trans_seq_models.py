@@ -14,7 +14,7 @@ import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet.gluon.block import HybridBlock, Block
-from gluonnlp.model import TransformerEncoderCell, TransformerEncoder
+from gluonnlp.model import TransformerEncoderCell
 from gluonnlp.loss import LabelSmoothing
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
 from tmnt.distributions import GaussianUnitVarLatentDistribution

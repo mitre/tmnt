@@ -4,6 +4,7 @@ import os, sys
 import argparse
 
 from tmnt.seq_vae.train import train_main
+from tmnt.seq_vae.ar_seq_models import test_ar
 
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational AutoEncoder on Context-aware Encodings')
 
@@ -37,9 +38,13 @@ parser.add_argument('--embedding_source', type=str, help='Word embedding source 
 parser.add_argument('--max_vocab_size', type=int, help='Maximum size of vocabulary (if not using BERT)', default=20000)
 parser.add_argument('--json_text_key', type=str, help='Assume json list format and select text using this key', default=None)
 parser.add_argument('--label_smoothing_epsilon', type=float, help='Label smoothing epsilon value', default=0.1)
+parser.add_argument('--ar_decoder', action='store_true', help='Use auto-regressive transformer decoder', default=False)
 
 
 args = parser.parse_args()
 
-train_main(args)
+if args.ar_decoder:
+    test_ar(args)
+else:
+    train_main(args)
 
