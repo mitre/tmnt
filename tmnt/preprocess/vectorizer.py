@@ -156,8 +156,8 @@ class JsonVectorizer(Vectorizer):
 
 class TextVectorizer(Vectorizer):
 
-    def __init__(self, custom_stop_word_file=None, min_doc_size=6):
-        super(TextVectorizer, self).__init__(custom_stop_word_file)
+    def __init__(self, custom_stop_word_file=None, min_doc_size=6, encoding='utf-8'):
+        super(TextVectorizer, self).__init__(custom_stop_word_file, encoding=encoding)
         self.min_doc_size = min_doc_size
 
         

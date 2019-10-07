@@ -1,6 +1,10 @@
 ## Optimizable hyper-parameters for TMNT topic models
+## This config is mostly illustrative and not necessarily a good hyper-parameter space to define
+## See config.yaml for a good starting config file
 ---
   lr: {range: [1e-6, 1e-2]}   ## learning rate
+
+  batch_size: {i_range: [100,400], step: 100} ## batch size, use much larger size for larger datasets
 
   latent_distribution: [vmf, gaussian, logistic_gaussian]
 
@@ -15,9 +19,9 @@
   ## CONDITIONAL on latent_distribution==vmf
   kappa: {range: [1.0, 100.0]}
   
-  target_sparsity: {range: [0.0, 0.2]}
+  target_sparsity: {range: [0.0, 0.1]}
   
-  coherence_regularizer_penalty: {range: [0.0, 0.2] }
+  coherence_regularizer_penalty: {range: [0.0, 0.1] }
 
   ## pre-trained embedding vocab + weights
   embedding_source: [glove:glove.42B.300d, glove:glove.6B.200d, fasttext:wiki.en, random]
