@@ -391,11 +391,11 @@ class BowVAEWorker(Worker):
             seed_rng(rng_seed+i)
             model, results = self._train_model(config, budget)
             loss = results['loss']
+            npmis.append(results['info']['test_npmi'])
+            perplexities.append(results['info']['test_perplexity'])
             if loss < best_loss:
                 best_loss = loss
                 best_model = model
-                npmis.append(results['info']['test_npmi'])
-                perplexities.append(results['info']['test_perplexity'])
         logging.info("******************************************")
         logging.info("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
         logging.info("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
