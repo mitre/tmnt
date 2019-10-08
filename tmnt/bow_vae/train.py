@@ -397,8 +397,12 @@ class BowVAEWorker(Worker):
                 best_loss = loss
                 best_model = model
         logging.info("******************************************")
-        logging.info("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
-        logging.info("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
+        if ntimes > 1:
+            logging.info("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
+            logging.info("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
+        else:
+            logging.info("Final NPMI       ==> {}".format(npmis[0]))
+            logging.info("Final Perplexity ==> {}".format(perplexities[0]))
         write_model(best_model, config, budget, self.c_args)
         
 
