@@ -511,7 +511,7 @@ def train_bow_vae(args):
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
     ns_port = get_port()
     worker, log_dir = get_worker(args, int(config['training_epochs']), id_str, ns_port)
-    worker.retrain_best_config(config, int(config['training_epochs']), args.seed)
+    worker.retrain_best_config(config, int(config['training_epochs']), args.seed, args.num_final_evals)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 

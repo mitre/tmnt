@@ -13,7 +13,7 @@ parser.add_argument('--budget',type=int, help='Maximum number of training epochs
 parser.add_argument('--iterations',type=int, help='Maximum number of full model training epochs to carry out as part of search', default=4)
 parser.add_argument('--coherence_coefficient', type=float, help='Weight applied to coherence (NPMI) term of objective function', default=1.0)
 parser.add_argument('--ns_port', type=int, help='Force a specific port number for HPBandSter nameserver', default=None)
-parser.add_argument('--num_final_evals', type=int, help='Number of times to evaluate final selected configuration (with random initializations)', default=10)
+
 
 
 args = parser.parse_args()
