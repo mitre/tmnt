@@ -15,6 +15,7 @@ import numpy as np
 import pickle
 import copy
 import socket
+import statistics
 
 from mxnet import autograd
 from mxnet import gluon
@@ -374,7 +375,7 @@ class BowVAEWorker(Worker):
         _, res = self._train_model(config, budget)
         return res
 
-    def retrain_best_config(self, config, budget):
+    def retrain_best_config(self, config, budget, rng_seed, ntimes=1):
         """Train a model as per the provided `Configuration` and `budget` and write to file.
         
         Parameters
@@ -382,8 +383,23 @@ class BowVAEWorker(Worker):
         config: `Configuration` to use to train/evaluate the model
         budget: int - number of iterations to train
         """
-        model, _ = self._train_model(config, budget)
-        write_model(model, config, budget, self.c_args)
+        best_loss = 100000000.0
+        best_model = None
+        npmis = []
+        perplexities = []
+        for i in range(ntimes):
+            seed_rng(rng_seed+i)
+            model, results = self._train_model(config, budget)
+            loss = results['loss']
+            if loss < best_loss:
+                best_loss = loss
+                best_model = model
+                npmis.append(results['info']['test_npmi'])
+                perplexities.append(results['info']['test_perplexity'])
+        logging("******************************************")
+        logging("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
+        logging("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
+        write_model(best_model, config, budget, self.c_args)
         
 
 def select_model(worker, tmnt_config_space, total_iterations, result_logger, id_str, ns_port):
@@ -483,7 +499,7 @@ def model_select_bow_vae(args):
         specs = json.dumps(inc_config)
         fp.write(specs)
     if args.model_dir:
-        worker.retrain_best_config(inc_config, inc_run.budget)
+        worker.retrain_best_config(inc_config, inc_run.budget, args.seed, args.num_final_evals)
     dd_finish = datetime.datetime.now()
     logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
     NS.shutdown()
@@ -495,7 +511,7 @@ def train_bow_vae(args):
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
     ns_port = get_port()
     worker, log_dir = get_worker(args, int(config['training_epochs']), id_str, ns_port)
-    worker.retrain_best_config(config, int(config['training_epochs']))
+    worker.retrain_best_config(config, int(config['training_epochs']), args.seed)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 
