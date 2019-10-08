@@ -396,9 +396,9 @@ class BowVAEWorker(Worker):
                 best_model = model
                 npmis.append(results['info']['test_npmi'])
                 perplexities.append(results['info']['test_perplexity'])
-        logging("******************************************")
-        logging("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
-        logging("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
+        logging.info("******************************************")
+        logging.info("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
+        logging.info("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
         write_model(best_model, config, budget, self.c_args)
         
 
