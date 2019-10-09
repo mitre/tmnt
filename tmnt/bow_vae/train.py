@@ -387,12 +387,14 @@ class BowVAEWorker(Worker):
         best_model = None
         npmis = []
         perplexities = []
+        redundancies = []
         for i in range(ntimes):
             seed_rng(rng_seed+i)
             model, results = self._train_model(config, budget)
             loss = results['loss']
             npmis.append(results['info']['test_npmi'])
             perplexities.append(results['info']['test_perplexity'])
+            redundancies.append(results['info']['redundancy'])
             if loss < best_loss:
                 best_loss = loss
                 best_model = model
@@ -400,9 +402,11 @@ class BowVAEWorker(Worker):
         if ntimes > 1:
             logging.info("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
             logging.info("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
+            logging.info("Final Redundancy ==> Mean: {}, StdDev: {}".format(statistics.mean(redundancies), statistics.stdev(redundancies)))
         else:
             logging.info("Final NPMI       ==> {}".format(npmis[0]))
             logging.info("Final Perplexity ==> {}".format(perplexities[0]))
+            logging.info("Final Redundancy ==> {}".format(redundancies[0]))
         write_model(best_model, config, budget, self.c_args)
         
 
