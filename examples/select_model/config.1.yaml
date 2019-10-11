@@ -6,7 +6,7 @@
 
   batch_size: {i_range: [100,400], step: 100} ## batch size, use much larger size for larger datasets
 
-  latent_distribution: [vmf, gaussian, logistic_gaussian]
+  latent_distribution: [logistic_gaussian]
 
   ## stochastic gradient-based optimizer
   optimizer: [adam, ftml]

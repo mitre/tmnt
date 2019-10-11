@@ -80,11 +80,11 @@ class TMNTConfig(object):
         n_latent_c = self._get_range_integer('n_latent',cd)
         enc_hidden_dim_c = self._get_range_integer('enc_hidden_dim', cd)
         
-        kappa_c = self._get_range_uniform('kappa', cd)
+
 
         batch_size_c = self._get_range_integer('batch_size', cd)
 
-        cs.add_hyperparameters([batch_size_c, lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, kappa_c])
+        cs.add_hyperparameters([batch_size_c, lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c])
 
         ## optional hyperparameters
         target_sparsity_c = self._get_range_uniform('target_sparsity', cd)
@@ -111,6 +111,9 @@ class TMNTConfig(object):
             embedding_size_c = self._get_range_integer('embedding_size', cd)
             cs.add_hyperparameters([embedding_size_c])
 
-        cond_kappa = CS.EqualsCondition(kappa_c, latent_distribution_c, 'vmf')
-        cs.add_condition(cond_kappa) # only use kappa_c if condition is met
+        if 'vmf' in self.cd['latent_distribution']:
+            kappa_c = self._get_range_uniform('kappa', cd)            
+            cond_kappa = CS.EqualsCondition(kappa_c, latent_distribution_c, 'vmf')
+            cs.add_hyperparameters([kappa_c])
+            cs.add_condition(cond_kappa) # only use kappa_c if condition is met
         return cs
