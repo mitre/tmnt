@@ -137,7 +137,6 @@ class BowVAEWorker(Worker):
         self.total_tst_words = total_tst_words
         self.vocabulary = vocabulary
         self.ctx = ctx
-        self.data_test_csr = data_test_csr
         self.max_budget = max_budget
         self.train_labels = train_labels
         self.test_labels = test_labels
@@ -317,8 +316,11 @@ class BowVAEWorker(Worker):
         l1_coef = self.c_args.init_sparsity_pen
         train_dataloader = \
             DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size, last_batch_handle='discard', shuffle=True))
+        ## handle test data differently as we'll assume it's not sparse
+        test_array = gluon.data.ArrayDataset(self.data_test_csr, self.test_labels)
         test_dataloader = \
-            DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='discard', shuffle=True))
+            gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='keep')
+            #DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='pad', shuffle=False))
 
         for epoch in range(int(budget)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,

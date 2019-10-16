@@ -195,8 +195,10 @@ def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, encoding
     vocab = load_vocab(vocab_file, encoding=encoding)
     tr_mat, total_tr, tr_labels_li, label_map = file_to_sp_vec(sp_vec_file, len(vocab), encoding=encoding)
     tr_labels = mx.nd.array(tr_labels_li, dtype='int')
+    keep_sp_sparse = False # force test data to be dense for easier evaluation
     if sp_vec_test_file:
-        tst_mat, total_tst, tst_labels_li, _ = file_to_sp_vec(sp_vec_test_file, len(vocab), label_map=label_map, encoding=encoding)
+        tst_mat_sp, total_tst, tst_labels_li, _ = file_to_sp_vec(sp_vec_test_file, len(vocab), label_map=label_map, encoding=encoding)
+        tst_mat = tst_mat_sp if keep_sp_sparse else tst_mat_sp.tostype('default') ## otherwise convert to dense
         tst_labels = mx.nd.array(tst_labels_li, dtype='int')
     else:
         tst_mat = None
