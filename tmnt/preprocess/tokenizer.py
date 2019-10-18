@@ -19,14 +19,12 @@ class BasicTokenizer(object):
         self.stop_word_set = get_stop_word_set(custom_stop_word_file) if custom_stop_word_file is not None else default_stop_words
         self.num_re = re.compile('[-+]?[.\d]*[\d]+[:,.\d]*$') ## matches straight number
         
-
     def get_stop_word_set(f):
         wds = []
         with io.open(f, 'r', encoding=self.encoding) as fp:
             for w in fp:
                 wds.append(w)
         return set(wds)
-
 
     def __call__(self, text):
         return self.tokenize(text)
@@ -64,7 +62,6 @@ class BasicTokenizer(object):
         tokens = text.split()
         return tokens
 
-
     def _run_strip_accents(self, text):
         """Strips accents from a piece of text."""
         text = unicodedata.normalize('NFD', text)
@@ -94,7 +91,6 @@ class BasicTokenizer(object):
                 start_new_word = False
                 output[-1].append(char)
             i += 1
-
         return [''.join(x) for x in output]
 
     def _clean_text(self, text):

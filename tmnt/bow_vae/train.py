@@ -65,8 +65,8 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu()):
     for i, (data,labels) in enumerate(data_loader):
         if labels is None:            
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-            labels = labels.as_in_context(ctx)
         data = data.as_in_context(ctx)
+        labels = labels.as_in_context(ctx)
         _, kl_loss, rec_loss, _, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         total_rec_loss += rec_loss.sum().asscalar()
         total_kl_loss += kl_loss.sum().asscalar()
@@ -126,6 +126,9 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
         top_k = [ vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]
         term_str = ' '.join(top_k)
         logging.info("Topic {}: {}".format(str(t), term_str))
+
+
+#def log_top_k_words_per_topic_
 
 
 class BowVAEWorker(Worker):
@@ -244,11 +247,16 @@ class BowVAEWorker(Worker):
         vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
         
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
-            n_covars = len(self.label_map)
-            self.train_labels = mx.nd.one_hot(self.train_labels, n_covars)
-            self.test_labels = mx.nd.one_hot(self.test_labels, n_covars) if self.test_labels is not None else None
+            if self.label_map:
+                n_covars = len(self.label_map)
+                self.train_labels = mx.nd.one_hot(self.train_labels, n_covars)
+                self.test_labels = mx.nd.one_hot(self.test_labels, n_covars) if self.test_labels is not None else None
+            else:  ## this case we assume scalar covariates (hardcoded to 1 for now)
+                n_covars = 1
+                self.train_labels = mx.nd.expand_dims(self.train_labels, n_covars)
+                self.test_labels = mx.nd.expand_dims(self.test_labels, n_covars) if self.test_labels is not None else None
             model = \
-                MetaDataBowNTM(self.label_map, vocab, enc_hidden_dim, n_latent, emb_size,
+                MetaDataBowNTM(self.label_map, n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa,
                                init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, 
                                batch_size=batch_size, wd_freqs=self.wd_freqs, ctx=self.ctx)
@@ -273,6 +281,8 @@ class BowVAEWorker(Worker):
         """
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
             perplexity = evaluate(model, test_dataloader, self.total_tst_words, self.c_args, self.ctx)
+            if self.c_args.scalar_covars:
+                model.get_top_k_terms_with_covar(0.2, 0)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
@@ -320,7 +330,7 @@ class BowVAEWorker(Worker):
         test_array = gluon.data.ArrayDataset(self.data_test_csr, self.test_labels)
         test_dataloader = \
             gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='keep')
-            #DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='pad', shuffle=False))
+        #test_dataloader = DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='discard', shuffle=True))
 
         for epoch in range(int(budget)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
@@ -462,11 +472,10 @@ def get_worker(args, budget, id_str, ns_port):
     if sp_vec_data:
         logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
         vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map = \
-            collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file, encoding=args.str_encoding)
+            collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
     else:
         raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
-    ### XXX - NOTE: For smaller datasets, may make sense to convert sparse matrices to dense here up front
     worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map, ctx=ctx,
                               max_budget=budget,
                               nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)

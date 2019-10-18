@@ -95,7 +95,8 @@ class Vectorizer(object):
 
 class JsonVectorizer(Vectorizer):
 
-    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6, label_prefix=-1, encoding='utf-8'):
+    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6, label_prefix=-1,
+                 encoding='utf-8'):
         super(JsonVectorizer, self).__init__(custom_stop_word_file, encoding=encoding)
         self.encoding = encoding
         self.text_key = text_key

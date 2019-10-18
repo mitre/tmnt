@@ -79,7 +79,6 @@ class TMNTConfig(object):
         optimizer_c = self._get_categorical('optimizer', cd)
         n_latent_c = self._get_range_integer('n_latent',cd)
         enc_hidden_dim_c = self._get_range_integer('enc_hidden_dim', cd)
-        
 
 
         batch_size_c = self._get_range_integer('batch_size', cd)
@@ -94,6 +93,7 @@ class TMNTConfig(object):
         coherence_reg_penalty_c = self._get_range_uniform('coherence_regularizer_penalty', cd)
         if coherence_reg_penalty_c:
             cs.add_hyperparameters([coherence_reg_penalty_c])
+
 
         embedding_source_c = self._get_categorical('embedding_source', cd)
         if embedding_source_c:
@@ -116,4 +116,5 @@ class TMNTConfig(object):
             cond_kappa = CS.EqualsCondition(kappa_c, latent_distribution_c, 'vmf')
             cs.add_hyperparameters([kappa_c])
             cs.add_condition(cond_kappa) # only use kappa_c if condition is met
+
         return cs

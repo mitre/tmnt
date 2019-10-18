@@ -5,6 +5,7 @@ Copyright (c) 2019 The MITRE Corporation.
 
 import json
 import mxnet as mx
+import numpy as np
 import gluonnlp as nlp
 import io
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
@@ -140,6 +141,18 @@ class BowNTMInference(object):
             cv_i_terms = []
             for t in range(n_topics):
                 top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]
+                cv_i_terms.append(top_k)
+            topic_terms.append(cv_i_terms)
+        return topic_terms
+
+
+    def get_top_k_words_per_topic_over_scalar_covariate(self, k, min_v=0.0, max_v=1.0, step=0.1):
+        topic_terms = []
+        for sc in np.arange(min_v, max_v, step=step):
+            cv_i_terms = []
+            for t in range(self.n_latent):
+                sorted_topic_ids = self.model.get_top_k_terms_with_covar(sc, t)
+                top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_topic_ids.asnumpy()) ]
                 cv_i_terms.append(top_k)
             topic_terms.append(cv_i_terms)
         return topic_terms
