@@ -22,7 +22,7 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
-from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
+from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.topic_seeds import get_seed_matrix_from_file
 from tmnt.utils.log_utils import logging_config
@@ -59,7 +59,7 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
     return sums
 
 
-def evaluate(model, data_loader, total_words, args, ctx=mx.cpu()):
+def evaluate(model, data_loader, last_batch_size, total_words, args, ctx=mx.cpu()):
     total_rec_loss = 0
     total_kl_loss  = 0
     for i, (data,labels) in enumerate(data_loader):
@@ -68,8 +68,15 @@ def evaluate(model, data_loader, total_words, args, ctx=mx.cpu()):
         data = data.as_in_context(ctx)
         labels = labels.as_in_context(ctx)
         _, kl_loss, rec_loss, _, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
-        total_rec_loss += rec_loss.sum().asscalar()
-        total_kl_loss += kl_loss.sum().asscalar()
+        ## We explicitly keep track of the last batch size        
+        ## The following lets us use a "rollover" for handling the last batch,
+        ## enabling the symbolic computation graph (via hybridize)
+        if i == len(data_loader) - 1:
+            total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
+            total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
+        else:
+            total_rec_loss += rec_loss.sum().asscalar()
+            total_kl_loss += kl_loss.sum().asscalar()
     perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
     logging.info("TEST/VALIDATION Perplexity = {} [ Rec Loss = {} + KL loss = {} / Total test words = {}]".
                  format(perplexity, total_rec_loss, total_kl_loss, total_words))
@@ -132,9 +139,11 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
 
 
 class BowVAEWorker(Worker):
-    def __init__(self, c_args, vocabulary, data_train_csr, total_tr_words,
-                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, ctx=mx.cpu(), max_budget=27, **kwargs):
+    def __init__(self, model_out_dir, c_args, vocabulary, data_train_csr, total_tr_words,
+                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, ctx=mx.cpu(),
+                 max_budget=27, **kwargs):
         super().__init__(**kwargs)
+        self.model_out_dir = model_out_dir
         self.c_args = c_args
         self.total_tr_words = total_tr_words
         self.total_tst_words = total_tst_words
@@ -143,8 +152,9 @@ class BowVAEWorker(Worker):
         self.max_budget = max_budget
         self.train_labels = train_labels
         self.test_labels = test_labels
-        self.data_train_csr = data_train_csr
-        self.data_test_csr = data_test_csr
+        self.data_train_csr   = data_train_csr
+        self.data_test_csr    = data_test_csr
+        self.data_heldout_csr = None
         self.label_map = label_map
         self.search_mode = False
         
@@ -155,6 +165,15 @@ class BowVAEWorker(Worker):
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary)
 
+    def set_heldout_data_as_test(self):
+        """Load in the heldout test data for final model evaluation
+        """
+        tst_mat, total_tst_words, tst_labels = collect_sparse_test(self.c_args.heldout_vec_file, self.vocabulary,
+                                                                   scalar_labels=self.c_args.scalar_covars, encoding=self.c_args.str_encoding)
+        self.data_test_csr = tst_mat
+        self.test_labels   = tst_labels
+        self.total_tst_words = total_tst_words
+        
 
     def _initialize_embedding_layer(self, embedding_source, config):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
@@ -271,7 +290,7 @@ class BowVAEWorker(Worker):
             model.hybridize()
         return model, trainer
 
-    def _eval_trace(self, model, epoch, test_dataloader):
+    def _eval_trace(self, model, epoch, test_dataloader, last_batch_size):
         """Evaluate the model against test/validation data and optionally write to a trace file.
         
         Parameters
@@ -280,15 +299,15 @@ class BowVAEWorker(Worker):
         epoch: int - the current epoch
         """
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
-            perplexity = evaluate(model, test_dataloader, self.total_tst_words, self.c_args, self.ctx)
+            perplexity = evaluate(model, test_dataloader, last_batch_size, self.total_tst_words, self.c_args, self.ctx)
             if self.c_args.scalar_covars:
                 model.get_top_k_terms_with_covar(0.2, 0)
+            npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
                     if otype == 'w+':
                         fp.write("Epoch,PPL,NPMI\n")
-                    npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
                     fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
 
     def _l1_regularize(self, model, cur_l1_coef):
@@ -326,11 +345,14 @@ class BowVAEWorker(Worker):
         l1_coef = self.c_args.init_sparsity_pen
         train_dataloader = \
             DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size, last_batch_handle='discard', shuffle=True))
-        ## handle test data differently as we'll assume it's not sparse
-        test_array = gluon.data.ArrayDataset(self.data_test_csr, self.test_labels)
-        test_dataloader = \
-            gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='keep')
-        #test_dataloader = DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='discard', shuffle=True))
+        if self.data_test_csr is not None:
+            test_array = gluon.data.ArrayDataset(self.data_test_csr, self.test_labels)
+            test_dataloader = \
+                gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='rollover')
+            last_batch_size = self.data_test_csr.shape[0] % batch_size
+        else:
+            last_batch_size = 0
+            test_array, test_dataloader = None, None
 
         for epoch in range(int(budget)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
@@ -349,25 +371,29 @@ class BowVAEWorker(Worker):
                 trainer.step(data.shape[0]) 
                 self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss)
             self._log_details(details, epoch)
-            if not self.search_mode:
-                self._eval_trace(model, epoch, test_dataloader)
+            if not self.search_mode and (test_dataloader is not None):
+                self._eval_trace(model, epoch, test_dataloader, last_batch_size)
             if model.target_sparsity > 0.0:
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
-        perplexity = evaluate(model, test_dataloader, self.total_tst_words, self.c_args, self.ctx)
-        npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
-        try:
-            coherence_coefficient = self.c_args.coherence_coefficient
-        except AttributeError:
-            coherence_coefficient = 1.0
-        res = {
-            'loss': 1.0 - (npmi * coherence_coefficient) + redundancy + (perplexity / 1000),
-            'info': {
-                'test_perplexity': perplexity,
-                'redundancy': redundancy,
-                'test_npmi': npmi
+        if test_dataloader:
+            perplexity = evaluate(model, test_dataloader, last_batch_size, self.total_tst_words, self.c_args, self.ctx)
+            npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
+            try:
+                coherence_coefficient = self.c_args.coherence_coefficient
+            except AttributeError:
+                coherence_coefficient = 1.0
+            res = {
+                'loss': 1.0 - (npmi * coherence_coefficient) + redundancy + (perplexity / 1000),
+                'info': {
+                    'test_perplexity': perplexity,
+                    'redundancy': redundancy,
+                    'test_npmi': npmi
+                }
             }
-        }
+        else:
+            ## in this case, we're only training a model; no model selection, validation or held out test data
+            res = {}
         return model, res
 
 
@@ -400,26 +426,33 @@ class BowVAEWorker(Worker):
         npmis = []
         perplexities = []
         redundancies = []
-        for i in range(ntimes):
-            seed_rng(rng_seed+i)
-            model, results = self._train_model(config, budget)
-            loss = results['loss']
-            npmis.append(results['info']['test_npmi'])
-            perplexities.append(results['info']['test_perplexity'])
-            redundancies.append(results['info']['redundancy'])
-            if loss < best_loss:
-                best_loss = loss
-                best_model = model
-        logging.info("******************************************")
-        if ntimes > 1:
-            logging.info("Final NPMI       ==> Mean: {}, StdDev: {}".format(statistics.mean(npmis), statistics.stdev(npmis)))
-            logging.info("Final Perplexity ==> Mean: {}, StdDev: {}".format(statistics.mean(perplexities), statistics.stdev(perplexities)))
-            logging.info("Final Redundancy ==> Mean: {}, StdDev: {}".format(statistics.mean(redundancies), statistics.stdev(redundancies)))
+        if self.c_args.heldout_vec_file:
+            self.set_heldout_data_as_test()
+        if self.c_args.tst_vec_file:
+            for i in range(ntimes):
+                seed_rng(rng_seed+i)
+                model, results = self._train_model(config, budget)
+                loss = results['loss']
+                npmis.append(results['info']['test_npmi'])
+                perplexities.append(results['info']['test_perplexity'])
+                redundancies.append(results['info']['redundancy'])
+                if loss < best_loss:
+                    best_loss = loss
+                    best_model = model
+            logging.info("******************************************")
+            test_type = "HELDOUT" if self.c_args.heldout_vec_file else "VALIDATATION"
+            if ntimes > 1:
+                logging.info("Final {} NPMI       ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(npmis), statistics.stdev(npmis)))
+                logging.info("Final {} Perplexity ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(perplexities), statistics.stdev(perplexities)))
+                logging.info("Final {} Redundancy ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(redundancies), statistics.stdev(redundancies)))
+            else:
+                logging.info("Final {} NPMI       ==> {}".format(test_type, npmis[0]))
+                logging.info("Final {} Perplexity ==> {}".format(test_type, perplexities[0]))
+                logging.info("Final {} Redundancy ==> {}".format(test_type, redundancies[0]))
         else:
-            logging.info("Final NPMI       ==> {}".format(npmis[0]))
-            logging.info("Final Perplexity ==> {}".format(perplexities[0]))
-            logging.info("Final Redundancy ==> {}".format(redundancies[0]))
-        write_model(best_model, config, budget, self.c_args)
+            ## in this case, no validation test data supplied
+            best_model, _ = self._train_model(config, budget)
+        write_model(best_model, self.model_out_dir, config, budget, self.c_args)
         
 
 def select_model(worker, tmnt_config_space, total_iterations, result_logger, id_str, ns_port):
@@ -436,11 +469,12 @@ def select_model(worker, tmnt_config_space, total_iterations, result_logger, id_
     bohb.shutdown(shutdown_workers=True)
     return res
 
-def write_model(m, config, budget, args):
-    if args.model_dir:
-        pfile = os.path.join(args.model_dir, 'model.params')
-        sp_file = os.path.join(args.model_dir, 'model.config')
-        vocab_file = os.path.join(args.model_dir, 'vocab.json')
+def write_model(m, model_dir, config, budget, args):
+    if model_dir:
+        pfile = os.path.join(model_dir, 'model.params')
+        sp_file = os.path.join(model_dir, 'model.config')
+        vocab_file = os.path.join(model_dir, 'vocab.json')
+        logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
         m.save_parameters(pfile)
         ## if the embedding_size wasn't set explicitly (e.g. determined via pre-trained embedding), then set it here
         if m.vocabulary.embedding:
@@ -458,25 +492,32 @@ def write_model(m, config, budget, args):
 
 def get_worker(args, budget, id_str, ns_port):
     i_dt = datetime.datetime.now()
-    train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond)
-    logging_config(folder=train_out_dir, name='bow_ntm', level=logging.INFO)
+    train_out_dir = \
+        os.path.join(args.save_dir,
+                     "train_{}_{}_{}_{}_{}_{}_{}".format(i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond))
+    logging_config(folder=train_out_dir, name='tmnt', level=logging.INFO)
     logging.info(args)
     seed_rng(args.seed)
-    sp_vec_data = False
-    ## if the vocab file and training files are available, use those
     if args.vocab_file and args.tr_vec_file:
         vpath = Path(args.vocab_file)
         tpath = Path(args.tr_vec_file)
-        if vpath.is_file() and tpath.is_file():
-            sp_vec_data = True
-    if sp_vec_data:
-        logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
-        vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map = \
-            collect_sparse_data(args.tr_vec_file, args.vocab_file, args.tst_vec_file, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
+        if not (vpath.is_file() and tpath.is_file()):
+            raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
+    logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
+    vocab, tr_csr_mat, total_tr_words, tr_labels, label_map = \
+        collect_sparse_data(args.tr_vec_file, args.vocab_file, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
+    if args.tst_vec_file:
+        tst_csr_mat, total_tst_words, tst_labels = \
+            collect_sparse_test(args.tst_vec_file, vocab, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
     else:
-        raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
+        tst_csr_mat, total_tst_words, tst_labels = None, None, None
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
-    worker = BowVAEWorker(args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map, ctx=ctx,
+    print("train out dir = {}".format(train_out_dir))
+    model_out_dir = args.model_dir if args.model_dir else os.path.join(train_out_dir, 'MODEL')
+    print("model out dir = {}".format(model_out_dir))    
+    if not os.path.exists(model_out_dir):
+        os.mkdir(model_out_dir)
+    worker = BowVAEWorker(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map, ctx=ctx,
                               max_budget=budget,
                               nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
     return worker, train_out_dir
@@ -503,8 +544,6 @@ def model_select_bow_vae(args):
     incumbent = res.get_incumbent_id()
     logging.info('Best found configuration:', id2config[incumbent]['config'])
     logging.info('Total budget corresponds to %.1f full function evaluations.'%(sum([r.budget for r in res.get_all_runs()])/32))
-    # Here is how you get he incumbent (best configuration)
-    # let's grab the run on the highest budget
     inc_runs = res.get_runs_by_id(incumbent)
     inc_run = inc_runs[-1]
     inc_loss = inc_run.loss

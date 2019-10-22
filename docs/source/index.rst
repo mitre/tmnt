@@ -14,6 +14,7 @@ Topic Modeling Neural Toolkit Documentation
    installation.rst
    quickstart.rst
    training.rst
+   command_options.rst
    config_options.rst
    model_selection.rst   
    evaluation.rst

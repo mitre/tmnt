@@ -1,3 +1,5 @@
+.. _guided-label:
+
 Guided Topic Models
 ===================
 

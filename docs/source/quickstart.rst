@@ -20,12 +20,11 @@ a model as follows::
   python bin/train_model.py --tr_vec_file ./data/train.vec \
   --tst_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
   --save_dir ./_experiments/ --model_dir ./_model_dir/ \
-  --config ./examples/train_model/model.config --trace_file ./TRACE.csv
+  --config ./examples/train_model/model.config 
 
-In general, TMNT assumes a test/validation corpus is available to determine the held out perplexity
-and coherence. If a separate held-out dataset is unavailable or not desired (testing on the training
-data is less of an issue for unsupervised algorithms), the ``--test_vec_file`` vector file can
-take the same file as for training (via the ``--tr_vec_file`` option).
+In general, TMNT assumes a test/validation corpus is available to determine the validation perplexity
+and coherence, specified with the ``test_vec_file`` option.  If a validation file is not available/needed
+it may be ommitted in which case no evaluation is performed.  See the :ref:`training-label`.
 
 
 2. Preparing text data

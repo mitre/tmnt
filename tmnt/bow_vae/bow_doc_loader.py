@@ -19,7 +19,7 @@ from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 from tmnt.preprocess.tokenizer import BasicTokenizer
 
 
-__all__ = ['DataIterLoader', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix']
+__all__ = ['DataIterLoader', 'collect_sparse_test', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix']
 
 def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
     if pre_vocab:
@@ -206,18 +206,17 @@ def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, scalar_l
     tr_labels = mx.nd.array(tr_labels_li, dtype=dt)
     if scalar_labels:
         tr_labels = normalize_scalar_values(tr_labels)
+    #tr_map = tr_mat.tostype('default')
+    return vocab, tr_mat, total_tr, tr_labels, label_map
     
-    keep_sp_sparse = False # force test data to be dense for easier evaluation
-    if sp_vec_test_file:
-        tst_mat_sp, total_tst, tst_labels_li, _ = \
-            file_to_sp_vec(sp_vec_test_file, len(vocab), label_map=label_map, scalar_labels=scalar_labels, encoding=encoding)
-        tst_mat = tst_mat_sp if keep_sp_sparse else tst_mat_sp.tostype('default') 
-        tst_labels = mx.nd.array(tst_labels_li, dtype=dt)
-        if scalar_labels:
-            tst_labels = normalize_scalar_values(tst_labels)            
-    else:
-        tst_mat = None
-        tst_labels = None
-        total_tst = 0
-    return vocab, tr_mat, total_tr, tst_mat, total_tst, tr_labels, tst_labels, label_map
-    
+
+def collect_sparse_test(sp_vec_file, vocab, scalar_labels=False, label_map=None, encoding='utf-8'):
+    keep_sp_sparse = False
+    tst_mat_sp, total_tst, tst_labels_li, _ = \
+        file_to_sp_vec(sp_vec_file, len(vocab), label_map=label_map, scalar_labels=scalar_labels, encoding=encoding)
+    tst_mat = tst_mat_sp if keep_sp_sparse else tst_mat_sp.tostype('default')
+    dt = 'float32' if scalar_labels else 'int'    
+    tst_labels = mx.nd.array(tst_labels_li, dtype=dt)
+    if scalar_labels:
+        tst_labels = normalize_scalar_values(tst_labels)
+    return tst_mat, total_tst, tst_labels

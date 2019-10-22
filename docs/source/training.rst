@@ -1,3 +1,5 @@
+.. _training-label:
+
 Training a Topic Model
 ======================
 

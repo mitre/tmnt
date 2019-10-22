@@ -1,6 +1,11 @@
 Installation
 ~~~~~~~~~~~~
 
+.. note::
+   TMNT is currently only supported for Linux/MacOS. While the following steps should in theory
+   work for Windows, some users have reported problems with installation of some of the 3rd party libraries.
+
+
 1. Downloading TMNT
 +++++++++++++++++++
 

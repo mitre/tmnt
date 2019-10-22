@@ -20,8 +20,8 @@ Below is an example::
   python bin/select_model.py --tr_vec_file ./data/train.2.vec \
   --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab \
   --save_dir ./_experiments/ --model_dir ./_model_dir/ \
-  --config_space ./examples/select_model/config.yaml --budget 81 \
-  --iterations 100 --coherence_coefficient 4.0
+  --config_space ./examples/select_model/config.yaml --budget 27 \
+  --iterations 60 --coherence_coefficient 4.0
 
 Configuration Space
 ~~~~~~~~~~~~~~~~~~~
