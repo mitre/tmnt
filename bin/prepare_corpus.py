@@ -8,10 +8,12 @@ from tmnt.preprocess.vectorizer import JsonVectorizer, TextVectorizer
 parser = argparse.ArgumentParser('Prepare a training and validation/test dataset for topic model training')
 
 parser.add_argument('--tr_input_dir', type=str, help='Directory of training files (json batches)')
-parser.add_argument('--tst_input_dir', type=str, help='Directory of test files (json batches)', default=None)
+parser.add_argument('--tst_input_dir', type=str, help='Directory of validation test files (json batches)', default=None)
+parser.add_argument('--heldout_input_dir', type=str, help='Directory of held out test files (json batches)', default=None)
 parser.add_argument('--file_pat', type=str, help='File pattern', default='*.json')
 parser.add_argument('--tr_vec_file', type=str, help='Output file with training documents in sparse vector format')
-parser.add_argument('--tst_vec_file', type=str, help='Output file with test documents in sparse vector format', default=None)
+parser.add_argument('--tst_vec_file', type=str, help='Output file with test validation documents in sparse vector format', default=None)
+parser.add_argument('--heldout_vec_file', type=str, help='Output file with heldout test documents in sparse vector format', default=None)
 parser.add_argument('--vocab_size', type=int, help='Size of the vocabulary to construct', default=2000)
 parser.add_argument('--vocab_file', type=str, help='File for resulting vocabulary')
 parser.add_argument('--full_vocab_histogram', type=str, help='Optional output of entire histogram', default=None)
@@ -38,5 +40,8 @@ if __name__ == '__main__':
 
     if args.tst_input_dir and args.tst_vec_file:
         _ = vectorizer.get_sparse_vecs(args.tst_vec_file, args.vocab_file, args.tst_input_dir, i_vocab=vocab,
+                                       pat=args.file_pat)
+    if args.heldout_input_dir and args.heldout_vec_file:
+        _ = vectorizer.get_sparse_vecs(args.heldout_vec_file, args.vocab_file, args.heldout_input_dir, i_vocab=vocab,
                                        pat=args.file_pat)
                                        
