@@ -219,8 +219,7 @@ class MetaDataBowNTM(BowNTM):
     def get_top_k_terms_with_covar(self, covar, topic_id):
         cov_y = self.decode_to_covar_posteriors(covar, topic_id)
         sorted_ids = cov_y.argsort(axis=1, is_ascend=False).squeeze()
-        #print("Sorted ids shape = {}".format(sorted_ids.shape))
-        print("Top ids = {}".format(sorted_ids[:10]))
+        return sorted_ids
             
 
     def hybrid_forward(self, F, data, covars, l1_pen_const=None):
