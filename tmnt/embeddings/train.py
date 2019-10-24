@@ -9,14 +9,14 @@ import time
 import io
 import datetime
 
-from data import transform_data_fasttext, transform_data_word2vec, preprocess_dataset_stream, preprocess_dataset, CustomDataSet
-from embed_utils import logging_config
+from tmnt.embeddings.data import transform_data_fasttext, transform_data_word2vec, preprocess_dataset_stream, preprocess_dataset, CustomDataSet
+from tmnt.utils.log_utils import logging_config
+from tmnt.embeddings.model import SG, CBOW
 
 import mxnet as mx
 import numpy as np
-
 import gluonnlp as nlp
-from model import SG, CBOW
+
 
 def get_context(args):
     if args.gpu is None or args.gpu == '':
@@ -90,7 +90,7 @@ def train_embeddings(args, exp_folder):
         if args.no_prefetch_batch:
             data = data.transform(batchify_fn)
         else:
-            from executors import LazyThreadPoolExecutor
+            from tmnt.embeddings.executors import LazyThreadPoolExecutor
             num_cpu = len(os.sched_getaffinity(0))
             ex = LazyThreadPoolExecutor(num_cpu)
     except (ImportError, SyntaxError, AttributeError):
