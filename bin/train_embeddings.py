@@ -3,6 +3,8 @@
 import os, sys
 import argparse
 
+from tmnt.embeddings.train_embeddings import train
+
 
 def parse_args():
     """Parse command line arguments."""
