@@ -82,10 +82,6 @@ def parse_args():
 
     args_ = parser.parse_args()
 
-    random.seed(args_.seed)
-    mx.random.seed(args_.seed)
-    np.random.seed(args_.seed)
-
     return args_
 
 

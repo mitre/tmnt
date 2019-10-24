@@ -200,4 +200,9 @@ def train(args):
     exp_folder = '{}/exp_{}_{}_{}_{}_{}_{}'.format(args.logdir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
     logging_config(exp_folder)
     logging.info(args)
+    random.seed(args_.seed)
+    mx.random.seed(args_.seed)
+    np.random.seed(args_.seed)
+
+
     train_embeddings(args, exp_folder)
