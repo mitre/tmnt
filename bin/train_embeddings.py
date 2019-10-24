@@ -3,7 +3,7 @@
 import os, sys
 import argparse
 
-from tmnt.embeddings.train_embeddings import train
+from tmnt.embeddings.train import train
 
 
 def parse_args():
