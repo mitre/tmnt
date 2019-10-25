@@ -20,6 +20,14 @@ from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 from sentence_splitter import SentenceSplitter
 
 
+def trim_counter_large_tokens(counter, size=20):
+    ## remove long tokens > 20
+    big_tokens = [t for t,_ in counter.items() if len(t) > 20]
+    for t in big_tokens:
+        del counter[t]
+    return counter
+    
+
 def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
     """Dataset preprocessing helper.
 
@@ -47,6 +55,7 @@ def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
 
     """
     counter = nlp.data.count_tokens(itertools.chain.from_iterable(data))
+    counter = trim_counter_large_tokens(counter, 20)    
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                           bos_token=None, eos_token=None, min_freq=min_freq,
                           max_size=max_vocab_size)
@@ -66,6 +75,7 @@ def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
     for data in iter(stream):
         counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter = counter)
         logging.info('.. counter size = {} ..'.format(str(len(counter))))
+    counter = trim_counter_large_tokens(counter, 20)
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                           bos_token=None, eos_token=None, min_freq=min_freq,
                           max_size=max_vocab_size)
@@ -176,7 +186,11 @@ def transform_data_fasttext(data, vocab, idx_to_counts, cbow, ngram_buckets,
         ts = [t for t in ts_1 if len(t) > 2]  ## only keep if this has length > 2
         return ts
 
+    def filter_samples(shard):
+        return [s for s in shard if len(s) > 5]
+
     data = data.transform(subsample)
+    data = data.transform(filter_samples)
 
     batchify = nlp.data.batchify.EmbeddingCenterContextBatchify(
         batch_size=batch_size, window_size=window_size, cbow=cbow,
