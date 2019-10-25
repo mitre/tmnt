@@ -42,6 +42,7 @@ def parse_args():
 
     # Model
     group = parser.add_argument_group('Model arguments')
+    group.add_argument('pre_embedding_name', type=str, default=None, help='Pretrained GLUON embedding')
     group.add_argument('--emsize', type=int, default=300,
                        help='Size of embedding vectors.')
     group.add_argument('--ngrams', type=int, nargs='+', default=[3, 4, 5, 6])

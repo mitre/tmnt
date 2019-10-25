@@ -62,14 +62,29 @@ def train_embeddings(args, exp_folder):
             frequent_token_subsampling=args.frequent_token_subsampling)
 
     num_tokens = float(sum(idx_to_counts))
+    
+    if args.pre_embedding_name:
+        e_type, e_name = tuple(args.pre_embedding_name.split(':'))
+        pt_embedding = nlp.embedding.create(e_type, source=e_name)
+        em_size = len(pt_embedding.idx_to_vec[0])
+    else:
+        pt_embedding = None
+        em_size = args.emsize
 
     model = CBOW if args.model.lower() == 'cbow' else SG
-    embedding = model(token_to_idx=vocab.token_to_idx, output_dim=args.emsize,
+    embedding = model(token_to_idx=vocab.token_to_idx, output_dim=em_size,
                       batch_size=args.batch_size, num_negatives=args.negative,
                       negatives_weights=mx.nd.array(idx_to_counts),
                       subword_function=subword_function)
     context = get_context(args)
     embedding.initialize(ctx=context)
+
+    if pt_embedding:
+        for t in vocab._token_to_idx:
+            w = pt_embedding.token_to_idx[t]
+            if w:
+                model.embedding.weight[t] = pt_embedding[t]
+        
     if not args.no_hybridize:
         embedding.hybridize(static_alloc=True, static_shape=True)
 
