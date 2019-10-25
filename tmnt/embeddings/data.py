@@ -17,6 +17,7 @@ import functools
 import warnings
 from gluonnlp.base import numba_njit
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
+from sentence_splitter import SentenceSplitter
 
 
 def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
@@ -80,11 +81,14 @@ def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
     return stream, vocab, idx_to_counts
 
 
+
+
 class CustomDataSet(SimpleDatasetStream):
     def __init__(self, root, pattern, bos, eos, skip_empty):
         self._root = root
         self._file_pattern = os.path.join(root, pattern)
-        self.codec = 'utf-8'        
+        self.codec = 'utf-8'
+        self.splitter = SentenceSplitter('en')
         super(CustomDataSet, self).__init__(
             dataset=CorpusDataset,
             file_pattern=self._file_pattern,
@@ -92,6 +96,7 @@ class CustomDataSet(SimpleDatasetStream):
             bos=bos,
             eos=eos,
             file_sampler='random',
+            sample_splitter = self.splitter.split,
             tokenizer = nlp.data.SacreMosesTokenizer()
             )
 

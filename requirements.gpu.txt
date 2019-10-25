@@ -48,6 +48,7 @@ python-dateutil==2.8.0
 pytz==2019.2
 PyYAML==5.1.2
 requests==2.22.0
+sacremoses==0.0.35
 scikit-learn==0.20.3
 scipy==1.3.0
 serpent==1.28
@@ -64,3 +65,4 @@ umap-learn==0.3.7
 urllib3==1.25.6
 mantichora==0.9.5
 atpbar==1.0.4
+tqdm==4.36.1
