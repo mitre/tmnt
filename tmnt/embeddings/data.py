@@ -91,7 +91,9 @@ class CustomDataSet(SimpleDatasetStream):
             skip_empty=skip_empty,
             bos=bos,
             eos=eos,
-            file_sampler='random')
+            file_sampler='random',
+            tokenizer = nlp.data.SacreMosesTokenizer()
+            )
 
 
 def transform_data_fasttext(data, vocab, idx_to_counts, cbow, ngram_buckets,
