@@ -267,7 +267,11 @@ def transform_data_word2vec(data, vocab, idx_to_counts, cbow, batch_size,
                               np.random.uniform(0, 1, size=len(sentence)))
             if r > idx_to_pdiscard[t]] for sentence in shard]
 
+    def filter_samples(shard):
+        return [s for s in shard if len(s) > 5]
+
     data = data.transform(subsample)
+    data = data.transform(filter_samples)
 
     batchify = nlp.data.batchify.EmbeddingCenterContextBatchify(
         batch_size=batch_size, window_size=window_size, cbow=cbow,

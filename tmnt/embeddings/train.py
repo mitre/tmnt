@@ -8,6 +8,7 @@ import sys
 import time
 import io
 import datetime
+import multiprocessing
 
 from tmnt.embeddings.data import transform_data_fasttext, transform_data_word2vec, preprocess_dataset_stream, preprocess_dataset, CustomDataSet
 from tmnt.utils.log_utils import logging_config
@@ -34,6 +35,20 @@ def train_embeddings(args, exp_folder):
     if not args.model.lower() in ['cbow', 'skipgram']:
         logging.error('Unsupported model %s.', args.model)
         sys.exit(1)
+
+    if args.pre_embedding_name and args.ngram_buckets > 0:
+        logging.error("Pre-trained embeddings not yet usable with fasttext-style embeddings")
+        sys.exit(1)
+
+    if args.pre_embedding_name:
+        e_type, e_name = tuple(args.pre_embedding_name.split(':'))
+        pt_embedding = nlp.embedding.create(e_type, source=e_name)
+        logging.info("Fine-tuning pre-trained (downloaded) embeddings {}".format(e_name))
+        em_size = len(pt_embedding.idx_to_vec[0])
+    else:
+        pt_embedding = None
+        em_size = args.emsize
+    logging.info("Embedding size: {}".format(em_size))
 
     if args.data_type == 'custom':
         data = CustomDataSet(args.data_root,args.file_pattern, '<bos>', '<eos>', skip_empty=True)
@@ -63,13 +78,6 @@ def train_embeddings(args, exp_folder):
 
     num_tokens = float(sum(idx_to_counts))
     
-    if args.pre_embedding_name:
-        e_type, e_name = tuple(args.pre_embedding_name.split(':'))
-        pt_embedding = nlp.embedding.create(e_type, source=e_name)
-        em_size = len(pt_embedding.idx_to_vec[0])
-    else:
-        pt_embedding = None
-        em_size = args.emsize
 
     model = CBOW if args.model.lower() == 'cbow' else SG
     embedding = model(token_to_idx=vocab.token_to_idx, output_dim=em_size,
@@ -80,10 +88,8 @@ def train_embeddings(args, exp_folder):
     embedding.initialize(ctx=context)
 
     if pt_embedding:
-        for t in vocab._token_to_idx:
-            w = pt_embedding.token_to_idx[t]
-            if w:
-                model.embedding.weight[t] = pt_embedding[t]
+        vocab.set_embedding(pt_embedding)
+        embedding.embedding.weight.set_data(vocab.embedding.idx_to_vec)
         
     if not args.no_hybridize:
         embedding.hybridize(static_alloc=True, static_shape=True)
@@ -106,7 +112,7 @@ def train_embeddings(args, exp_folder):
             data = data.transform(batchify_fn)
         else:
             from tmnt.embeddings.executors import LazyThreadPoolExecutor
-            num_cpu = len(os.sched_getaffinity(0))
+            num_cpu = multiprocessing.cpu_count()
             ex = LazyThreadPoolExecutor(num_cpu)
     except (ImportError, SyntaxError, AttributeError):
         # Py2 - no async prefetching is supported
@@ -167,12 +173,6 @@ def train_embeddings(args, exp_folder):
                 log_avg_loss = 0
                 log_wc = 0
 
-            #if args.eval_interval and (i + 1) % args.eval_interval == 0:
-            #    with print_time('mx.nd.waitall()'):
-            #        mx.nd.waitall()
-            #    with print_time('evaluate'):
-            #        evaluate(args, embedding, vocab, num_update)
-
     # Evaluate
     #with print_time('mx.nd.waitall()'):
     #    mx.nd.waitall()
@@ -180,16 +180,11 @@ def train_embeddings(args, exp_folder):
     #    evaluate(args, embedding, vocab, num_update,
     #             eval_analogy=not args.no_eval_analogy)
 
-    # Save full embedding
-    #with print_time('save parameters'):
-    ## write out vocab    
     with io.open(os.path.join(exp_folder, 'vocab.json'), 'w') as f:
         js_vocab = vocab.to_json()
         f.write(js_vocab)
     embedding.embedding.save_parameters(os.path.join(exp_folder, 'embedding.params'))
-    for t in ['vector', 'emperor', 'boy', 'queen', 'trump', 'clinton', 'senator', 'president']:
-        ls = get_k_closest_tokens(vocab, embedding.embedding, 10, t)
-        logging.info('K closest tokens to {} are {}'.format(t, ls))
+    
 
 
 def norm_vecs_by_row(x):
