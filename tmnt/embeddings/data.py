@@ -19,8 +19,7 @@ from gluonnlp.base import numba_njit
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 from sentence_splitter import SentenceSplitter
 from collections import defaultdict
-import multiprocessing
-from multiprocessing import Pool
+
 
 
 def trim_counter_large_tokens(counter, size=20):
@@ -72,23 +71,16 @@ def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
     data = nlp.data.SimpleDataStream([data])
     return data, vocab, idx_to_counts
 
-def cnt_fn(data):
-    c = nlp.data.count_tokens(itertools.chain.from_iterable(data))
-    return c
 
 def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
     counters = []
     i = 0
-
-    str_list = list(stream)  ## pull into memory
-    p = Pool(min(multiprocessing.cpu_count(), len(str_list)))
-    counters = p.map(cnt_fn, str_list)
-    #for data in iter(stream):
-    #    i += 1
-    #    c = nlp.data.count_tokens(itertools.chain.from_iterable(data))
-    #    counters.append(c)
-    #    if i % 1000 == 0:
-    #        logging.info("{} Files pre-processed".format(i))
+    for data in iter(stream):
+        i += 1
+        c = nlp.data.count_tokens(itertools.chain.from_iterable(data))
+        counters.append(c)
+        if i % 1000 == 0:
+            logging.info("{} Files pre-processed".format(i))
     dd = defaultdict(int)
     for d in counters:
         for k in d:
