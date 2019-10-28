@@ -62,6 +62,7 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
 def evaluate(model, data_loader, last_batch_size, total_words, args, ctx=mx.cpu()):
     total_rec_loss = 0
     total_kl_loss  = 0
+    logging.info("Evaluation over {} validation/test batches".format(len(data_loader)))
     for i, (data,labels) in enumerate(data_loader):
         if labels is None:            
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
