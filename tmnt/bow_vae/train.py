@@ -59,10 +59,11 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
     return sums
 
 
-def evaluate(model, data_loader, last_batch_size, total_words, args, ctx=mx.cpu()):
+def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words, args, ctx=mx.cpu()):
     total_rec_loss = 0
     total_kl_loss  = 0
-    logging.info("Evaluation over {} validation/test batches".format(len(data_loader)))
+    #logging.info("Evaluation over {} validation/test batches".format(len(data_loader)))
+    batch_size = 0
     for i, (data,labels) in enumerate(data_loader):
         if labels is None:            
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
@@ -72,7 +73,7 @@ def evaluate(model, data_loader, last_batch_size, total_words, args, ctx=mx.cpu(
         ## We explicitly keep track of the last batch size        
         ## The following lets us use a "rollover" for handling the last batch,
         ## enabling the symbolic computation graph (via hybridize)
-        if i == len(data_loader) - 1:
+        if i == num_test_batches - 1:
             total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
             total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
         else:
@@ -291,7 +292,7 @@ class BowVAEWorker(Worker):
             model.hybridize()
         return model, trainer
 
-    def _eval_trace(self, model, epoch, test_dataloader, last_batch_size):
+    def _eval_trace(self, model, epoch, test_dataloader, last_batch_size, num_test_batches):
         """Evaluate the model against test/validation data and optionally write to a trace file.
         
         Parameters
@@ -300,7 +301,7 @@ class BowVAEWorker(Worker):
         epoch: int - the current epoch
         """
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
-            perplexity = evaluate(model, test_dataloader, last_batch_size, self.total_tst_words, self.c_args, self.ctx)
+            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
             if self.c_args.scalar_covars:
                 model.get_top_k_terms_with_covar(0.2, 0)
             npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
@@ -344,13 +345,21 @@ class BowVAEWorker(Worker):
         model, trainer = self._get_model(config)
         batch_size = int(config['batch_size'])
         l1_coef = self.c_args.init_sparsity_pen
+        num_test_batches = 0
         train_dataloader = \
             DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size, last_batch_handle='discard', shuffle=True))
         if self.data_test_csr is not None:
-            test_array = gluon.data.ArrayDataset(self.data_test_csr, self.test_labels)
+            #test_array = gluon.data.ArrayDataset(self.data_test_csr, self.test_labels)
+            #test_dataloader = \
+            #    gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='keep')
             test_dataloader = \
-                gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='rollover')
+                DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='pad', shuffle=False))
             last_batch_size = self.data_test_csr.shape[0] % batch_size
+            num_test_batches = self.data_test_csr.shape[0] // batch_size
+            if last_batch_size > 0:
+                num_test_batches += 1
+            logging.info("Total validation/test instances = {}, batch_size = {}, last_batch = {}, num batches = {}"
+                         .format(self.data_test_csr.shape[0], batch_size, last_batch_size, num_test_batches))
         else:
             logging.warning("**** No validation/evaluation available for model validation test csr = {} ******".format(self.data_test_csr))
             last_batch_size = 0
@@ -374,12 +383,12 @@ class BowVAEWorker(Worker):
                 self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss)
             self._log_details(details, epoch)
             if not self.search_mode and (test_dataloader is not None):
-                self._eval_trace(model, epoch, test_dataloader, last_batch_size)
+                self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)
             if model.target_sparsity > 0.0:
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
         if test_dataloader is not None:
-            perplexity = evaluate(model, test_dataloader, last_batch_size, self.total_tst_words, self.c_args, self.ctx)
+            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
             npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
             try:
                 coherence_coefficient = self.c_args.coherence_coefficient
