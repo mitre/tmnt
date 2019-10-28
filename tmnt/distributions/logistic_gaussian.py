@@ -37,7 +37,7 @@ class LogisticGaussianLatentDistribution(LatentDistribution):
         dt = F.broadcast_div(delta * delta, self.prior_var)
         v_div = F.broadcast_div(posterior_var, self.prior_var)
         lv_div = self.prior_logvar - lv
-        return F.sum(0.5 * (F.sum((v_div + dt + lv_div), axis=1) - self.n_latent))
+        return 0.5 * (F.sum((v_div + dt + lv_div), axis=1) - self.n_latent)
 
     def hybrid_forward(self, F, data, batch_size):
         mu = self.mu_encoder(data)
