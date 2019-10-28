@@ -377,7 +377,7 @@ class BowVAEWorker(Worker):
             if model.target_sparsity > 0.0:
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
-        if test_dataloader:
+        if test_dataloader is not None:
             perplexity = evaluate(model, test_dataloader, last_batch_size, self.total_tst_words, self.c_args, self.ctx)
             npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
             try:
