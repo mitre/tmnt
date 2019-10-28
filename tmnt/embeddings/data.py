@@ -94,7 +94,6 @@ def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
 
 
 
-
 class CustomDataSet(SimpleDatasetStream):
     def __init__(self, root, pattern, bos, eos, skip_empty):
         self._root = root
@@ -187,11 +186,7 @@ def transform_data_fasttext(data, vocab, idx_to_counts, cbow, ngram_buckets,
         ts = [t for t in ts_1 if len(t) > 2]  ## only keep if this has length > 2
         return ts
 
-    def filter_samples(shard):
-        return [s for s in shard if len(s) > 5]
-
     data = data.transform(subsample)
-    data = data.transform(filter_samples)
 
     batchify = nlp.data.batchify.EmbeddingCenterContextBatchify(
         batch_size=batch_size, window_size=window_size, cbow=cbow,
@@ -282,17 +277,16 @@ def transform_data_word2vec(data, vocab, idx_to_counts, cbow, batch_size,
         for count in idx_to_counts]
 
     def subsample(shard):
-        return [[
+        ts_1 = [[
             t for t, r in zip(sentence,
                               np.random.uniform(0, 1, size=len(sentence)))
             if r > idx_to_pdiscard[t]] for sentence in shard]
-
-    def filter_samples(shard):
-        return [s for s in shard if len(s) > 5]
-
+        ts = [t for t in ts_1 if len(t) > 2]  ## only keep if this has length > 2
+        if len(ts) < 1:
+            raise Exception("Shard has size 0!!!! = {}".format(ts))
+        return ts
 
     data = data.transform(subsample)
-    data = data.transform(filter_samples)
 
     batchify = nlp.data.batchify.EmbeddingCenterContextBatchify(
         batch_size=batch_size, window_size=window_size, cbow=cbow,

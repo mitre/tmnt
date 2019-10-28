@@ -27,16 +27,26 @@ args = parser.parse_args()
 if __name__ == '__main__':
     files = os.listdir(args.input_dir)
     splitter = SentenceSplitter('en')
+    cnt = 0
+    total_lines = 0
+    ostr = None
     for f in files:
         in_file = os.path.join(args.input_dir, f)
         if os.path.isfile(in_file):
-            with open(os.path.join(args.output_dir, f), 'w') as ostr:
-                with open(in_file, 'r') as fp:
-                    data = fp.read().replace('\n', ' ')
-                    sents = splitter.split(data)
-                    for s in sents:
-                        ostr.write(s)
-                        ostr.write('\n')
+            if total_lines > 1000 or cnt < 1:
+                cnt += 1
+                ofile = os.path.join(args.output_dir, ('train_emb'+ str(cnt)+ '.txt'))
+                if ostr:
+                    ostr.close()
+                ostr = open(ofile, 'w')
+                total_lines = 0
+            with open(in_file, 'r') as fp:
+                data = fp.read().replace('\n', ' ')
+                sents = splitter.split(data)
+                for s in sents:
+                    ostr.write(s)
+                    ostr.write('\n')
+                    total_lines += 1
 
                 
         
