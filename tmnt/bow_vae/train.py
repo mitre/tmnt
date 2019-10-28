@@ -393,7 +393,8 @@ class BowVAEWorker(Worker):
             }
         else:
             ## in this case, we're only training a model; no model selection, validation or held out test data
-            res = {}
+            logging.info('Warning: training finished with no evaluation/validation dataset')
+            res = {'loss': 100000000.0}
         return model, res
 
 
