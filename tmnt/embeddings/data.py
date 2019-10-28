@@ -72,10 +72,11 @@ def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
 
 def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
     counter = None
+    i = 0
     for data in iter(stream):
         i += 1
         counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter=counter)
-        if i % 1000 == 0:
+        if i % 100 == 0:
             logging.info("{} Files pre-processed".format(i))
     counter = trim_counter_large_tokens(counter, 20)
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
