@@ -17,9 +17,7 @@ import functools
 import warnings
 from gluonnlp.base import numba_njit
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
-from sentence_splitter import SentenceSplitter
 from collections import defaultdict
-
 
 
 def trim_counter_large_tokens(counter, size=20):
@@ -73,19 +71,12 @@ def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
 
 
 def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
-    counters = []
-    i = 0
+    counter = None
     for data in iter(stream):
         i += 1
-        c = nlp.data.count_tokens(itertools.chain.from_iterable(data))
-        counters.append(c)
+        counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter=counter)
         if i % 1000 == 0:
             logging.info("{} Files pre-processed".format(i))
-    dd = defaultdict(int)
-    for d in counters:
-        for k in d:
-            dd[k] += d[k]
-    counter = nlp.data.Counter(dd)
     counter = trim_counter_large_tokens(counter, 20)
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                           bos_token=None, eos_token=None, min_freq=min_freq,
@@ -98,7 +89,7 @@ def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
     def code_corpus(corpus):
         return corpus.transform(code)
 
-    stream = stream.transform(code_corpus) ###  will this never cache the mapped corpus??
+    stream = stream.transform(code_corpus) 
     return stream, vocab, idx_to_counts
 
 
@@ -109,7 +100,6 @@ class CustomDataSet(SimpleDatasetStream):
         self._root = root
         self._file_pattern = os.path.join(root, pattern)
         self.codec = 'utf-8'
-        self.splitter = SentenceSplitter('en')
         super(CustomDataSet, self).__init__(
             dataset=CorpusDataset,
             file_pattern=self._file_pattern,
@@ -117,7 +107,7 @@ class CustomDataSet(SimpleDatasetStream):
             bos=bos,
             eos=eos,
             file_sampler='random',
-            sample_splitter = self.splitter.split,
+            #sample_splitter = self.splitter.split,  ## default to newline
             tokenizer = nlp.data.SacreMosesTokenizer()
             )
 
@@ -299,6 +289,7 @@ def transform_data_word2vec(data, vocab, idx_to_counts, cbow, batch_size,
 
     def filter_samples(shard):
         return [s for s in shard if len(s) > 5]
+
 
     data = data.transform(subsample)
     data = data.transform(filter_samples)
