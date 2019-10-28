@@ -568,8 +568,7 @@ def model_select_bow_vae(args):
         inc_config['training_epochs'] = args.budget
         specs = json.dumps(inc_config)
         fp.write(specs)
-    if args.model_dir:
-        worker.retrain_best_config(inc_config, inc_run.budget, args.seed, args.num_final_evals)
+    worker.retrain_best_config(inc_config, inc_run.budget, args.seed, args.num_final_evals)
     dd_finish = datetime.datetime.now()
     logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
     NS.shutdown()
