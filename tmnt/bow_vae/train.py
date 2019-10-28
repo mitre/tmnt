@@ -351,6 +351,7 @@ class BowVAEWorker(Worker):
                 gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='rollover')
             last_batch_size = self.data_test_csr.shape[0] % batch_size
         else:
+            logging.warning("**** No validation/evaluation available for model validation test csr = {} ******".format(self.data_test_csr))
             last_batch_size = 0
             test_array, test_dataloader = None, None
 
