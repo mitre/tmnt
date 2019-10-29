@@ -237,11 +237,15 @@ class BowVAEWorker(Worker):
         epoch: int - current epoch number
         """
         tr_size = details['tr_size']
-        nd = {}
-        for (k,v) in details.items():
-            nd[k] = v / tr_size
-        logging.info("Epoch {}: Loss = {}, [ KL loss = {:8.4f} ] [ L1 loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Coherence loss = {:8.4f} ] [ Entropy losss = {:8.4f} ]".
+        if tr_size > 0:
+            nd = {}
+            for (k,v) in details.items():
+                nd[k] = v / tr_size
+                logging.info(
+                    "Epoch {}: Loss = {}, [ KL loss = {:8.4f} ] [ L1 loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Coherence loss = {:8.4f} ] [ Entropy losss = {:8.4f} ]".
                      format(epoch, nd['epoch_loss'], nd['kl_loss'], nd['l1_pen'], nd['rec_loss'], nd['coherence_loss'], nd['entropies_loss']))
+        else:
+            logging.info("WARNING: Training set size = {}".format(tr_size))
 
     def _get_model(self, config):
         """Take a model configuration - specified by a config file or as determined by model selection and 
@@ -349,9 +353,6 @@ class BowVAEWorker(Worker):
         train_dataloader = \
             DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size, last_batch_handle='discard', shuffle=True))
         if self.data_test_csr is not None:
-            #test_array = gluon.data.ArrayDataset(self.data_test_csr, self.test_labels)
-            #test_dataloader = \
-            #    gluon.data.DataLoader(test_array, batch_size=batch_size, shuffle=False, last_batch='keep')
             test_dataloader = \
                 DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='pad', shuffle=False))
             last_batch_size = self.data_test_csr.shape[0] % batch_size
