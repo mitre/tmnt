@@ -13,6 +13,7 @@ from multiprocessing import Pool, cpu_count
 from mantichora import mantichora
 from atpbar import atpbar
 import threading
+import logging
 
 from tmnt.preprocess import BasicTokenizer
 
@@ -66,8 +67,9 @@ class Vectorizer(object):
             sp_vecs = [ item for sl in sp_vecs for item in sl ]
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
+        sp_list = list(sp_vecs)
         with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
-            for block in sp_vecs:
+            for block in sp_list:
                 for (v,l) in block:
                     fp.write(str(l))  
                     for (i,c) in v:
@@ -124,9 +126,10 @@ class JsonVectorizer(Vectorizer):
         files = glob.glob(data_dir + '/' + pat)
         if len(files) > 2:
             file_batches = list(self.chunks(files, min(cpu_count(), len(files))))
+            logging.info("Counting vocabulary over {} text files with {} batches".format(len(files), len(file_batches)))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
-                    mcore.run(self.task,"Counting Vocab Items Batch {}".format(i), file_batches[i])
+                    mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batches[i])
                 counter_cs = mcore.returns()
             counters = [ item for sl in counter_cs for item in sl ]
         else:
@@ -180,7 +183,7 @@ class TextVectorizer(Vectorizer):
             file_batch_batches = list(self.chunks(file_batches, min(cpu_count(), len(files))))
             with mantichora() as mcore:
                 for i in range(len(file_batch_batches)):
-                    mcore.run(self.task,"Batch {}".format(i), file_batch_batches[i])
+                    mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batch_batches[i])
                 counter_cs = mcore.returns()
             counters = [ item for sl in counter_cs for item in sl ]
         else:
@@ -206,9 +209,9 @@ class TextVectorizer(Vectorizer):
                 toks = self.tokenizer.tokenize(txt)
                 tok_ids = [vocab[token] for token in toks if token in vocab]
                 doc_tok_ids.extend(tok_ids)
-            if (len(tok_ids) >= self.min_doc_size):
+            if (len(doc_tok_ids) >= self.min_doc_size):
                 cnts = nlp.data.count_tokens(doc_tok_ids)
-                sp_vecs.append((sorted(cnts.items()), -1))
+                sp_vecs.append((sorted(cnts.items()), "<unk>"))
         return sp_vecs
 
     

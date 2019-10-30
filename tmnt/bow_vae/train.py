@@ -575,8 +575,12 @@ def model_select_bow_vae(args):
     NS.shutdown()
 
 def train_bow_vae(args):
-    with open(args.config, 'r') as f:
-        config = json.loads(f.read())
+    try:
+        with open(args.config, 'r') as f:
+            config = json.loads(f.read())
+    except:
+        logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(args.config))
+        raise Exception("Invalid Json Configuration File")
     dd = datetime.datetime.now()
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
     ns_port = get_port()
