@@ -241,9 +241,9 @@ class BowVAEWorker(Worker):
             nd = {}
             for (k,v) in details.items():
                 nd[k] = v / tr_size
-                logging.info(
-                    "Epoch {}: Loss = {}, [ KL loss = {:8.4f} ] [ L1 loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Coherence loss = {:8.4f} ] [ Entropy losss = {:8.4f} ]".
-                     format(epoch, nd['epoch_loss'], nd['kl_loss'], nd['l1_pen'], nd['rec_loss'], nd['coherence_loss'], nd['entropies_loss']))
+            logging.info(
+                "Epoch {}: Loss = {}, [ KL loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Entropy losss = {:8.4f} ]".
+                format(epoch, nd['epoch_loss'], nd['kl_loss'], nd['rec_loss'], nd['entropies_loss']))
         else:
             logging.info("WARNING: Training set size = {}".format(tr_size))
 
@@ -525,9 +525,7 @@ def get_worker(args, budget, id_str, ns_port):
     else:
         tst_csr_mat, total_tst_words, tst_labels = None, None, None
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
-    print("train out dir = {}".format(train_out_dir))
     model_out_dir = args.model_dir if args.model_dir else os.path.join(train_out_dir, 'MODEL')
-    print("model out dir = {}".format(model_out_dir))    
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
     worker = BowVAEWorker(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map, ctx=ctx,
