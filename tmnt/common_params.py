@@ -7,8 +7,8 @@ import argparse
 def get_base_argparser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--tr_vec_file', type=str, help='Training file in sparse vector format')
-    parser.add_argument('--tst_vec_file', type=str, help='Test/validation file in sparse vector format')
-    parser.add_argument('--heldout_vec_file', type=str, help='Helout test file in sparse vector format')
+    parser.add_argument('--val_vec_file', type=str, help='Test/validation file in sparse vector format')
+    parser.add_argument('--tst_vec_file', type=str, help='Helout test file in sparse vector format')
     parser.add_argument('--vocab_file', type=str, help='Vocabulary file associated with sparse vector data')
     parser.add_argument('--seed', type=int, default=1234, help='The random seed to use for RNG')
     parser.add_argument('--save_dir', type=str, default='_experiments')

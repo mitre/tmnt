@@ -59,7 +59,7 @@ class Vectorizer(object):
             vocab = i_vocab
         files_and_vocab = [(f,vocab) for f in files]
         if len(files_and_vocab) > 2:
-            file_batches = list(self.chunks(files_and_vocab, min(cpu_count(), len(files_and_vocab))))
+            file_batches = list(self.chunks(files_and_vocab, max(1, len(files_and_vocab) // cpu_count())))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
                     mcore.run(self.task_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i])
@@ -106,7 +106,6 @@ class JsonVectorizer(Vectorizer):
         self.label_prefix = label_prefix
         self.min_doc_size = min_doc_size
 
-    
     def get_counter_file(self, json_file):
         counter = None
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
@@ -125,7 +124,7 @@ class JsonVectorizer(Vectorizer):
     def get_counter_dir_parallel(self, data_dir, pat):
         files = glob.glob(data_dir + '/' + pat)
         if len(files) > 2:
-            file_batches = list(self.chunks(files, min(cpu_count(), len(files))))
+            file_batches = list(self.chunks(files, max(1, len(files) // cpu_count())))
             logging.info("Counting vocabulary over {} text files with {} batches".format(len(files), len(file_batches)))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
@@ -180,7 +179,7 @@ class TextVectorizer(Vectorizer):
         batch_size = max(1, int(len(files) / 20))
         file_batches = list(batches(files, batch_size))
         if len(file_batches) > 2:
-            file_batch_batches = list(self.chunks(file_batches, min(cpu_count(), len(files))))
+            file_batch_batches = list(self.chunks(file_batches, max(1, len(files) // cpu_count())))
             with mantichora() as mcore:
                 for i in range(len(file_batch_batches)):
                     mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batch_batches[i])

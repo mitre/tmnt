@@ -15,15 +15,13 @@ found in the ``bin/`` directory.  Using the example data provided (20 news corpu
 a model as follows::
 
   mkdir _experiments
-  mkdir _model_dir
 
   python bin/train_model.py --tr_vec_file ./data/train.vec \
-  --tst_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
-  --save_dir ./_experiments/ --model_dir ./_model_dir/ \
-  --config ./examples/train_model/model.config 
+  --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
+  --save_dir ./_exps/ --config ./examples/train_model/model.config 
 
 In general, TMNT assumes a test/validation corpus is available to determine the validation perplexity
-and coherence, specified with the ``test_vec_file`` option.  If a validation file is not available/needed
+and coherence, specified with the ``val_vec_file`` option.  If a validation file is not available/needed
 it may be ommitted in which case no evaluation is performed.  See the :ref:`training-label`.
 
 
@@ -47,16 +45,16 @@ size of 2000.  Note that this script uses the built in pre-processing which toke
 An example invocation::
 
   python bin/prepare_corpus.py --vocab_size 2000 --file_pat *.json --tr_input_dir ./train-json-files/ \
-  --tst_input_dir ./test-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --tst_vec_file ./test.2k.vec 
+  --val_input_dir ./val-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --val_vec_file ./val.2k.vec 
 
 
-The plain text input format assumes directories for training and test sets, where each file is a separate plain text document. This should be
+The plain text input format assumes directories for training, validation and test sets, where each file is a separate plain text document. This should be
 invoked by adding the ``--txt_mode`` option::
 
 
   python bin/prepare_corpus.py --vocab_size 2000 --file_pat *.txt --tr_input_dir ./train-txt-files/ \
-  --tst_input_dir ./test-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  \
-  --tst_vec_file ./test.2k.vec --txt_mode
+  --val_input_dir ./val-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  \
+  --val_vec_file ./val.2k.vec --txt_mode
    
 
 TMNT does its own rudimentary pre-processing of the text and includes a built-in stop-word list for English

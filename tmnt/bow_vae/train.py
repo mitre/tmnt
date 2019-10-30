@@ -170,7 +170,7 @@ class BowVAEWorker(Worker):
     def set_heldout_data_as_test(self):
         """Load in the heldout test data for final model evaluation
         """
-        tst_mat, total_tst_words, tst_labels = collect_sparse_test(self.c_args.heldout_vec_file, self.vocabulary,
+        tst_mat, total_tst_words, tst_labels = collect_sparse_test(self.c_args.tst_vec_file, self.vocabulary,
                                                                    scalar_labels=self.c_args.scalar_covars, encoding=self.c_args.str_encoding)
         self.data_test_csr = tst_mat
         self.test_labels   = tst_labels
@@ -439,9 +439,9 @@ class BowVAEWorker(Worker):
         npmis = []
         perplexities = []
         redundancies = []
-        if self.c_args.heldout_vec_file:
-            self.set_heldout_data_as_test()
         if self.c_args.tst_vec_file:
+            self.set_heldout_data_as_test()
+        if self.c_args.val_vec_file:
             for i in range(ntimes):
                 seed_rng(rng_seed+i)
                 model, results = self._train_model(config, budget)
@@ -453,7 +453,7 @@ class BowVAEWorker(Worker):
                     best_loss = loss
                     best_model = model
             logging.info("******************************************")
-            test_type = "HELDOUT" if self.c_args.heldout_vec_file else "VALIDATATION"
+            test_type = "HELDOUT" if self.c_args.tst_vec_file else "VALIDATATION"
             if ntimes > 1:
                 logging.info("Final {} NPMI       ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(npmis), statistics.stdev(npmis)))
                 logging.info("Final {} Perplexity ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(perplexities), statistics.stdev(perplexities)))
@@ -519,9 +519,9 @@ def get_worker(args, budget, id_str, ns_port):
     logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
     vocab, tr_csr_mat, total_tr_words, tr_labels, label_map = \
         collect_sparse_data(args.tr_vec_file, args.vocab_file, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
-    if args.tst_vec_file:
+    if args.val_vec_file:
         tst_csr_mat, total_tst_words, tst_labels = \
-            collect_sparse_test(args.tst_vec_file, vocab, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
+            collect_sparse_test(args.val_vec_file, vocab, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
     else:
         tst_csr_mat, total_tst_words, tst_labels = None, None, None
     ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))

@@ -16,8 +16,8 @@ Argument             Type           Description
 ===================  ===========    =================================================================
 config               string/path    Configuration file (see :ref:`config-options-label`)
 tr_vec_file          string/path    Vector file containing the training set
-tst_vec_file         stirng/path    Vector file containing the validation/test set
-heldout_vec_file     string/path    Vector file containing the held out test set
+val_vec_file         stirng/path    Vector file containing the validation set
+test_vec_file        string/path    Vector file containing the held out test set
 vocab_file           string/path    Vocabulary file
 save_dir             string/path    Directory for log files, model selection configs, and saved model parameters
 model_dir            string/path    Override directory for model outputs (default location is a ``MODEL`` sub-directory within the argument to ``save_dir``
@@ -34,8 +34,8 @@ topic_seed_file      string/path    JSON file that provides seed terms for topic
 ++++++++++++++++++++++
 
 The ``select_model.py`` script implements the full model selection. The hyper-parameter selection
-is carried out over the validation/test data (provided by ``--tst_vec_file``). It is recommended
-to compute the final held out perplexity and coherence on a separate held out dataset using ``--heldout_vec_file``.
+is carried out over the validation data (provided by ``--val_vec_file``). It is recommended
+to compute the final held out perplexity and coherence on a separate held out dataset using ``--tst_vec_file``.
 
 The arguments for ``select_model.py`` overlap to a large degree with the ``train_model.py`` script.
 Below are the additional arguments used by ``select_model.py``.

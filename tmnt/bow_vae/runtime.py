@@ -8,6 +8,7 @@ import mxnet as mx
 import numpy as np
 import gluonnlp as nlp
 import io
+import os
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
 from tmnt.preprocess.tokenizer import BasicTokenizer
@@ -16,8 +17,12 @@ from multiprocessing import Pool
 
 class BowNTMInference(object):
 
-    def __init__(self, param_file, specs_file, vocab_file, ctx=mx.cpu()):
+    def __init__(self, param_file=None, specs_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
         self.max_batch_size = 2
+        if model_dir is not None:
+            param_file = os.path.join(model_dir,'model.params')
+            vocab_file = os.path.join(model_dir,'vocab.json')
+            specs_file = os.path.join(model_dir,'model.config')
         with open(specs_file) as f:
             specs = json.loads(f.read())
         with open(vocab_file) as f:
