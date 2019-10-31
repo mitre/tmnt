@@ -5,6 +5,7 @@ import argparse
 import funcy
 import json
 from pathlib import Path
+import warnings
 
 from tmnt.bow_vae.runtime import BowNTMInference
 
@@ -19,7 +20,11 @@ parser.add_argument('--str_encoding', type=str, help='String/file encoding', def
 
 args = parser.parse_args()
 
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+
 if __name__ == '__main__':
+    os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
     param_file, config_file, vocab_file = \
         args.model_dir / "model.params", args.model_dir / "model.config", args.model_dir / "vocab.json"
     infer = BowNTMInference(param_file, config_file, vocab_file)
