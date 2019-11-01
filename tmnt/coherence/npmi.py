@@ -7,6 +7,7 @@ from math import log10
 from collections import Counter
 
 import numpy as np
+import mxnet as mx
 
 from tmnt.utils.ngram_helpers import BigramReader
 from itertools import combinations
@@ -51,15 +52,24 @@ class EvaluateNPMI(object):
         return total_npmi / len(self.top_k_words_per_topic)
 
     def evaluate_csr_mat(self, csr_mat):
-        mat = csr_mat.asnumpy() ## converts to dense matrix - could take up a lot of memory for large test sets
+        is_sparse = isinstance(csr_mat, mx.nd.sparse.CSRNDArray)
+        if is_sparse:
+            mat = csr_mat.asscipy()
+        else:
+            mat = csr_mat.asnumpy()
         n_docs = mat.shape[0]
         total_npmi = 0
         for i, words_per_topic in enumerate(self.top_k_words_per_topic):
             total_topic_npmi = 0
             n_topics = len(words_per_topic)
             for (w1, w2) in combinations(sorted(words_per_topic), 2):
-                occur_1 = np.array(mat[:, w1] > 0, dtype='int')
-                occur_2 = np.array(mat[:, w2] > 0, dtype='int')
+                o_1 = mat[:, w1] > 0
+                o_2 = mat[:, w2] > 0
+                if is_sparse:
+                    o_1 = o_1.toarray().squeeze()
+                    o_2 = o_2.toarray().squeeze()
+                occur_1 = np.array(o_1, dtype='int')
+                occur_2 = np.array(o_2, dtype='int')
                 unigram_1 = occur_1.sum()
                 unigram_2 = occur_2.sum()
                 bigram_cnt = np.sum(occur_1 * occur_2)

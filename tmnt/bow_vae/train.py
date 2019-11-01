@@ -40,6 +40,8 @@ from hpbandster.optimizers import BOHB as BOHB
 
 __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
+MAX_DESIGN_MATRIX = 250000000 
+
 def usedPort(port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     result = True
@@ -353,8 +355,15 @@ class BowVAEWorker(Worker):
         train_dataloader = \
             DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size, last_batch_handle='discard', shuffle=True))
         if self.data_test_csr is not None:
-            test_dataloader = \
-                DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='pad', shuffle=False))
+            test_size = self.data_test_csr.shape[0] * self.data_test_csr.shape[1]
+            if test_size < MAX_DESIGN_MATRIX:
+                self.data_test_csr = self.data_test_csr.tostype('default')
+                test_dataloader = \
+                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='pad', shuffle=False))
+            else:
+                logging.info("Warning: Test dataset is very large. Using sparse representation which may result in approximation to Perplexity.")
+                test_dataloader = \
+                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='discard', shuffle=False))
             last_batch_size = self.data_test_csr.shape[0] % batch_size
             num_test_batches = self.data_test_csr.shape[0] // batch_size
             if last_batch_size > 0:

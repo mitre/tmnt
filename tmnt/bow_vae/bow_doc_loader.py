@@ -211,7 +211,7 @@ def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, scalar_l
     
 
 def collect_sparse_test(sp_vec_file, vocab, scalar_labels=False, label_map=None, encoding='utf-8'):
-    keep_sp_sparse = False
+    keep_sp_sparse = True
     tst_mat_sp, total_tst, tst_labels_li, _ = \
         file_to_sp_vec(sp_vec_file, len(vocab), label_map=label_map, scalar_labels=scalar_labels, encoding=encoding)
     tst_mat = tst_mat_sp if keep_sp_sparse else tst_mat_sp.tostype('default')
