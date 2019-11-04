@@ -32,13 +32,12 @@ file that specifies the hyperparameter space.  See the example here::
   ## Learnable hyper-parameters 
   ---
     lr: {range: [1e-6, 1e-2]}
-    latent_distribution: [vmf, gaussian, logistic_gaussian]
+    latent_distribution: [vmf]
     optimizer: [adam]
     n_latent: {i_range: [20, 40], step: 5}
     enc_hidden_dim: {i_range: [50, 400], step: 50}
     kappa: {range: [1.0, 100.0]}   ## conditional on latent_distribution==vmf
-    target_sparsity: {range: [0.0, 0.2]}
-    embedding_source: [glove:glove.42B.300d, glove:glove.6B.200d, fasttext:wiki.en]
+    embedding_source: [glove:glove.42B.300d, glove:glove.6B.200d, fasttext:wiki.en, random]
     fixed_embedding: [True, False]
     embedding_size: {i_range: [50, 400], step: 50}
 
