@@ -177,12 +177,13 @@ def train_embeddings(args, exp_folder):
         f.write(js_vocab)
     embedding.embedding.save_parameters(os.path.join(exp_folder, 'embedding.params'))
     if args.model_export:
+        idx_to_vec = embedding.embedding.weight.data()
         with io.open(os.path.join(exp_folder, args.model_export), 'w') as f:
-            for i in range(len(embedding.idx_to_token)):
-                f.write(embedding.idx_to_token[i])
-                for j in range(len(embedding.idx_to_vec[i])):
+            for i in range(len(vocab.idx_to_token)):
+                f.write(vocab.idx_to_token[i])
+                for j in range(len(idx_to_vec[i])):
                     f.write(' ')
-                    f.write(str(embedding.idx_to_vec[i][j]))
+                    f.write(str(idx_to_vec[i][j]))
                 f.write('\n')
 
     
