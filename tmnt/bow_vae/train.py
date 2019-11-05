@@ -405,7 +405,7 @@ class BowVAEWorker(Worker):
             except AttributeError:
                 coherence_coefficient = 1.0
             res = {
-                'loss': 1.0 - (npmi * coherence_coefficient) + redundancy + (perplexity / 1000),
+                'loss': 1.0 - (npmi * coherence_coefficient) + (redundancy * coherence_coefficient) + (perplexity / 1000),
                 'info': {
                     'test_perplexity': perplexity,
                     'redundancy': redundancy,
