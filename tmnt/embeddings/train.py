@@ -183,7 +183,7 @@ def train_embeddings(args, exp_folder):
                 f.write(vocab.idx_to_token[i])
                 for j in range(len(idx_to_vec[i])):
                     f.write(' ')
-                    f.write(str(idx_to_vec[i][j]))
+                    f.write(str(idx_to_vec[i][j].asscalar()))
                 f.write('\n')
 
     
