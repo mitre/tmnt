@@ -172,18 +172,19 @@ def train_embeddings(args, exp_folder):
                 log_start_time = time.time()
                 log_avg_loss = 0
                 log_wc = 0
-
-    # Evaluate
-    #with print_time('mx.nd.waitall()'):
-    #    mx.nd.waitall()
-    #with print_time('evaluate'):
-    #    evaluate(args, embedding, vocab, num_update,
-    #             eval_analogy=not args.no_eval_analogy)
-
     with io.open(os.path.join(exp_folder, 'vocab.json'), 'w') as f:
         js_vocab = vocab.to_json()
         f.write(js_vocab)
     embedding.embedding.save_parameters(os.path.join(exp_folder, 'embedding.params'))
+    if args.model_export:
+        with io.open(os.path.join(exp_folder, args.model_export), 'w') as f:
+            for i in range(len(embedding.idx_to_token)):
+                f.write(embedding.idx_to_token[i])
+                for j in range(len(embedding.idx_to_vec[i])):
+                    f.write(' ')
+                    f.write(str(embedding.idx_to_vec[i][j]))
+                f.write('\n')
+
     
 
 

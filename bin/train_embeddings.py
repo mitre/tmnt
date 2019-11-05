@@ -14,7 +14,7 @@ def parse_args():
 
     # Data options
     group = parser.add_argument_group('Data arguments')
-    group.add_argument('--data_type', type=str, default='twitter', help='Corpus type (twitter, news, etc.) - triggers appropriate pre-processing')
+    group.add_argument('--data_type', type=str, default='custom', help='Corpus type (twitter, news, etc.) - triggers appropriate pre-processing')
     group.add_argument('--data_root', type=str, default='',
                        help='Training dataset.')
     group.add_argument('--file_pattern', type=str, default='*.txt', help='File regex pattern to select files in corpus (relative to data_root)')
@@ -64,6 +64,7 @@ def parse_args():
         '--max-vocab-size', type=int,
         help='Limit the number of words considered. '
         'OOV words will be ignored.')
+    group.add_argument('--model_export', type=str, default=None, help='Export model in word2vec format')
 
     # Optimization options
     group = parser.add_argument_group('Optimization arguments')
