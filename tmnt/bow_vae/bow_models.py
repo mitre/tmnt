@@ -14,7 +14,6 @@ from tmnt.distributions import GaussianUnitVarLatentDistribution
 __all__ = ['BowNTM', 'MetaDataBowNTM']
 
 
-
 class BowNTM(HybridBlock):
     """
     Parameters
@@ -266,7 +265,6 @@ class CovariateModel(HybridBlock):
             return score_C
             
 
-            
         
 class ContinuousCovariateModel(HybridBlock):
 

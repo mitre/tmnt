@@ -45,7 +45,8 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         kld = F.broadcast_to(kld_const, shape=(batch_size,))
         z_p = self._get_hypersphere_sample(F, mu_bn, batch_size, vmf_samples)
         z = self.post_sample_dr_o(z_p)
-        return F.softmax(z), kld
+        z_r = F.sigmoid(z) ## or F.softmax(z)?
+        return z_r, kld
 
 
     """
@@ -74,6 +75,7 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         return w_f
     
     def _get_hypersphere_sample(self, F, mu, batch_size, vmf_samples):
+        mu = F.broadcast_div(mu, F.norm(mu, axis=1, keepdims=True))
         sw = self._get_weight_from_cache(F, batch_size, vmf_samples)
         #sw = self._get_weight_batch(F, batch_size)
         sw = F.expand_dims(sw, axis=1)
@@ -149,9 +151,10 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         rv         = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent, 1), ctx=self.model_ctx)
         rescaled_1 = F.squeeze(F.linalg.gemm2(mu_1, rv), axis=2)
         rescaled   = F.broadcast_to(rescaled_1, shape=(batch_size, self.n_latent))
-        proj_mu_v  = F.broadcast_mul(mu, rescaled)        
+        proj_mu_v  = F.broadcast_mul(mu, rescaled)        # shape =  (batch_size, n_latent)
         o_vec      = rv.squeeze() - proj_mu_v
         o_norm     = F.norm(o_vec, axis=1, keepdims=True)
+        #print("Shape mu_1 = {}, shape rv = {}, shape rescaled_1 = {}".format(mu_1.shape, rv.shape, rescaled_1.shape))                
         return F.broadcast_div(o_vec, o_norm)
 
 
