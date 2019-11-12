@@ -32,5 +32,7 @@ class GaussianLatentDistribution(LatentDistribution):
         lv_bn = self.lv_bn(lv)
         z = self._get_gaussian_sample(F, mu_bn, lv_bn, batch_size)
         KL = self._get_kl_term(F, mu_bn, lv_bn)
-        return self.post_sample_dr_o(z), KL
+        z = self.post_sample_dr_o(z)
+        #z = F.relu(z)
+        return z, KL
 
