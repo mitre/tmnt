@@ -116,5 +116,10 @@ class TMNTConfig(object):
             cond_kappa = CS.EqualsCondition(kappa_c, latent_distribution_c, 'vmf')
             cs.add_hyperparameters([kappa_c])
             cs.add_condition(cond_kappa) # only use kappa_c if condition is met
+        elif 'logistic_gaussian' in self.cd['latent_distribution']:
+            alpha_c = self._get_range_uniform('alpha', cd)
+            cond_alpha = CS.EqualsCondition(alpha_c, latent_distribution_c, 'logistic_gaussian')
+            cs.add_hyperparameters([alpha_c])
+            cs.add_condition(cond_alpha) # only use alpha_c if condition is met
 
         return cs

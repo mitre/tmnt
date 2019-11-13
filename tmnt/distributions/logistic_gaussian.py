@@ -13,9 +13,9 @@ __all__ = ['LogisticGaussianLatentDistribution']
 
 class LogisticGaussianLatentDistribution(LatentDistribution):
 
-    def __init__(self, n_latent, ctx, dr=0.2):
+    def __init__(self, n_latent, ctx, dr=0.2, alpha=1.0):
         super(LogisticGaussianLatentDistribution, self).__init__(n_latent, ctx)
-        self.alpha = 1.0
+        self.alpha = alpha
 
         prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
         self.prior_var = mx.nd.array([prior_var], ctx=ctx)

@@ -26,7 +26,7 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, target_sparsity = 0.0, batch_size=None, wd_freqs=None,
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None, wd_freqs=None,
                  seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
@@ -51,7 +51,7 @@ class BowNTM(HybridBlock):
             self.encoder = gluon.nn.Dense(in_units=(self.embedding_size + n_covars),
                                           units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
-                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx)
+                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, alpha=alpha)
             elif latent_distrib == 'vmf':
                 self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
@@ -184,9 +184,9 @@ class BowNTM(HybridBlock):
 class MetaDataBowNTM(BowNTM):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
-                                             coherence_reg_penalty, kappa, 0.0, batch_size, wd_freqs, seed_mat, n_covars, ctx)
+                                             coherence_reg_penalty, kappa, alpha, 0.0, batch_size, wd_freqs, seed_mat, n_covars, ctx)
         self.n_covars = n_covars
         self.label_map = l_map
         with self.name_scope():
