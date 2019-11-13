@@ -376,7 +376,7 @@ class BowVAEWorker(Worker):
 
         training_epochs = (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
 
-        for epoch in range(int(training_epochs)):
+        for epoch in range(math.ceil(training_epochs)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
             for i, (data, labels) in enumerate(train_dataloader):
