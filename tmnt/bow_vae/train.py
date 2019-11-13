@@ -80,7 +80,10 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
         else:
             total_rec_loss += rec_loss.sum().asscalar()
             total_kl_loss += kl_loss.sum().asscalar()
-    perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
+    if ((total_rec_loss + total_kl_loss) / total_words) < 709.0:
+        perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
+    else:
+        perplexity = 1e300
     logging.info("TEST/VALIDATION Perplexity = {} [ Rec Loss = {} + KL loss = {} / Total test words = {}]".
                  format(perplexity, total_rec_loss, total_kl_loss, total_words))
     return perplexity
