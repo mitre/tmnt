@@ -64,7 +64,6 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
 def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words, args, ctx=mx.cpu()):
     total_rec_loss = 0
     total_kl_loss  = 0
-    #logging.info("Evaluation over {} validation/test batches".format(len(data_loader)))
     batch_size = 0
     for i, (data,labels) in enumerate(data_loader):
         if labels is None:            
@@ -375,7 +374,9 @@ class BowVAEWorker(Worker):
             last_batch_size = 0
             test_array, test_dataloader = None, None
 
-        for epoch in range(int(budget)):
+        training_epochs = (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
+
+        for epoch in range(int(training_epochs)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
             for i, (data, labels) in enumerate(train_dataloader):
