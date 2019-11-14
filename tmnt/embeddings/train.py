@@ -52,21 +52,7 @@ def train_embeddings(args, exp_folder):
 
 
     data = CustomDataSet(args.data_root,args.file_pattern, '<bos>', '<eos>', skip_empty=True)
-    data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size)
-
-    if pt_embedding:
-        pt_embedding = nlp.embedding.TokenEmbedding(allow_extend=True, idx_to_token=pt_embedding.idx_to_token, idx_to_vec=pt_embedding.idx_to_vec)
-        for t in vocab.token_to_idx:
-            if pt_embedding.token_to_idx[t] == 0:  ## means it's not in the pre-embedding vocab
-                pt_embedding[t] = mx.random.normal(loc=0.0, scale=0.1, shape=em_size)
-        n_idx_to_counts = [0 for i in pt_embedding.idx_to_token]
-        n_counter = nlp.data.Counter(pt_embedding.idx_to_token)
-        for i,cnt in idx_to_counts:
-            t = vocab.idx_to_token[i]
-            ni = pt_embedding.token_to_idx[t]
-            n_idx_to_counts[ni] += cnt
-        vocab = nlp.Vocab(n_counter)
-        idx_to_counts = n_idx_to_counts
+    data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size, pre_embedding=pt_embedding)
 
     logging.info('Data pre-processing complete.  Data transform beginning...')
 
