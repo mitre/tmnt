@@ -20,9 +20,9 @@ from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 from collections import defaultdict
 
 
-def trim_counter_large_tokens(counter, size=20):
+def trim_counter_large_tokens(counter, size=30):
     ## remove long tokens > 20
-    big_tokens = [t for t,_ in counter.items() if len(t) > 20]
+    big_tokens = [t for t,_ in counter.items() if len(t) > size]
     for t in big_tokens:
         del counter[t]
     return counter
@@ -55,7 +55,7 @@ def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
 
     """
     counter = nlp.data.count_tokens(itertools.chain.from_iterable(data))
-    counter = trim_counter_large_tokens(counter, 20)    
+    counter = trim_counter_large_tokens(counter, 30)    
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                           bos_token=None, eos_token=None, min_freq=min_freq,
                           max_size=max_vocab_size)
@@ -78,7 +78,7 @@ def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None):
         counter = nlp.data.count_tokens(itertools.chain.from_iterable(data), counter=counter)
         if i % 100 == 0:
             logging.info("{} Files pre-processed".format(i))
-    counter = trim_counter_large_tokens(counter, 20)
+    counter = trim_counter_large_tokens(counter, 30)
     vocab = nlp.Vocab(counter, unknown_token=None, padding_token=None,
                           bos_token=None, eos_token=None, min_freq=min_freq,
                           max_size=max_vocab_size)

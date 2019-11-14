@@ -50,16 +50,22 @@ def train_embeddings(args, exp_folder):
         em_size = args.emsize
     logging.info("Embedding size: {}".format(em_size))
 
-    if args.data_type == 'custom':
-        data = CustomDataSet(args.data_root,args.file_pattern, '<bos>', '<eos>', skip_empty=True)
-        data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size)
-    elif args.data_type == 'gbw':
-        data = nlp.data.corpora.google_billion_word.GBWStream()
-        data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size)
-    elif args.data_type == 'text8':
-        data = nlp.data.Text8(segment='train')
-        data, vocab, idx_to_counts = preprocess_dataset(
-            data, max_vocab_size=args.max_vocab_size)
+
+    data = CustomDataSet(args.data_root,args.file_pattern, '<bos>', '<eos>', skip_empty=True)
+    data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size)
+
+    if pt_embedding:
+        for t in vocab.token_to_idx:
+            if pt_embedding.token_to_idx[t] == 0:  ## means it's not in the pre-embedding vocab
+                pt_embedding[t] = mx.random.normal(loc=0.0, scale=0.1, shape=em_size)
+        n_idx_to_counts = [0 for i in pt_embedding.idx_to_token]
+        n_counter = nlp.data.Counter(pt_embedding.idx_to_token)
+        for i,cnt in idx_to_counts:
+            t = vocab.idx_to_token[i]
+            ni = pt_embedding.token_to_idx[t]
+            n_idx_to_counts[ni] += cnt
+        vocab = nlp.Vocab(n_counter)
+        idx_to_counts = n_idx_to_counts
 
     logging.info('Data pre-processing complete.  Data transform beginning...')
 
@@ -78,7 +84,6 @@ def train_embeddings(args, exp_folder):
 
     num_tokens = float(sum(idx_to_counts))
     
-
     model = CBOW if args.model.lower() == 'cbow' else SG
     embedding = model(token_to_idx=vocab.token_to_idx, output_dim=em_size,
                       batch_size=args.batch_size, num_negatives=args.negative,
@@ -187,8 +192,6 @@ def train_embeddings(args, exp_folder):
                 f.write('\n')
 
     
-
-
 def norm_vecs_by_row(x):
     return x / (mx.nd.sum(x * x, axis=1) + 1e-10).sqrt().reshape((-1, 1))
 

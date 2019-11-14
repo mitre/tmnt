@@ -18,11 +18,6 @@ def parse_args():
     group.add_argument('--data_root', type=str, default='',
                        help='Training dataset.')
     group.add_argument('--file_pattern', type=str, default='*.txt', help='File regex pattern to select files in corpus (relative to data_root)')
-    group.add_argument('--wiki-root', type=str, default='text8',
-                       help='Root under which preprocessed wiki dump.')
-    group.add_argument('--wiki-language', type=str, default='text8',
-                       help='Language of wiki dump.')
-    group.add_argument('--wiki-date', help='Date of wiki dump.')
 
     # Computation options
     group = parser.add_argument_group('Computation arguments')
