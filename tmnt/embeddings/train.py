@@ -55,6 +55,7 @@ def train_embeddings(args, exp_folder):
     data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size)
 
     if pt_embedding:
+        pt_embedding = nlp.embedding.TokenEmbedding(allow_extend=True, idx_to_token=pt_embedding.idx_to_token, idx_to_vec=pt_embedding.idx_to_vec)
         for t in vocab.token_to_idx:
             if pt_embedding.token_to_idx[t] == 0:  ## means it's not in the pre-embedding vocab
                 pt_embedding[t] = mx.random.normal(loc=0.0, scale=0.1, shape=em_size)
