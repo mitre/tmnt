@@ -17,8 +17,8 @@ Quick Start
 With a given configuration space (see details below), model selection is performed via the ``select_model.py`` script.
 Below is an example::
 
-  python bin/select_model.py --tr_vec_file ./data/train.2.vec \
-  --tst_vec_file ./data/test.2.vec --vocab_file ./data/train.2.vocab \
+  python bin/select_model.py --tr_vec_file ./data/train.vec \
+  --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
   --save_dir ./_experiments/ --model_dir ./_model_dir/ \
   --config_space ./examples/select_model/config.yaml --budget 27 \
   --iterations 60 --coherence_coefficient 4.0
