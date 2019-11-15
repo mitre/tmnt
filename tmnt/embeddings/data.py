@@ -71,7 +71,7 @@ def preprocess_dataset(data, min_freq=5, max_vocab_size=None):
 
 
 def preprocess_dataset_stream(stream, logging, min_freq=5, max_vocab_size=None, pre_embedding=None):
-    if pre_vocab:
+    if pre_embedding:
         counter = nlp.data.Counter(pre_embedding.idx_to_token)
         ## increase counts so these terms aren't filtered out of the vocabulary
         for i in range(int(math.log2(min_freq * 2))):
