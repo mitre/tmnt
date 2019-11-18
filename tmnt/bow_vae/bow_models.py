@@ -80,6 +80,23 @@ class BowNTM(HybridBlock):
             bias_param.grad_req = 'null'
             self.out_bias = bias_param.data()
 
+    def get_top_k_terms(self, k):
+        """
+        Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
+        probability increases the most for a unit increase in a given topic score/probability
+        are those most associated with the topic.
+        """
+        z = mx.nd.ones(shape=(1, self.n_latent))
+        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent))
+        z.attach_grad()        
+        for i in range(self.vocab_size):
+            with mx.autograd.record():
+                y = self.decoder(z)
+                yi = y[0][i]
+            yi.backward()
+            jacobian[i] = z.grad
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)[:k,:]
+        return sorted_j
 
     def encode_data(self, data):
         """
@@ -155,7 +172,7 @@ class BowNTM(HybridBlock):
         #print("Shape entropies = {}".format(entropies_term.shape))        
         #print("Entropies term = {}".format(entropies_term[:20].asnumpy()))
         return (F.broadcast_add(cur_loss, entropies), entropies)
-        
+
 
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
@@ -215,10 +232,21 @@ class MetaDataBowNTM(BowNTM):
         cov_y = mx.nd.softmax(cov_dec_out, axis=1)
         return cov_y
 
-    def get_top_k_terms_with_covar(self, covar, topic_id):
-        cov_y = self.decode_to_covar_posteriors(covar, topic_id)
-        sorted_ids = cov_y.argsort(axis=1, is_ascend=False).squeeze()
-        return sorted_ids
+
+    def get_top_k_terms_with_covar(self, covar):
+        z_o = mx.nd.ones(shape=(1,self.n_topics))
+        jacobian = mx.nd.zeros(shape(self.vocab_size, self.n_latent))
+        for i in range(len(self.vocab_size)):
+            z_o.attach_grad()
+            with mx.autograd.record():
+                yy1 = self.decoder(z_o)
+                yy2 = self.cov_decoer(z_o, covar)
+                y = yy1 + yy2
+                y_i = y[0][i]
+            y_i.backward()
+            jacobian[i] = z_o.grad
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)[:k,:]
+        return sorted_j
             
 
     def hybrid_forward(self, F, data, covars, l1_pen_const=None):
@@ -265,7 +293,6 @@ class CovariateModel(HybridBlock):
             return score_C
             
 
-        
 class ContinuousCovariateModel(HybridBlock):
 
     def __init__(self, n_topics, n_scalars, vocab_size, total_layers = 1, ctx=mx.cpu()):

@@ -173,9 +173,9 @@ def train_embeddings(args, exp_folder):
         with io.open(os.path.join(exp_folder, args.model_export), 'w') as f:
             for i in range(len(vocab.idx_to_token)):
                 f.write(vocab.idx_to_token[i])
-                for j in range(len(idx_to_vec[i])):
-                    f.write(' ')
-                    f.write(str(idx_to_vec[i][j].asscalar()))
+                f.write(' ')
+                astr = np.array2string(idx_to_vec[i].asnumpy())[1:-1]
+                f.write(astr)
                 f.write('\n')
 
     
