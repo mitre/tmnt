@@ -20,6 +20,7 @@ parser.add_argument('--full_vocab_histogram', type=str, help='Optional output of
 parser.add_argument('--txt_mode', action='store_true', help='Assume txt file input (1 document per file)')
 parser.add_argument('--json_text_key', type=str, help='Key for json field containing document text (default is \'text\')', default='text')
 parser.add_argument('--json_label_key', type=str, help='Key for json field containing label (default is \'label\')', default='label')
+parser.add_argument('--json_add', action='store_true', help='Create a new JSON list file with vectors added as a field')
 parser.add_argument('--min_doc_length', type=int, help='Minimum document length (in tokens)', default=10)
 parser.add_argument('--custom_stop_words', type=str, help='Custom stop-word file (one word per line)', default=None)
 parser.add_argument('--label_prefix_chars', type=int, help='Use first N characters of label', default=-1)
@@ -34,6 +35,7 @@ if __name__ == '__main__':
         TextVectorizer(min_doc_size=args.min_doc_length, encoding=args.str_encoding) if args.txt_mode \
         else JsonVectorizer(text_key=args.json_text_key, label_key=args.json_label_key,
                             min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars,
+                            json_rewrite=args.json_add,
                             encoding=args.str_encoding)
     vocab = vectorizer.get_sparse_vecs(args.tr_vec_file, args.vocab_file, args.tr_input_dir,
                                    args.vocab_size, full_histogram_file=args.full_vocab_histogram, pat=args.file_pat)

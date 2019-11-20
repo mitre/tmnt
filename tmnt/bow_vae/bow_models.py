@@ -95,7 +95,7 @@ class BowNTM(HybridBlock):
                 yi = y[0][i]
             yi.backward()
             jacobian[i] = z.grad
-        sorted_j = jacobian.argsort(axis=0, is_ascend=False)[:k,:]
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j
 
     def encode_data(self, data):
@@ -200,7 +200,8 @@ class BowNTM(HybridBlock):
 
 class MetaDataBowNTM(BowNTM):
 
-    def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
+    def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
+                 fixed_embedding=False, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, wd_freqs, seed_mat, n_covars, ctx)
@@ -233,20 +234,25 @@ class MetaDataBowNTM(BowNTM):
         return cov_y
 
 
-    def get_top_k_terms_with_covar(self, covar):
-        z_o = mx.nd.ones(shape=(1,self.n_topics))
-        jacobian = mx.nd.zeros(shape(self.vocab_size, self.n_latent))
-        for i in range(len(self.vocab_size)):
+    def get_top_k_terms_with_covar(self, k, covar):
+        z_o = mx.nd.ones(shape=(1,self.n_latent))
+        cv = mx.nd.expand_dims(covar, axis=0)
+        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent))
+        for i in range(self.vocab_size):
             z_o.attach_grad()
             with mx.autograd.record():
                 yy1 = self.decoder(z_o)
-                yy2 = self.cov_decoer(z_o, covar)
+                yy2 = self.cov_decoder(z_o, cv)
                 y = yy1 + yy2
                 y_i = y[0][i]
             y_i.backward()
             jacobian[i] = z_o.grad
-        sorted_j = jacobian.argsort(axis=0, is_ascend=False)[:k,:]
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j
+    
+
+    def get_top_k_terms(self, k):
+        return self.get_top_k_terms_with_covar(k, mx.nd.array([0.5]))
             
 
     def hybrid_forward(self, F, data, covars, l1_pen_const=None):

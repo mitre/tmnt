@@ -5,6 +5,7 @@ Copyright (c) 2019 The MITRE Corporation.
 
 
 import io
+import os
 import json
 import gluonnlp as nlp
 import glob
@@ -25,6 +26,7 @@ class Vectorizer(object):
     def __init__(self, custom_stop_word_file=None, encoding='utf-8'):
         self.encoding = encoding
         self.tokenizer = BasicTokenizer(use_stop_words=True)
+        self.json_rewrite = False
 
     def get_counter_dir_parallel(self, data_dir, pat):
         raise NotImplementedError('Vectorizer must be instantiated as TextVectorizer or JsonVectorizer')
@@ -50,7 +52,8 @@ class Vectorizer(object):
         return sp_vecs
 
 
-    def get_sparse_vecs(self, sp_out_file, vocab_out_file, data_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None, pat='*.json'):
+    def get_sparse_vecs(self, sp_out_file, vocab_out_file, data_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None,
+                        pat='*.json'):
         files = glob.glob(data_dir + '/' + pat)
         if i_vocab is None:
             counter = self.get_counter_dir_parallel(data_dir, pat)
@@ -68,16 +71,17 @@ class Vectorizer(object):
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
         sp_list = list(sp_vecs)
-        with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
-            for block in sp_list:
-                for (v,l) in block:
-                    fp.write(str(l))  
-                    for (i,c) in v:
-                        fp.write(' ')
-                        fp.write(str(i))
-                        fp.write(':')
-                        fp.write(str(c))
-                    fp.write('\n')
+        if not self.json_rewrite:
+            with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
+                for block in sp_list:
+                    for (v,l) in block:
+                        fp.write(str(l))  
+                        for (i,c) in v:
+                            fp.write(' ')
+                            fp.write(str(i))
+                            fp.write(':')
+                            fp.write(str(c))
+                        fp.write('\n')
         if i_vocab is None: ## print out vocab if we had to create it
             with io.open(vocab_out_file, 'w', encoding=self.encoding) as fp:
                 for i in range(len(vocab.idx_to_token)):
@@ -98,13 +102,14 @@ class Vectorizer(object):
 class JsonVectorizer(Vectorizer):
 
     def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6, label_prefix=-1,
-                 encoding='utf-8'):
+                 json_rewrite=False, encoding='utf-8'):
         super(JsonVectorizer, self).__init__(custom_stop_word_file, encoding=encoding)
         self.encoding = encoding
         self.text_key = text_key
         self.label_key = label_key
         self.label_prefix = label_prefix
         self.min_doc_size = min_doc_size
+        self.json_rewrite = json_rewrite
 
     def get_counter_file(self, json_file):
         counter = None
@@ -135,7 +140,32 @@ class JsonVectorizer(Vectorizer):
             counters = map(self.get_counter_file, files)
         return sum(counters, Counter())
 
-    def vectorize_fn(self, file_and_vocab):
+    def vectorize_fn_to_json(self, file_and_vocab):
+        json_file, vocab = file_and_vocab
+        json_path, file_name = os.path.split(json_file)
+        n_json_file = os.path.join(json_path, "vec_"+file_name)
+        with io.open(json_file, 'r', encoding=self.encoding) as fp:
+            with io.open(n_json_file, 'w', encoding=self.encoding) as op:
+                for l in fp:
+                    js = json.loads(l)
+                    toks = self.tokenizer.tokenize(js[self.text_key])
+                    try:
+                        lstr = js[self.label_key]
+                        if self.label_prefix > 0:
+                            label_str = lstr[:self.label_prefix]
+                        else:
+                            label_str = lstr
+                    except KeyError:
+                        label_str = "<unk>"
+                    tok_ids = [vocab[token] for token in toks if token in vocab]
+                    if (len(tok_ids) >= self.min_doc_size):
+                        cnts_items = nlp.data.count_tokens(tok_ids).items()
+                        js['sp_vec'] = [[k,v] for k,v in cnts_items]
+                        op.write(json.dumps(js))
+                        op.write('\n')
+                        
+
+    def vectorize_fn_std(self, file_and_vocab):
         json_file, vocab = file_and_vocab
         sp_vecs = []
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
@@ -155,6 +185,12 @@ class JsonVectorizer(Vectorizer):
                     cnts = nlp.data.count_tokens(tok_ids)
                     sp_vecs.append((sorted(cnts.items()), label_str))
         return sp_vecs
+
+    def vectorize_fn(self, file_and_vocab):
+        if self.json_rewrite:
+            return self.vectorize_fn_to_json(file_and_vocab)
+        else:
+            return self.vectorize_fn_std(file_and_vocab)
 
 
 class TextVectorizer(Vectorizer):

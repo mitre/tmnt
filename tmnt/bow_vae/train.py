@@ -94,9 +94,13 @@ def compute_coherence(model, k, test_data, log_terms=False, covariate_interactio
     if covariate_interactions:
         logging.info("Rendering interactions not supported yet")
     num_topics = model.n_latent
-    sorted_ids = w.argsort(axis=0, is_ascend=False)
+    #sorted_ids = w.argsort(axis=0, is_ascend=False)
+    sorted_ids = model.get_top_k_terms(k)
     num_topics = min(num_topics, sorted_ids.shape[-1])
     top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
+    ##
+    ## Get top K words for each co-variate value
+    ## Compute NPMI only over the test subset with that value separately
     npmi_eval = EvaluateNPMI(top_k_words_per_topic)
     npmi = npmi_eval.evaluate_csr_mat(test_data)
     unique_term_ids = set()
@@ -140,8 +144,6 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
         term_str = ' '.join(top_k)
         logging.info("Topic {}: {}".format(str(t), term_str))
 
-
-#def log_top_k_words_per_topic_
 
 
 class BowVAEWorker(Worker):
@@ -202,7 +204,12 @@ class BowVAEWorker(Worker):
                 vocab = copy.deepcopy(self.vocab_cache[embedding_source])
             else:
                 e_type, e_name = tuple(embedding_source.split(':'))
-                pt_embedding = nlp.embedding.create(e_type, source=e_name)
+                if e_type == 'file':
+                    if not os.path.exists(e_name):
+                        raise Exception("Embedding file not found: {}".format(e_name))
+                    pt_embedding = nlp.embedding.TokenEmbedding.from_file(e_name)
+                else:
+                    pt_embedding = nlp.embedding.create(e_type, source=e_name)
                 vocab = copy.deepcopy(self.vocabulary) ## create a copy of the vocab to attach the vocab to 
                 vocab.set_embedding(pt_embedding)
                 self.vocab_cache[embedding_source] = copy.deepcopy(vocab) ## cache another copy so the pre-trained embedding is preserverd
@@ -311,8 +318,6 @@ class BowVAEWorker(Worker):
         """
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
-            if self.c_args.scalar_covars:
-                model.get_top_k_terms_with_covar(0.2, 0)
             npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'

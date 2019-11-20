@@ -37,7 +37,8 @@ class BowNTMInference(object):
             self.covar_model = True
             self.n_covars = specs['n_covars']
             self.label_map = specs['l_map']            
-            self.model = MetaDataBowNTM(self.label_map, self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
+            self.model = MetaDataBowNTM(self.label_map, self.n_covars,
+                                        self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
         else:
             self.covar_model = False
             self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
