@@ -20,6 +20,7 @@ from tmnt.preprocess import BasicTokenizer
 
 __all__ = ['JsonVectorizer', 'TextVectorizer']
 
+lock = threading.RLock()
 
 class Vectorizer(object):
 
@@ -51,6 +52,26 @@ class Vectorizer(object):
             sp_vecs.append(self.vectorize_fn(files[i]))
         return sp_vecs
 
+    
+    def direct_out_vec_fn(self, name, files, sp_out_file):
+        global lock
+        for i in atpbar(range(len(files)), name=name):
+            vs = self.vectorize_fn(files[i])
+            lock.acquire()
+            try:
+                with io.open(sp_out_file, 'a+') as out_stream:
+                    for (v,l) in vs:
+                        out_stream.write(str(l))
+                        for (i,c) in v:
+                            out_stream.write(' ')
+                            out_stream.write(str(i))
+                            out_stream.write(':')
+                            out_stream.write(str(c))
+                        out_stream.write('\n')
+            finally:
+                lock.release()
+        return None
+        
 
     def get_sparse_vecs(self, sp_out_file, vocab_out_file, data_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None,
                         pat='*.json'):
@@ -61,27 +82,30 @@ class Vectorizer(object):
         else:
             vocab = i_vocab
         files_and_vocab = [(f,vocab) for f in files]
+        
         if len(files_and_vocab) > 2:
             file_batches = list(self.chunks(files_and_vocab, max(1, len(files_and_vocab) // cpu_count())))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
-                    mcore.run(self.task_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i])
+                    mcore.run(self.direct_out_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i], sp_out_file)
+                    #mcore.run(self.task_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i])
                 sp_vecs = mcore.returns()
-            sp_vecs = [ item for sl in sp_vecs for item in sl ]
+            #sp_vecs = [ item for sl in sp_vecs for item in sl ]
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
-        sp_list = list(sp_vecs)
-        if not self.json_rewrite:
-            with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
-                for block in sp_list:
-                    for (v,l) in block:
-                        fp.write(str(l))  
-                        for (i,c) in v:
-                            fp.write(' ')
-                            fp.write(str(i))
-                            fp.write(':')
-                            fp.write(str(c))
-                        fp.write('\n')
+        
+        #sp_list = list(sp_vecs)
+        #if not self.json_rewrite:
+        #    with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
+        #        for block in sp_list:
+        #            for (v,l) in block:
+        #                fp.write(str(l))  
+        #                for (i,c) in v:
+        #                    fp.write(' ')
+        #                    fp.write(str(i))
+        #                    fp.write(':')
+        #                    fp.write(str(c))
+        #                fp.write('\n')
         if i_vocab is None: ## print out vocab if we had to create it
             with io.open(vocab_out_file, 'w', encoding=self.encoding) as fp:
                 for i in range(len(vocab.idx_to_token)):

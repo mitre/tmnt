@@ -26,8 +26,8 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None, wd_freqs=None,
-                 seed_mat=None, n_covars=0, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None,
+                 wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
         self._orig_batch_size = batch_size
@@ -86,8 +86,8 @@ class BowNTM(HybridBlock):
         probability increases the most for a unit increase in a given topic score/probability
         are those most associated with the topic.
         """
-        z = mx.nd.ones(shape=(1, self.n_latent))
-        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent))
+        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
+        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
         z.attach_grad()        
         for i in range(self.vocab_size):
             with mx.autograd.record():
