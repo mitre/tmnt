@@ -202,14 +202,17 @@ class MetaDataBowNTM(BowNTM):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, wd_freqs=None,
+                 seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, wd_freqs, seed_mat, n_covars, ctx)
         self.n_covars = n_covars
         self.label_map = l_map
+        self.covar_net_layers = covar_net_layers
         with self.name_scope():
             if l_map is None:  
-                self.cov_decoder = ContinuousCovariateModel(self.n_latent, self.n_covars, self.vocab_size, total_layers=1, ctx=ctx)
+                self.cov_decoder = ContinuousCovariateModel(self.n_latent, self.n_covars, self.vocab_size,
+                                                            total_layers=covar_net_layers, ctx=ctx)
             else:
                 self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size,
                                                   batch_size=self.batch_size, interactions=True, ctx=ctx)
@@ -224,36 +227,26 @@ class MetaDataBowNTM(BowNTM):
         return self.latent_dist.mu_encoder(enc_out)
 
 
-    def decode_to_covar_posteriors(self, covar, topic_id):
-        z_oh = mx.nd.one_hot(mx.nd.array([topic_id], dtype='int'), self.n_latent)
-        cv = mx.nd.array([covar], dtype='float32').expand_dims(1)
-        #dec_out = self.decoder(z_oh)
-        print("Shape z = {} cv = {}".format(z_oh.shape, cv.shape))
-        cov_dec_out = self.cov_decoder(z_oh, cv)
-        cov_y = mx.nd.softmax(cov_dec_out, axis=1)
-        return cov_y
-
-
-    def get_top_k_terms_with_covar(self, k, covar):
-        z_o = mx.nd.ones(shape=(1,self.n_latent))
+    def get_top_k_terms_with_covar_at_data(self, data, k, covar):
+        """
+        Uses test/training data-point as the input points around which term sensitivity is computed
+        """
+        if isinstance(covar, float):
+            covar = mx.nd.array([covar], ctx=self.model_ctx)
         cv = mx.nd.expand_dims(covar, axis=0)
         jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent))
         for i in range(self.vocab_size):
-            z_o.attach_grad()
+            z_o.attach_grad()            
             with mx.autograd.record():
-                yy1 = self.decoder(z_o)
-                yy2 = self.cov_decoder(z_o, cv)
-                y = yy1 + yy2
-                y_i = y[0][i]
+                #yy = self.decoder(data)
+                yy = self.cov_decoder(data, cv)
+                #y = yy1 + yy2
+                y_i = yy[:,i] ## get y[i] across batch for i-th vocab item
             y_i.backward()
             jacobian[i] = z_o.grad
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j
     
-
-    def get_top_k_terms(self, k):
-        return self.get_top_k_terms_with_covar(k, mx.nd.array([0.5]))
-            
 
     def hybrid_forward(self, F, data, covars, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
@@ -305,6 +298,7 @@ class ContinuousCovariateModel(HybridBlock):
         self.n_topics  = n_topics
         self.n_scalars = n_scalars   # number of continuous variables
         self.model_ctx = ctx
+        self.time_topic_dim = 300
         super(ContinuousCovariateModel, self).__init__()
 
         with self.name_scope():
@@ -313,9 +307,10 @@ class ContinuousCovariateModel(HybridBlock):
                 if i < 1:
                     in_units = self.n_scalars + self.n_topics
                 else:
-                    in_units = self.n_topics
-                self.cov_decoder.add(gluon.nn.Dense(in_units = in_units, units=self.n_topics, activation='tanh', use_bias=True))
-            self.cov_decoder.add(gluon.nn.Dense(in_units=self.n_topics, units=vocab_size, activation=None, use_bias=False))
+                    in_units = self.time_topic_dim
+                self.cov_decoder.add(gluon.nn.Dense(in_units = in_units, units=self.time_topic_dim,
+                                                    activation='relu', use_bias=(i < 1)))
+            self.cov_decoder.add(gluon.nn.Dense(in_units=self.time_topic_dim, units=vocab_size, activation=None, use_bias=False))
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
 
     def hybrid_forward(self, F, topic_distrib, scalars):

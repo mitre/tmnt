@@ -82,30 +82,33 @@ class Vectorizer(object):
         else:
             vocab = i_vocab
         files_and_vocab = [(f,vocab) for f in files]
-        
+        if self.json_rewrite:
+            vec_fn = self.task_vec_fn
+        else:
+            vec_fn = self.direct_out_vec_fn
         if len(files_and_vocab) > 2:
             file_batches = list(self.chunks(files_and_vocab, max(1, len(files_and_vocab) // cpu_count())))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
-                    mcore.run(self.direct_out_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i], sp_out_file)
-                    #mcore.run(self.task_vec_fn,"Vectorizing Batch {}".format(i), file_batches[i])
+                    mcore.run(vec_fn,"Vectorizing Batch {}".format(i), file_batches[i], sp_out_file)
                 sp_vecs = mcore.returns()
-            #sp_vecs = [ item for sl in sp_vecs for item in sl ]
+            if not self.json_rewrite:
+                sp_vecs = [ item for sl in sp_vecs for item in sl ]
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
-        
-        #sp_list = list(sp_vecs)
-        #if not self.json_rewrite:
-        #    with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
-        #        for block in sp_list:
-        #            for (v,l) in block:
-        #                fp.write(str(l))  
-        #                for (i,c) in v:
-        #                    fp.write(' ')
-        #                    fp.write(str(i))
-        #                    fp.write(':')
-        #                    fp.write(str(c))
-        #                fp.write('\n')
+        ## if we're not outputing json and we used non-concurrent processing, need to print out vecs here
+        if not self.json_rewrite and len(files_and_vocab) <= 2:
+            sp_list = list(sp_vecs)
+            with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
+                for block in sp_list:
+                    for (v,l) in block:
+                        fp.write(str(l))  
+                        for (i,c) in v:
+                            fp.write(' ')
+                            fp.write(str(i))
+                            fp.write(':')
+                            fp.write(str(c))
+                        fp.write('\n')
         if i_vocab is None: ## print out vocab if we had to create it
             with io.open(vocab_out_file, 'w', encoding=self.encoding) as fp:
                 for i in range(len(vocab.idx_to_token)):

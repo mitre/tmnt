@@ -177,7 +177,8 @@ class BowVAEWorker(Worker):
         """Load in the heldout test data for final model evaluation
         """
         tst_mat, total_tst_words, tst_labels = collect_sparse_test(self.c_args.tst_vec_file, self.vocabulary,
-                                                                   scalar_labels=self.c_args.scalar_covars, encoding=self.c_args.str_encoding)
+                                                                   scalar_labels=self.c_args.scalar_covars,
+                                                                   encoding=self.c_args.str_encoding)
         self.data_test_csr = tst_mat
         self.test_labels   = tst_labels
         self.total_tst_words = total_tst_words
@@ -212,7 +213,7 @@ class BowVAEWorker(Worker):
                     pt_embedding = nlp.embedding.create(e_type, source=e_name)
                 vocab = copy.deepcopy(self.vocabulary) ## create a copy of the vocab to attach the vocab to 
                 vocab.set_embedding(pt_embedding)
-                self.vocab_cache[embedding_source] = copy.deepcopy(vocab) ## cache another copy so the pre-trained embedding is preserverd
+                self.vocab_cache[embedding_source] = copy.deepcopy(vocab) ## cache another copy 
             emb_size = len(vocab.embedding.idx_to_vec[0])
             num_oov = 0
             for word in vocab.embedding._idx_to_token:
@@ -282,6 +283,7 @@ class BowVAEWorker(Worker):
         embedding_source = config.get('embedding_source')
         fixed_embedding = config.get('fixed_embedding') == 'True'
         vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
+        covar_net_layers = config.get('covar_net_layers')
         
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             if self.label_map:
@@ -296,13 +298,15 @@ class BowVAEWorker(Worker):
                 MetaDataBowNTM(self.label_map, n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa, alpha=alpha,
                                init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, 
-                               batch_size=batch_size, wd_freqs=self.wd_freqs, ctx=self.ctx)
+                               batch_size=batch_size, wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
+                               ctx=self.ctx)
         else:
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
-                   fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
-                       init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity, kappa=kappa, alpha=alpha,
-                   batch_size=batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+                       fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
+                       init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity,
+                       kappa=kappa, alpha=alpha,
+                       batch_size=batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
         if self.c_args.hybridize:
             model.hybridize()
@@ -317,7 +321,8 @@ class BowVAEWorker(Worker):
         epoch: int - the current epoch
         """
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
-            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
+            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
+                                  self.c_args, self.ctx)
             npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
@@ -341,7 +346,7 @@ class BowVAEWorker(Worker):
         model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
         return l1_coef
 
-    def _train_model(self, config, budget):
+    def _train_model(self, config, budget, data_sensitive_budget=True):
         """Main training function which takes a single model configuration and a budget (i.e. number of epochs) and
         fits the model to the training data.
         
@@ -383,7 +388,9 @@ class BowVAEWorker(Worker):
             last_batch_size = 0
             test_array, test_dataloader = None, None
 
-        training_epochs = (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
+        training_epochs = budget
+        if data_sensitive_budget:
+            training_epochs = (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0] 
 
         for epoch in range(math.ceil(training_epochs)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
@@ -445,7 +452,7 @@ class BowVAEWorker(Worker):
         _, res = self._train_model(config, budget)
         return res
 
-    def retrain_best_config(self, config, budget, rng_seed, ntimes=1):
+    def retrain_best_config(self, config, budget, rng_seed, ntimes=1, data_sensitive_budget=True):
         """Train a model as per the provided `Configuration` and `budget` and write to file.
         
         Parameters
@@ -463,7 +470,7 @@ class BowVAEWorker(Worker):
         if self.c_args.val_vec_file:
             for i in range(ntimes):
                 seed_rng(rng_seed+i)
-                model, results = self._train_model(config, budget)
+                model, results = self._train_model(config, budget, data_sensitive_budget=data_sensitive_budget)
                 loss = results['loss']
                 npmis.append(results['info']['test_npmi'])
                 perplexities.append(results['info']['test_perplexity'])
@@ -515,6 +522,7 @@ def write_model(m, model_dir, config, budget, args):
         if isinstance(m, MetaDataBowNTM):
             config['n_covars'] = int(m.n_covars)
             config['l_map'] = m.label_map
+            config['covar_net_layers'] = m.covar_net_layers
         specs = json.dumps(config)
         with open(sp_file, 'w') as f:
             f.write(specs)
@@ -547,9 +555,8 @@ def get_worker(args, budget, id_str, ns_port):
     model_out_dir = args.model_dir if args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
-    worker = BowVAEWorker(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels, label_map, ctx=ctx,
-                              max_budget=budget,
-                              nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
+    worker = BowVAEWorker(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
+                          label_map, ctx=ctx, max_budget=budget, nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
     return worker, train_out_dir
 
 
@@ -602,7 +609,7 @@ def train_bow_vae(args):
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
     ns_port = get_port()
     worker, log_dir = get_worker(args, int(config['training_epochs']), id_str, ns_port)
-    worker.retrain_best_config(config, int(config['training_epochs']), args.seed, args.num_final_evals)
+    worker.retrain_best_config(config, int(config['training_epochs']), args.seed, args.num_final_evals, data_sensitive_budget=(not args.exact_epochs))
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 
