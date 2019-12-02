@@ -25,6 +25,7 @@ from pathlib import Path
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.topic_seeds import get_seed_matrix_from_file
+from tmnt.bow_vae.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
 from tmnt.utils.log_utils import logging_config
 from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
 from tmnt.utils.random import seed_rng
@@ -41,18 +42,6 @@ from hpbandster.optimizers import BOHB as BOHB
 __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
 MAX_DESIGN_MATRIX = 250000000 
-
-def usedPort(port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    result = True
-    try:
-        sock.bind(("0.0.0.0", port))
-        result = False
-    except:
-        result = True
-    sock.close()
-    return result
-
 
 def get_wd_freqs(data_csr, max_sample_size=1000000):
     sample_size = min(max_sample_size, data_csr.shape[0])
@@ -89,15 +78,19 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
     return perplexity
 
 
-def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False):
-    w = model.decoder.collect_params().get('weight').data()
+def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False, test_dataloader=None):
     if covariate_interactions:
         logging.info("Rendering interactions not supported yet")
     num_topics = model.n_latent
-    #sorted_ids = w.argsort(axis=0, is_ascend=False)
-    sorted_ids = model.get_top_k_terms(k)
-    num_topics = min(num_topics, sorted_ids.shape[-1])
-    top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
+    if test_dataloader is not None:
+        ## in this case compute coherence using encoder Jacobian
+        js = get_encoder_jacobians_at_data_nocovar(model, test_dataloader, 500, 50000)
+        sorted_j = js.argsort(axis=1, is_ascend=False)
+        top_k_words_per_topic = [ [int(i) for i in list(sorted_j[t, :k].asnumpy()) ] for t in range(num_topics)]
+    else:
+        sorted_ids = model.get_top_k_terms(k)
+        num_topics = min(num_topics, sorted_ids.shape[-1])
+        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
     ##
     ## Get top K words for each co-variate value
     ## Compute NPMI only over the test subset with that value separately
@@ -323,7 +316,8 @@ class BowVAEWorker(Worker):
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
                                   self.c_args, self.ctx)
-            npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
+            tst_ld = test_dataloader if self.c_args.encoder_coherence else None
+            npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
@@ -416,7 +410,8 @@ class BowVAEWorker(Worker):
         mx.nd.waitall()
         if test_dataloader is not None:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
-            npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True)
+            tst_ld = test_dataloader if self.c_args.encoder_coherence else None
+            npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
             try:
                 coherence_coefficient = self.c_args.coherence_coefficient
             except AttributeError:
@@ -481,9 +476,12 @@ class BowVAEWorker(Worker):
             logging.info("******************************************")
             test_type = "HELDOUT" if self.c_args.tst_vec_file else "VALIDATATION"
             if ntimes > 1:
-                logging.info("Final {} NPMI       ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(npmis), statistics.stdev(npmis)))
-                logging.info("Final {} Perplexity ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(perplexities), statistics.stdev(perplexities)))
-                logging.info("Final {} Redundancy ==> Mean: {}, StdDev: {}".format(test_type, statistics.mean(redundancies), statistics.stdev(redundancies)))
+                logging.info("Final {} NPMI       ==> Mean: {}, StdDev: {}"
+                             .format(test_type, statistics.mean(npmis), statistics.stdev(npmis)))
+                logging.info("Final {} Perplexity ==> Mean: {}, StdDev: {}"
+                             .format(test_type, statistics.mean(perplexities), statistics.stdev(perplexities)))
+                logging.info("Final {} Redundancy ==> Mean: {}, StdDev: {}"
+                             .format(test_type, statistics.mean(redundancies), statistics.stdev(redundancies)))
             else:
                 logging.info("Final {} NPMI       ==> {}".format(test_type, npmis[0]))
                 logging.info("Final {} Perplexity ==> {}".format(test_type, perplexities[0]))
@@ -495,6 +493,9 @@ class BowVAEWorker(Worker):
         
 
 def select_model(worker, tmnt_config_space, total_iterations, result_logger, id_str, ns_port):
+    """
+    Top level call to model selection. 
+    """
     tmnt_config = TMNTConfig(tmnt_config_space)
     worker.run(background=True)
     cs = tmnt_config.get_configspace() 
@@ -559,6 +560,17 @@ def get_worker(args, budget, id_str, ns_port):
                           label_map, ctx=ctx, max_budget=budget, nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
     return worker, train_out_dir
 
+
+def usedPort(port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    result = True
+    try:
+        sock.bind(("0.0.0.0", port))
+        result = False
+    except:
+        result = True
+    sock.close()
+    return result
 
 def get_port():
     p = 9090

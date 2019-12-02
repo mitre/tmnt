@@ -10,6 +10,8 @@ from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.runtime import BowNTMInference
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, file_to_sp_vec
 
+__all__ = ['get_encoder_jacobians_at_data_nocovar']
+
 def _get_sampled_topic_embeddings(model, data, covars, batch_size):
     emb_out = model.embedding(data)
     co_emb = mx.nd.concat(emb_out, covars)
@@ -88,7 +90,7 @@ def _get_encoder_jacobians_at_data(model, dataloader, batch_size, sample_size):
     return jacobians
 
 
-def _get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size):
+def get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size):
     """
     For a given model, compute sum of jacobian matrix values at datapoint in dataloader
     """
@@ -98,7 +100,6 @@ def _get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample
         if bi * batch_size >= sample_size:
             print("Sample processed, exiting..")
             break
-        print("Batch {} inference complete".format(bi))
         x_data = data.tostype('default')
         for i in range(model.n_latent):
             x_data.attach_grad()
@@ -109,13 +110,13 @@ def _get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample
             yi.backward()
             ss = x_data.grad.sum(axis=0)
             jacobians[i] += ss
-        print("Batch {} totally processed".format(bi))
     return jacobians
 
-def get_encoder_jacobians_at_data(model, data_file, sample_size=20000):
+
+def get_encoder_jacobians_at_data_file(model, data_file, sample_size=20000):
     batch_size = 1000
     data_mat, _, data_labels_list, _ = file_to_sp_vec(data_file, model.vocab_size, scalar_labels=True, encoding='utf-8')
     data_labels = mx.nd.array(data_labels_list, dtype='float32')
     data_labels = (data_labels - data_labels.min()) / (data_labels.max() - data_labels.min()) ## normalize
     dataloader = DataIterLoader(mx.io.NDArrayIter(data_mat, data_labels, batch_size, last_batch_handle='discard', shuffle=True))
-    return _get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size)
+    return get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size)
