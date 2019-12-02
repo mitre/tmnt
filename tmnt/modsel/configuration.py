@@ -79,11 +79,11 @@ class TMNTConfig(object):
         optimizer_c = self._get_categorical('optimizer', cd)
         n_latent_c = self._get_range_integer('n_latent',cd)
         enc_hidden_dim_c = self._get_range_integer('enc_hidden_dim', cd)
-
-
+        num_enc_layers_c = self._get_range_integer('num_enc_layers', cd)
+        enc_dr_c = self._get_range_uniform('enc_dr', cd)
         batch_size_c = self._get_range_integer('batch_size', cd)
 
-        cs.add_hyperparameters([batch_size_c, lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c])
+        cs.add_hyperparameters([batch_size_c, lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, num_enc_layers_c, enc_dr_c])
 
         ## optional hyperparameters
         target_sparsity_c = self._get_range_uniform('target_sparsity', cd)
@@ -101,7 +101,7 @@ class TMNTConfig(object):
             fixed_embedding_c = self._get_categorical('fixed_embedding', cd)
             if fixed_embedding_c:
                 cs.add_hyperparameters([fixed_embedding_c])
-            if embedding_source_c.is_legal('random'):  ## if NOT, then don't add embedding size as a hyperparameters at all as it's determined by the embedding
+            if embedding_source_c.is_legal('random'):  ## if NOT, then don't add embedding size as a hyperparameters at all
                 embedding_size_c = self._get_range_integer('embedding_size', cd)
                 cs.add_hyperparameters([embedding_size_c])
                 cond_embed = CS.EqualsCondition(embedding_size_c, embedding_source_c, 'random')

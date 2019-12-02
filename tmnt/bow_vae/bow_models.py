@@ -27,6 +27,7 @@ class BowNTM(HybridBlock):
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None,
+                 n_encoding_layers = 3, enc_dr=0.1,
                  wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
@@ -40,6 +41,7 @@ class BowNTM(HybridBlock):
         self.vocabulary = vocabulary
         if vocabulary.embedding:
             assert vocabulary.embedding.idx_to_vec[0].size == embedding_size
+        self.encoding_dims = [self.embedding_size + n_covars] + [enc_dim for _ in range(n_encoding_layers)]
         with self.name_scope():
             self.l1_pen_const = self.params.get('l1_pen_const',
                                       shape=(1,),
@@ -47,9 +49,11 @@ class BowNTM(HybridBlock):
                                       differentiable=False)
             ## Add in topic seed constraints
             self.seed_matrix = seed_mat
+            ## should be tanh here to avoid losing embedding information
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
-            self.encoder = gluon.nn.Dense(in_units=(self.embedding_size + n_covars),
-                                          units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
+            self.encoder = self._get_encoder(self.encoding_dims, dr=enc_dr)
+            #self.encoder = gluon.nn.Dense(in_units=(self.embedding_size + n_covars),
+            #                              units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, alpha=alpha)
             elif latent_distrib == 'vmf':
@@ -79,6 +83,14 @@ class BowNTM(HybridBlock):
             bias_param.set_data(log_freq)
             bias_param.grad_req = 'null'
             self.out_bias = bias_param.data()
+
+
+    def _get_encoder(self, dims, dr=0.1):
+        encoder = gluon.nn.HybridSequential()
+        for i in range(len(dims)-1):
+            encoder.add(gluon.nn.Dense(in_units=dims[i], units=dims[i+1], activation='softrelu'))
+            encoder.add(gluon.nn.Dropout(dr))
+        return encoder
 
     def get_top_k_terms(self, k):
         """
@@ -202,10 +214,11 @@ class MetaDataBowNTM(BowNTM):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, wd_freqs=None,
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers=1, enc_dr=0.1, wd_freqs=None,
                  seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
-                                             coherence_reg_penalty, kappa, alpha, 0.0, batch_size, wd_freqs, seed_mat, n_covars, ctx)
+                                             coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
+                                             wd_freqs, seed_mat, n_covars, ctx)
         self.n_covars = n_covars
         self.label_map = l_map
         self.covar_net_layers = covar_net_layers

@@ -7,6 +7,7 @@ Copyright (c) 2019 The MITRE Corporation.
 import math
 import logging
 import datetime
+import time
 import io
 import os
 import json
@@ -16,6 +17,7 @@ import pickle
 import copy
 import socket
 import statistics
+import random
 
 from mxnet import autograd
 from mxnet import gluon
@@ -277,6 +279,8 @@ class BowVAEWorker(Worker):
         fixed_embedding = config.get('fixed_embedding') == 'True'
         vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
         covar_net_layers = config.get('covar_net_layers')
+        n_encoding_layers = config.get('num_enc_layers', 1)
+        enc_dr = config.get('enc_dr', 0.1)
         
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             if self.label_map:
@@ -291,7 +295,8 @@ class BowVAEWorker(Worker):
                 MetaDataBowNTM(self.label_map, n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa, alpha=alpha,
                                init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, 
-                               batch_size=batch_size, wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
+                               batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
+                               wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
                                ctx=self.ctx)
         else:
             model = \
@@ -299,7 +304,8 @@ class BowVAEWorker(Worker):
                        fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
                        init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity,
                        kappa=kappa, alpha=alpha,
-                       batch_size=batch_size, wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+                       batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
+                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
         if self.c_args.hybridize:
             model.hybridize()
@@ -575,6 +581,8 @@ def usedPort(port):
 def get_port():
     p = 9090
     while usedPort(p):
+        logging.info("Port {} is currently used trying {}".format(p, p+1))
+        time.sleep(random.random() * 4)
         p += 1
     return p
 
