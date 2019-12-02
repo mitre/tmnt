@@ -602,10 +602,10 @@ def robust_start(id_str, p=None):
 def model_select_bow_vae(args):
     dd = datetime.datetime.now()
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
+    NS, ns_port = robust_start(id_str)
     worker, log_dir = get_worker(args, args.budget, id_str, ns_port)
     worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=log_dir, overwrite=True)
-    NS, ns_port = robust_start(id_str)
     #NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
     #NS.start()
     res = select_model(worker, args.config_space, args.iterations, result_logger, id_str, ns_port)
