@@ -578,37 +578,36 @@ def usedPort(port):
     sock.close()
     return result
 
-def get_port():
-    p = 9090
+def get_port(p=None):
+    p = 9090 if p is None else p
     while usedPort(p):
         logging.info("Port {} is currently used trying {}".format(p, p+1))
         time.sleep(random.random() * 4)
         p += 1
     return p
 
-def robust_start(id_str):
-    p = get_port()
+def robust_start(id_str, p=None):
+    p = get_port(p)
     try:
-        NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
+        NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=p)
         NS.start()
         return NS
     except Exception as e:
         logging.info("Exception CAUGHT: {}".format(e))
         logging.info("Re-attempting to start nameserver")
-        return robust_start(id_str)
+        return robust_start(id_str,p)
     
 
 def model_select_bow_vae(args):
     dd = datetime.datetime.now()
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
-    ns_port = get_port()
     worker, log_dir = get_worker(args, args.budget, id_str, ns_port)
     worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=log_dir, overwrite=True)
     logging.info("Starting nameserver on port {}".format(ns_port))
     NS = robust_start(id_str)
-    NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
-    NS.start()
+    #NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
+    #NS.start()
     res = select_model(worker, args.config_space, args.iterations, result_logger, id_str, ns_port)
     id2config = res.get_id2config_mapping()
     incumbent = res.get_incumbent_id()
