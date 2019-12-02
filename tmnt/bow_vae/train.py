@@ -586,16 +586,16 @@ def get_port():
         p += 1
     return p
 
-def robust_start(id_str, port):
+def robust_start(id_str):
+    p = get_port()
     try:
         NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
         NS.start()
         return NS
     except Exception as e:
-        p = get_port()
         logging.info("Exception CAUGHT: {}".format(e))
-        logging.info("Re-attempting to start nameserver on port: {}".format(p))
-        return robust_start(id_str, p)
+        logging.info("Re-attempting to start nameserver")
+        return robust_start(id_str)
     
 
 def model_select_bow_vae(args):
@@ -606,6 +606,7 @@ def model_select_bow_vae(args):
     worker.search_mode = True
     result_logger = hpres.json_result_logger(directory=log_dir, overwrite=True)
     logging.info("Starting nameserver on port {}".format(ns_port))
+    NS = robust_start(id_str)
     NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
     NS.start()
     res = select_model(worker, args.config_space, args.iterations, result_logger, id_str, ns_port)
