@@ -586,6 +586,18 @@ def get_port():
         p += 1
     return p
 
+def robust_start(id_str, port):
+    try:
+        NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
+        NS.start()
+        return NS
+    except Exception as e:
+        p = get_port()
+        logging.info("Exception CAUGHT: {}".format(e))
+        logging.info("Re-attempting to start nameserver on port: {}".format(p))
+        return robust_start(id_str, p)
+    
+
 def model_select_bow_vae(args):
     dd = datetime.datetime.now()
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
