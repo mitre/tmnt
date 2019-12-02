@@ -37,28 +37,31 @@ class TMNTConfig(object):
             return None
 
     def _get_range_integer(self, param, cd, q=1):
-        p = cd[param]
+        if cd.get(param):
+            p = cd[param]
         
-        if len(p['i_range']) < 2:
-            return CSH.Constant(param, int(p['i_range'][0]))
+            if len(p['i_range']) < 2:
+                return CSH.Constant(param, int(p['i_range'][0]))
         
-        low = int(p['i_range'][0])
-        upp = int(p['i_range'][1])
-        default_val = p.get('default')
-        q_val_s = p.get('step')
-        if q_val_s:
-            q_val = int(q_val_s)
+            low = int(p['i_range'][0])
+            upp = int(p['i_range'][1])
+            default_val = p.get('default')
+            q_val_s = p.get('step')
+            if q_val_s:
+                q_val = int(q_val_s)
+            else:
+                q_val = 1
+            if default_val:
+                default = float(default_val)
+            else:
+                default = int((upp + low) / 2)
+            use_log = False
+            if low == upp:
+                return CSH.Constant(param, low)
+            else:
+                return CSH.UniformIntegerHyperparameter(param, lower=low, upper=upp, default_value=default, q=q_val, log=use_log)
         else:
-            q_val = 1
-        if default_val:
-            default = float(default_val)
-        else:
-            default = int((upp + low) / 2)
-        use_log = False
-        if low == upp:
-            return CSH.Constant(param, low)
-        else:
-            return CSH.UniformIntegerHyperparameter(param, lower=low, upper=upp, default_value=default, q=q_val, log=use_log)
+            return None
 
     def _get_categorical(self, param, cd):
         if cd.get(param):
@@ -83,7 +86,7 @@ class TMNTConfig(object):
         enc_dr_c = self._get_range_uniform('enc_dr', cd)
         batch_size_c = self._get_range_integer('batch_size', cd)
 
-        cs.add_hyperparameters([batch_size_c, lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c, num_enc_layers_c, enc_dr_c])
+        cs.add_hyperparameters([batch_size_c, lr_c, latent_distribution_c, optimizer_c, n_latent_c, enc_hidden_dim_c])
 
         ## optional hyperparameters
         target_sparsity_c = self._get_range_uniform('target_sparsity', cd)
@@ -94,6 +97,11 @@ class TMNTConfig(object):
         if coherence_reg_penalty_c:
             cs.add_hyperparameters([coherence_reg_penalty_c])
 
+        if num_enc_layers_c:
+            cs.add_hyperparameters([num_enc_layers_c])
+
+        if enc_dr_c:
+            cs.add_hyperparameters([enc_dr_c])
 
         embedding_source_c = self._get_categorical('embedding_source', cd)
         if embedding_source_c:
