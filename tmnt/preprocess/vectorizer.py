@@ -26,7 +26,7 @@ class Vectorizer(object):
 
     def __init__(self, custom_stop_word_file=None, encoding='utf-8'):
         self.encoding = encoding
-        self.tokenizer = BasicTokenizer(use_stop_words=True)
+        self.tokenizer = BasicTokenizer(use_stop_words=True, custom_stop_word_file=custom_stop_word_file, encoding=encoding)
         self.json_rewrite = False
 
     def get_counter_dir_parallel(self, data_dir, pat):
