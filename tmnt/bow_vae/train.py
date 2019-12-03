@@ -487,7 +487,7 @@ class BowVAEWorker(Worker):
                 model, results = self._train_model(config, budget, data_sensitive_budget=data_sensitive_budget)
                 loss = results['loss']
                 npmis.append(results['info']['test_npmi'])
-                enc_npmis.append(reslts['info']['test_enc_npmi'])
+                enc_npmis.append(results['info']['test_enc_npmi'])
                 perplexities.append(results['info']['test_perplexity'])
                 redundancies.append(results['info']['redundancy'])
                 if loss < best_loss:
