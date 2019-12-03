@@ -89,7 +89,8 @@ class BowNTM(HybridBlock):
         encoder = gluon.nn.HybridSequential()
         for i in range(len(dims)-1):
             encoder.add(gluon.nn.Dense(in_units=dims[i], units=dims[i+1], activation='softrelu'))
-            encoder.add(gluon.nn.Dropout(dr))
+            if dr > 0.0:
+                encoder.add(gluon.nn.Dropout(dr))
         return encoder
 
     def get_top_k_terms(self, k):
