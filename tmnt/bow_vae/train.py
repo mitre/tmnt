@@ -24,7 +24,7 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
-from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, BowDataSet, collect_stream_as_sparse_matrix
+from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.topic_seeds import get_seed_matrix_from_file
 from tmnt.bow_vae.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
@@ -80,24 +80,28 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
     return perplexity
 
 
+
 def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False, test_dataloader=None):
     if covariate_interactions:
         logging.info("Rendering interactions not supported yet")
     num_topics = model.n_latent
+
     if test_dataloader is not None:
         ## in this case compute coherence using encoder Jacobian
-        js = get_encoder_jacobians_at_data_nocovar(model, test_dataloader, 500, 50000)
+        js = get_encoder_jacobians_at_data_nocovar(model, test_dataloader, 500, 100000)
         sorted_j = js.argsort(axis=1, is_ascend=False)
-        top_k_words_per_topic = [ [int(i) for i in list(sorted_j[t, :k].asnumpy()) ] for t in range(num_topics)]
+        enc_top_k_words_per_topic = [ [int(i) for i in list(sorted_j[t, :k].asnumpy()) ] for t in range(num_topics)]
+        enc_npmi_eval = EvaluateNPMI(enc_top_k_words_per_topic)
+        enc_npmi = enc_npmi_eval.evaluate_csr_mat(test_data)
     else:
-        sorted_ids = model.get_top_k_terms(k)
-        num_topics = min(num_topics, sorted_ids.shape[-1])
-        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
-    ##
-    ## Get top K words for each co-variate value
-    ## Compute NPMI only over the test subset with that value separately
+        enc_npmi = None
+        
+    sorted_ids = model.get_top_k_terms(k)
+    num_topics = min(num_topics, sorted_ids.shape[-1])
+    top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
     npmi_eval = EvaluateNPMI(top_k_words_per_topic)
     npmi = npmi_eval.evaluate_csr_mat(test_data)
+    
     unique_term_ids = set()
     unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
     for i in range(num_topics):
@@ -111,7 +115,7 @@ def compute_coherence(model, k, test_data, log_terms=False, covariate_interactio
         top_k_tokens = [list(map(lambda x: model.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
         for i in range(num_topics):
             logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
-    return npmi, redundancy
+    return npmi, enc_npmi, redundancy
 
 
 def analyze_seed_matrix(model, seed_matrix):
@@ -280,7 +284,7 @@ class BowVAEWorker(Worker):
         vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
         covar_net_layers = config.get('covar_net_layers')
         n_encoding_layers = config.get('num_enc_layers', 1)
-        enc_dr = config.get('enc_dr', 0.1)
+        enc_dr = config.get('enc_dr', 0.0)
         
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             if self.label_map:
@@ -323,7 +327,7 @@ class BowVAEWorker(Worker):
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
                                   self.c_args, self.ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi,_ = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
+            npmi, _, _ = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
@@ -366,17 +370,21 @@ class BowVAEWorker(Worker):
         l1_coef = self.c_args.init_sparsity_pen
         num_test_batches = 0
         train_dataloader = \
-            DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size, last_batch_handle='discard', shuffle=True))
+            DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size,
+                                             last_batch_handle='discard', shuffle=True))
         if self.data_test_csr is not None:
             test_size = self.data_test_csr.shape[0] * self.data_test_csr.shape[1]
             if test_size < MAX_DESIGN_MATRIX:
                 self.data_test_csr = self.data_test_csr.tostype('default')
                 test_dataloader = \
-                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='pad', shuffle=False))
+                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size,
+                                                     last_batch_handle='pad', shuffle=False))
             else:
-                logging.info("Warning: Test dataset is very large. Using sparse representation which may result in approximation to Perplexity.")
+                logging.info("Warning: Test dataset is very large." + \
+                             "Using sparse representation which may result in approximation to Perplexity.")
                 test_dataloader = \
-                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size, last_batch_handle='discard', shuffle=False))
+                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size,
+                                                     last_batch_handle='discard', shuffle=False))
             last_batch_size = self.data_test_csr.shape[0] % batch_size
             num_test_batches = self.data_test_csr.shape[0] // batch_size
             if last_batch_size > 0:
@@ -384,13 +392,15 @@ class BowVAEWorker(Worker):
             logging.info("Total validation/test instances = {}, batch_size = {}, last_batch = {}, num batches = {}"
                          .format(self.data_test_csr.shape[0], batch_size, last_batch_size, num_test_batches))
         else:
-            logging.warning("**** No validation/evaluation available for model validation test csr = {} ******".format(self.data_test_csr))
+            logging.warning("**** No validation/evaluation available for model validation test csr = {} ******"
+                            .format(self.data_test_csr))
             last_batch_size = 0
             test_array, test_dataloader = None, None
 
         training_epochs = budget
         if data_sensitive_budget:
-            training_epochs = (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0] 
+            training_epochs = \
+                (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0] 
 
         for epoch in range(math.ceil(training_epochs)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
@@ -417,17 +427,19 @@ class BowVAEWorker(Worker):
         if test_dataloader is not None:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
+            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
+            npmi_to_optimize = enc_npmi if enc_npmi and self.c_args.optimize_encoder_coherence else npmi
             try:
                 coherence_coefficient = self.c_args.coherence_coefficient
             except AttributeError:
                 coherence_coefficient = 1.0
             res = {
-                'loss': 1.0 - (npmi * coherence_coefficient) + (redundancy * coherence_coefficient) + (perplexity / 1000),
+                'loss': 1.0 - (npmi_to_optimize * coherence_coefficient) + (redundancy * coherence_coefficient) + (perplexity / 1000),
                 'info': {
                     'test_perplexity': perplexity,
                     'redundancy': redundancy,
-                    'test_npmi': npmi
+                    'test_npmi': npmi,
+                    'test_enc_npmi': (enc_npmi if enc_npmi else 0.0)
                 }
             }
         else:
@@ -464,6 +476,7 @@ class BowVAEWorker(Worker):
         best_loss = 100000000.0
         best_model = None
         npmis = []
+        enc_npmis = []
         perplexities = []
         redundancies = []
         if self.c_args.tst_vec_file:
@@ -474,6 +487,7 @@ class BowVAEWorker(Worker):
                 model, results = self._train_model(config, budget, data_sensitive_budget=data_sensitive_budget)
                 loss = results['loss']
                 npmis.append(results['info']['test_npmi'])
+                enc_npmis.append(reslts['info']['test_enc_npmi'])
                 perplexities.append(results['info']['test_perplexity'])
                 redundancies.append(results['info']['redundancy'])
                 if loss < best_loss:
@@ -482,16 +496,19 @@ class BowVAEWorker(Worker):
             logging.info("******************************************")
             test_type = "HELDOUT" if self.c_args.tst_vec_file else "VALIDATATION"
             if ntimes > 1:
-                logging.info("Final {} NPMI       ==> Mean: {}, StdDev: {}"
+                logging.info("Final {} NPMI         ==> Mean: {}, StdDev: {}"
                              .format(test_type, statistics.mean(npmis), statistics.stdev(npmis)))
-                logging.info("Final {} Perplexity ==> Mean: {}, StdDev: {}"
+                logging.info("Final {} Perplexity   ==> Mean: {}, StdDev: {}"
                              .format(test_type, statistics.mean(perplexities), statistics.stdev(perplexities)))
-                logging.info("Final {} Redundancy ==> Mean: {}, StdDev: {}"
+                logging.info("Final {} Redundancy   ==> Mean: {}, StdDev: {}"
                              .format(test_type, statistics.mean(redundancies), statistics.stdev(redundancies)))
+                logging.info("Final {} Encoder NPMI ==> Mean: {}, StdDev: {}"
+                             .format(test_type, statistics.mean(enc_npmis), statistics.stdev(enc_npmis)))
             else:
-                logging.info("Final {} NPMI       ==> {}".format(test_type, npmis[0]))
-                logging.info("Final {} Perplexity ==> {}".format(test_type, perplexities[0]))
-                logging.info("Final {} Redundancy ==> {}".format(test_type, redundancies[0]))
+                logging.info("Final {} NPMI         ==> {}".format(test_type, npmis[0]))
+                logging.info("Final {} Perplexity   ==> {}".format(test_type, perplexities[0]))
+                logging.info("Final {} Redundancy   ==> {}".format(test_type, redundancies[0]))
+                logging.info("Final {} Encoder NPMI ==> {}".format(test_type, enc_npmis[0]))
         else:
             ## in this case, no validation test data supplied
             best_model, _ = self._train_model(config, budget)
@@ -641,7 +658,8 @@ def train_bow_vae(args):
     id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
     ns_port = get_port()
     worker, log_dir = get_worker(args, int(config['training_epochs']), id_str, ns_port)
-    worker.retrain_best_config(config, int(config['training_epochs']), args.seed, args.num_final_evals, data_sensitive_budget=(not args.exact_epochs))
+    worker.retrain_best_config(config, int(config['training_epochs']), args.seed, args.num_final_evals,
+                               data_sensitive_budget=(not args.exact_epochs))
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 
