@@ -90,17 +90,17 @@ def _get_encoder_jacobians_at_data(model, dataloader, batch_size, sample_size):
     return jacobians
 
 
-def get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size):
+def get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size, ctx):
     """
     For a given model, compute sum of jacobian matrix values at datapoint in dataloader
     """
-    jacobians = mx.nd.zeros(shape=(model.n_latent, model.vocab_size))
-    #jacobians = mx.nd.zeros(shape=(model.n_latent, 200))
+    jacobians = mx.nd.zeros(shape=(model.n_latent, model.vocab_size), ctx=ctx)
     for bi, (data, _) in enumerate(dataloader):
         if bi * batch_size >= sample_size:
             print("Sample processed, exiting..")
             break
         x_data = data.tostype('default')
+        x_data = x_data.as_in_context(ctx)
         for i in range(model.n_latent):
             x_data.attach_grad()
             with mx.autograd.record():
@@ -119,4 +119,4 @@ def get_encoder_jacobians_at_data_file(model, data_file, sample_size=20000):
     data_labels = mx.nd.array(data_labels_list, dtype='float32')
     data_labels = (data_labels - data_labels.min()) / (data_labels.max() - data_labels.min()) ## normalize
     dataloader = DataIterLoader(mx.io.NDArrayIter(data_mat, data_labels, batch_size, last_batch_handle='discard', shuffle=True))
-    return get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size)
+    return get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_size, mx.cpu())

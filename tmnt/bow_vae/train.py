@@ -81,7 +81,7 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
 
 
 
-def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False, test_dataloader=None):
+def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False, test_dataloader=None, ctx=mx.cpu()):
     if covariate_interactions:
         logging.info("Rendering interactions not supported yet")
     num_topics = model.n_latent
@@ -327,7 +327,7 @@ class BowVAEWorker(Worker):
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
                                   self.c_args, self.ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi, _, _ = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
+            npmi, _, _ = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld, ctx=model.model_ctx)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
@@ -427,7 +427,8 @@ class BowVAEWorker(Worker):
         if test_dataloader is not None:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld)
+            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld,
+                                                           ctx=model.model_ctx)
             npmi_to_optimize = enc_npmi if enc_npmi and self.c_args.optimize_encoder_coherence else npmi
             try:
                 coherence_coefficient = self.c_args.coherence_coefficient
