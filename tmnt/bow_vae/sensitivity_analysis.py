@@ -6,6 +6,7 @@ Copyright (c) 2019 The MITRE Corporation.
 import mxnet as mx
 import numpy as np
 import time
+import logging
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.runtime import BowNTMInference
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, file_to_sp_vec
@@ -74,7 +75,6 @@ def _get_encoder_jacobians_at_data(model, dataloader, batch_size, sample_size):
         if bi * batch_size >= sample_size:
             print("Sample processed, exiting..")
             break
-        print("Batch {} inference complete".format(bi))
         covars = mx.nd.expand_dims(covars, axis=1)
         x_data = data.tostype('default')
         for i in range(model.n_latent):
@@ -94,7 +94,7 @@ def get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_
     """
     For a given model, compute sum of jacobian matrix values at datapoint in dataloader
     """
-    jacobians = mx.nd.zeros(shape=(model.n_latent, model.vocab_size), ctx=ctx)
+    jacobians = np.zeros(shape=(model.n_latent, model.vocab_size))
     for bi, (data, _) in enumerate(dataloader):
         if bi * batch_size >= sample_size:
             print("Sample processed, exiting..")
@@ -108,7 +108,8 @@ def get_encoder_jacobians_at_data_nocovar(model, dataloader, batch_size, sample_
                 enc_out = model.latent_dist.mu_encoder(model.encoder(emb_out))
                 yi = enc_out[:, i] ## for the ith topic, over batch
             yi.backward()
-            ss = x_data.grad.sum(axis=0)
+            mx.nd.waitall()
+            ss = x_data.grad.sum(axis=0).asnumpy()
             jacobians[i] += ss
     return jacobians
 

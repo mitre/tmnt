@@ -89,8 +89,8 @@ def compute_coherence(model, k, test_data, log_terms=False, covariate_interactio
     if test_dataloader is not None:
         ## in this case compute coherence using encoder Jacobian
         js = get_encoder_jacobians_at_data_nocovar(model, test_dataloader, int(1000 / num_topics), 100000, ctx)
-        sorted_j = js.argsort(axis=1, is_ascend=False)
-        sorted_topk = sorted_j[:, :k].asnumpy()
+        sorted_j = (-js).argsort(axis=1)
+        sorted_topk = sorted_j[:, :k]
         enc_top_k_words_per_topic = [ [int(i) for i in list(sorted_topk[t, :]) ] for t in range(num_topics)]
         enc_npmi_eval = EvaluateNPMI(enc_top_k_words_per_topic)
         enc_npmi = enc_npmi_eval.evaluate_csr_mat(test_data)
