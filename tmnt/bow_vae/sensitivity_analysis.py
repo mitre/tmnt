@@ -11,7 +11,7 @@ from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.bow_vae.runtime import BowNTMInference
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, file_to_sp_vec
 
-__all__ = ['get_encoder_jacobians_at_data_nocovar']
+__all__ = ['get_encoder_jacobians_at_data_file', 'get_jacobians_at_data_file']
 
 def _get_sampled_topic_embeddings(model, data, covars, batch_size):
     emb_out = model.embedding(data)
@@ -55,14 +55,13 @@ def _get_jacobians_at_data(model, dataloader, f_covars, batch_size, sample_size)
     return mx.nd.swapaxes(jacobians, 1, 0)
 
 
-def get_jacobians_at_data(model, data_file, covars, sample_size=200):
+def get_jacobians_at_data_file(model, data_file, covars, sample_size=200):
     batch_size = 50
     data_mat, _, data_labels_list, _ = file_to_sp_vec(data_file, model.vocab_size, scalar_labels=True, encoding='utf-8')
     data_labels = mx.nd.array(data_labels_list, dtype='float32')
     data_labels = (data_labels - data_labels.min()) / (data_labels.max() - data_labels.min()) ## normalize
     dataloader = DataIterLoader(mx.io.NDArrayIter(data_mat, data_labels, batch_size, last_batch_handle='discard', shuffle=True))
     return _get_jacobians_at_data(model, dataloader, covars, batch_size, sample_size)
-
 
 
 def _get_encoder_jacobians_at_data(model, dataloader, batch_size, sample_size):

@@ -10,6 +10,7 @@ from tmnt.distributions import LogisticGaussianLatentDistribution
 from tmnt.distributions import GaussianLatentDistribution
 from tmnt.distributions import HyperSphericalLatentDistribution
 from tmnt.distributions import GaussianUnitVarLatentDistribution
+import logging
 
 __all__ = ['BowNTM', 'MetaDataBowNTM']
 
@@ -215,8 +216,8 @@ class MetaDataBowNTM(BowNTM):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers=1, enc_dr=0.1, wd_freqs=None,
-                 seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
+                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers=1,
+                 enc_dr=0.1, wd_freqs=None, seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
                                              wd_freqs, seed_mat, n_covars, ctx)

@@ -17,6 +17,8 @@ from mxnet import autograd as ag
 import string
 from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform, BasicTokenizer
 
+__all__ = ['load_dataset_bert', 'load_dataset_basic']
+
 trans_table = str.maketrans(dict.fromkeys(string.punctuation))
 
 def remove_punct_and_urls(txt):
@@ -57,7 +59,8 @@ def load_dataset_basic(sent_file, vocab=None, json_text_key=None, max_len=64, ma
                     counter = nlp.data.count_tokens(toks, counter = counter)
         vocab = nlp.Vocab(counter, max_size=max_vocab_size)
     pad_id = vocab[vocab.padding_token]
-    logging.info("Vocabulary established from data file {} with ===> {} vocabulary items".format(sent_file, len(vocab.idx_to_token)))
+    logging.info("Vocabulary established from data file {} with ===> {} vocabulary items"
+                 .format(sent_file, len(vocab.idx_to_token)))
     with io.open(sent_file, 'r', encoding='utf-8') as fp:
         for line in fp:
             if json_text_key:

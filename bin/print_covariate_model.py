@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 
 from tmnt.bow_vae.runtime import BowNTMInference
-from tmnt.bow_vae.sensitivity_analysis import get_jacobians_at_data, get_encoder_jacobians_at_data
+from tmnt.bow_vae.sensitivity_analysis import get_jacobians_at_data_file, get_encoder_jacobians_at_data_file
 
 parser = argparse.ArgumentParser()
 

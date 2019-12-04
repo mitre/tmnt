@@ -288,14 +288,17 @@ class BowVAEWorker(Worker):
         enc_dr = config.get('enc_dr', 0.0)
         
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
-            if self.label_map:
-                n_covars = len(self.label_map)
-                self.train_labels = mx.nd.one_hot(self.train_labels, n_covars)
-                self.test_labels = mx.nd.one_hot(self.test_labels, n_covars) if self.test_labels is not None else None
-            else:  ## this case we assume scalar covariates (hardcoded to 1 for now)
-                n_covars = 1
-                self.train_labels = mx.nd.expand_dims(self.train_labels, n_covars)
-                self.test_labels = mx.nd.expand_dims(self.test_labels, n_covars) if self.test_labels is not None else None
+            if len(self.train_labels.shape) < 3:
+                ## only do this if the label shape hasn't been changed already
+                ## this method has state (via self.train_labels) and may get called repeatedly
+                if self.label_map:
+                    n_covars = len(self.label_map)
+                    self.train_labels = mx.nd.one_hot(self.train_labels, n_covars)
+                    self.test_labels = mx.nd.one_hot(self.test_labels, n_covars) if self.test_labels is not None else None
+                else:  ## this case we assume scalar covariates (hardcoded to 1 for now)
+                    n_covars = 1
+                    self.train_labels = mx.nd.expand_dims(self.train_labels, n_covars)
+                    self.test_labels = mx.nd.expand_dims(self.test_labels, n_covars) if self.test_labels is not None else None
             model = \
                 MetaDataBowNTM(self.label_map, n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa, alpha=alpha,
