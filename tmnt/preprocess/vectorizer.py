@@ -26,7 +26,8 @@ class Vectorizer(object):
 
     def __init__(self, custom_stop_word_file=None, encoding='utf-8'):
         self.encoding = encoding
-        self.tokenizer = BasicTokenizer(use_stop_words=True, custom_stop_word_file=custom_stop_word_file, encoding=encoding)
+        self.tokenizer = BasicTokenizer(use_stop_words=True, custom_stop_word_file=custom_stop_word_file,
+                                        encoding=encoding)
         self.json_rewrite = False
 
     def get_counter_dir_parallel(self, data_dir, pat):
@@ -73,8 +74,8 @@ class Vectorizer(object):
         return None
         
 
-    def get_sparse_vecs(self, sp_out_file, vocab_out_file, data_dir, vocab_size=2000, i_vocab=None, full_histogram_file=None,
-                        pat='*.json'):
+    def get_sparse_vecs(self, sp_out_file, vocab_out_file, data_dir, vocab_size=2000, i_vocab=None,
+                        full_histogram_file=None, pat='*.json'):
         files = glob.glob(data_dir + '/' + pat)
         if i_vocab is None:
             counter = self.get_counter_dir_parallel(data_dir, pat)
@@ -86,18 +87,18 @@ class Vectorizer(object):
             vec_fn = self.task_vec_fn
         else:
             vec_fn = self.direct_out_vec_fn
-        if len(files_and_vocab) > 2:
+        if True:
             file_batches = list(self.chunks(files_and_vocab, max(1, len(files_and_vocab) // cpu_count())))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
                     mcore.run(vec_fn,"Vectorizing Batch {}".format(i), file_batches[i], sp_out_file)
                 sp_vecs = mcore.returns()
-            if not self.json_rewrite:
+            if self.json_rewrite:
                 sp_vecs = [ item for sl in sp_vecs for item in sl ]
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
         ## if we're not outputing json and we used non-concurrent processing, need to print out vecs here
-        if not self.json_rewrite and len(files_and_vocab) <= 2:
+        if False: # not self.json_rewrite and len(files_and_vocab) <= 2:
             sp_list = list(sp_vecs)
             with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
                 for block in sp_list:
@@ -155,16 +156,13 @@ class JsonVectorizer(Vectorizer):
 
     def get_counter_dir_parallel(self, data_dir, pat):
         files = glob.glob(data_dir + '/' + pat)
-        if len(files) > 2:
-            file_batches = list(self.chunks(files, max(1, len(files) // cpu_count())))
-            logging.info("Counting vocabulary over {} text files with {} batches".format(len(files), len(file_batches)))
-            with mantichora() as mcore:
-                for i in range(len(file_batches)):
-                    mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batches[i])
-                counter_cs = mcore.returns()
-            counters = [ item for sl in counter_cs for item in sl ]
-        else:
-            counters = map(self.get_counter_file, files)
+        file_batches = list(self.chunks(files, max(1, len(files) // cpu_count())))
+        logging.info("Counting vocabulary over {} text files with {} batches".format(len(files), len(file_batches)))
+        with mantichora() as mcore:
+            for i in range(len(file_batches)):
+                mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batches[i])
+            counter_cs = mcore.returns()
+        counters = [ item for sl in counter_cs for item in sl ]
         return sum(counters, Counter())
 
     def vectorize_fn_to_json(self, file_and_vocab):
@@ -241,15 +239,12 @@ class TextVectorizer(Vectorizer):
         files = glob.glob(txt_dir + '/' + pat)
         batch_size = max(1, int(len(files) / 20))
         file_batches = list(batches(files, batch_size))
-        if len(file_batches) > 2:
-            file_batch_batches = list(self.chunks(file_batches, max(1, len(files) // cpu_count())))
-            with mantichora() as mcore:
-                for i in range(len(file_batch_batches)):
-                    mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batch_batches[i])
-                counter_cs = mcore.returns()
-            counters = [ item for sl in counter_cs for item in sl ]
-        else:
-            counters = map(self.get_counter_file_batch, file_batches)    
+        file_batch_batches = list(self.chunks(file_batches, max(1, len(files) // cpu_count())))
+        with mantichora() as mcore:
+            for i in range(len(file_batch_batches)):
+                mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batch_batches[i])
+            counter_cs = mcore.returns()
+        counters = [ item for sl in counter_cs for item in sl ]
         return sum(counters, Counter())
 
 
