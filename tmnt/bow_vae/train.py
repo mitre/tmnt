@@ -288,19 +288,7 @@ class BowVAEWorker(Worker):
         enc_dr = config.get('enc_dr', 0.0)
         
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
-            if self.label_map:
-                n_covars = len(self.label_map)
-            else:
-                n_covars = 1
-            if len(self.train_labels.shape) < 3:
-                ## only do this if the label shape hasn't been changed already
-                ## this method has state (via self.train_labels) and may get called repeatedly
-                if self.label_map:
-                    self.train_labels = mx.nd.one_hot(self.train_labels, n_covars)
-                    self.test_labels = mx.nd.one_hot(self.test_labels, n_covars) if self.test_labels is not None else None
-                else:  ## this case we assume scalar covariates (hardcoded to 1 for now)
-                    self.train_labels = mx.nd.expand_dims(self.train_labels, n_covars)
-                    self.test_labels = mx.nd.expand_dims(self.test_labels, n_covars) if self.test_labels is not None else None
+            n_covars = len(self.label_map) if self.label_map else 1
             model = \
                 MetaDataBowNTM(self.label_map, n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa, alpha=alpha,
@@ -375,6 +363,7 @@ class BowVAEWorker(Worker):
         batch_size = int(config['batch_size'])
         l1_coef = self.c_args.init_sparsity_pen
         num_test_batches = 0
+
         train_dataloader = \
             DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size,
                                              last_batch_handle='discard', shuffle=True))
@@ -586,6 +575,14 @@ def get_worker(args, budget, id_str, ns_port):
     model_out_dir = args.model_dir if args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
+    if args.use_labels_as_covars and tr_labels is not None:
+        if label_map is not None:
+            n_covars = len(label_map)
+            tr_labels = mx.nd.one_hot(tr_labels, n_covars)
+            tst_labels = mx.nd.one_hot(tst_labels, n_covars) if tst_labels is not None else None
+        else:
+            tr_labels = mx.nd.expand_dims(tr_labels, 1)
+            tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
     worker = BowVAEWorker(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
                           label_map, ctx=ctx, max_budget=budget, nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
     return worker, train_out_dir
