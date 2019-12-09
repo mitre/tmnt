@@ -60,15 +60,17 @@ class Vectorizer(object):
             vs = self.vectorize_fn(files[i])
             lock.acquire()
             try:
-                with io.open(sp_out_file, 'a+') as out_stream:
-                    for (v,l) in vs:
-                        out_stream.write(str(l))
-                        for (i,c) in v:
-                            out_stream.write(' ')
-                            out_stream.write(str(i))
-                            out_stream.write(':')
-                            out_stream.write(str(c))
-                        out_stream.write('\n')
+                out_stream = io.open(sp_out_file, 'a+')
+                for (v,l) in vs:
+                    out_stream.write(str(l))
+                    for (i,c) in v:
+                        out_stream.write(' ')
+                        out_stream.write(str(i))
+                        out_stream.write(':')
+                        out_stream.write(str(c))
+                    out_stream.write('\n')
+                out_stream.flush()
+                os.fsync(out_stream.fileno())
             finally:
                 lock.release()
         return None
