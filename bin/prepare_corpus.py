@@ -32,8 +32,9 @@ if __name__ == '__main__':
     if args.vocab_file is None:
         raise Exception("Vocabulary output file name/path must be provided")
     vectorizer = \
-        TextVectorizer(min_doc_size=args.min_doc_length, encoding=args.str_encoding) if args.txt_mode \
-        else JsonVectorizer(text_key=args.json_text_key, label_key=args.json_label_key,
+        TextVectorizer(min_doc_size=args.min_doc_length, encoding=args.str_encoding, custom_stop_word_file=args.custom_stop_words) \
+        if args.txt_mode \
+           else JsonVectorizer(text_key=args.json_text_key, custom_stop_word_file=args.custom_stop_words, label_key=args.json_label_key,
                             min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars,
                             json_rewrite=args.json_add,
                             encoding=args.str_encoding)

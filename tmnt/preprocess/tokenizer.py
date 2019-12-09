@@ -6,6 +6,7 @@ Copyright (c) 2019 The MITRE Corporation.
 
 import unicodedata
 import re
+import io
 
 __all__ = ['BasicTokenizer']
 
@@ -16,10 +17,11 @@ class BasicTokenizer(object):
         self.encoding = encoding
         self.do_lower_case = do_lower_case
         self.use_stop_words = use_stop_words
-        self.stop_word_set = get_stop_word_set(custom_stop_word_file) if custom_stop_word_file is not None else default_stop_words
+        print("Initializing tokenizer using stop words = {}".format(custom_stop_word_file))
+        self.stop_word_set = self.get_stop_word_set(custom_stop_word_file) if custom_stop_word_file is not None else default_stop_words
         self.num_re = re.compile('[-+]?[.\d]*[\d]+[:,.\d]*$') ## matches straight number
         
-    def get_stop_word_set(f):
+    def get_stop_word_set(self, f):
         wds = []
         with io.open(f, 'r', encoding=self.encoding) as fp:
             for w in fp:
