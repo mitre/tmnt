@@ -15,12 +15,15 @@ from mantichora import mantichora
 from atpbar import atpbar
 import threading
 import logging
+import threading
+from queue import Queue
 
 from tmnt.preprocess import BasicTokenizer
 
 __all__ = ['JsonVectorizer', 'TextVectorizer']
 
 lock = threading.RLock()
+write_queue = Queue()
 
 class Vectorizer(object):
 
@@ -29,6 +32,8 @@ class Vectorizer(object):
         self.tokenizer = BasicTokenizer(use_stop_words=True, custom_stop_word_file=custom_stop_word_file,
                                         encoding=encoding)
         self.json_rewrite = False
+        self.max_queue_size = 100000
+
 
     def get_counter_dir_parallel(self, data_dir, pat):
         raise NotImplementedError('Vectorizer must be instantiated as TextVectorizer or JsonVectorizer')
@@ -53,26 +58,32 @@ class Vectorizer(object):
             sp_vecs.append(self.vectorize_fn(files[i]))
         return sp_vecs
 
-    
-    def direct_out_vec_fn(self, name, files, sp_out_file):
+    def _expunge_write_queue(self, sp_out_file, force):
         global lock
-        for i in atpbar(range(len(files)), name=name):
-            vs = self.vectorize_fn(files[i])
-            lock.acquire()
-            try:
-                out_stream = io.open(sp_out_file, 'a+')
-                for (v,l) in vs:
-                    out_stream.write(str(l))
-                    for (i,c) in v:
+        lock.acquire()        
+        try:
+            print("Entering print loop")
+            with open(sp_out_file,'a+') as out_stream:
+                while write_queue.qsize():
+                    v, l = write_queue.get()
+                    out_stream.write("{}".format(l))
+                    for (i, c) in v:
                         out_stream.write(' ')
                         out_stream.write(str(i))
                         out_stream.write(':')
                         out_stream.write(str(c))
                     out_stream.write('\n')
-                out_stream.flush()
-                os.fsync(out_stream.fileno())
-            finally:
-                lock.release()
+        finally:
+            lock.release()
+        return None
+
+    
+    def direct_out_vec_fn(self, name, files, sp_out_file, last_batch):
+        for i in atpbar(range(len(files)), name=name):
+            vs = self.vectorize_fn(files[i])
+            for v in vs:
+                write_queue.put(v)
+        self._expunge_write_queue(sp_out_file, last_batch)
         return None
         
 
@@ -91,10 +102,14 @@ class Vectorizer(object):
             vec_fn = self.direct_out_vec_fn
         if True:
             file_batches = list(self.chunks(files_and_vocab, max(1, len(files_and_vocab) // cpu_count())))
+            #file_batches = [files_and_vocab]
+            print("Length of file batches = {}".format(len(file_batches)))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
-                    mcore.run(vec_fn,"Vectorizing Batch {}".format(i), file_batches[i], sp_out_file)
+                    mcore.run(vec_fn,"Vectorizing Batch {}".format(i), file_batches[i], sp_out_file, i==(len(file_batches)-1))
                 sp_vecs = mcore.returns()
+                write_queue.join()
+                self._expunge_write_queue(sp_out_file, True)
             if self.json_rewrite:
                 sp_vecs = [ item for sl in sp_vecs for item in sl ]
         else:
