@@ -17,13 +17,11 @@ import threading
 import logging
 import threading
 from queue import Queue
+from tmnt.utils.log_utils import logging_config
 
 from tmnt.preprocess import BasicTokenizer
 
 __all__ = ['JsonVectorizer', 'TextVectorizer']
-
-lock = threading.RLock()
-write_queue = Queue()
 
 class Vectorizer(object):
 
@@ -32,7 +30,6 @@ class Vectorizer(object):
         self.tokenizer = BasicTokenizer(use_stop_words=True, custom_stop_word_file=custom_stop_word_file,
                                         encoding=encoding)
         self.json_rewrite = False
-        self.max_queue_size = 100000
 
 
     def get_counter_dir_parallel(self, data_dir, pat):
@@ -46,7 +43,6 @@ class Vectorizer(object):
                           bos_token=None, eos_token=None, min_freq=5, max_size=size)
         return vocab
 
-
     def chunks(self, l, n):
         """Yield successive n-sized chunks from l."""
         for i in range(0, len(l), n):
@@ -55,37 +51,14 @@ class Vectorizer(object):
     def task_vec_fn(self, name, files):
         sp_vecs = []
         for i in atpbar(range(len(files)), name=name):
-            sp_vecs.append(self.vectorize_fn(files[i]))
+            sp_vecs.extend(self.vectorize_fn(files[i]))
         return sp_vecs
 
-    def _expunge_write_queue(self, sp_out_file, force):
-        global lock
-        lock.acquire()        
-        try:
-            print("Entering print loop")
-            with open(sp_out_file,'a+') as out_stream:
-                while write_queue.qsize():
-                    v, l = write_queue.get()
-                    out_stream.write("{}".format(l))
-                    for (i, c) in v:
-                        out_stream.write(' ')
-                        out_stream.write(str(i))
-                        out_stream.write(':')
-                        out_stream.write(str(c))
-                    out_stream.write('\n')
-        finally:
-            lock.release()
+    def no_return_task_vec_fn(self, name, files):
+        for i in atpbar(range(len(files)), name=name):
+            self.vectorize_fn(files[i])
         return None
 
-    
-    def direct_out_vec_fn(self, name, files, sp_out_file, last_batch):
-        for i in atpbar(range(len(files)), name=name):
-            vs = self.vectorize_fn(files[i])
-            for v in vs:
-                write_queue.put(v)
-        self._expunge_write_queue(sp_out_file, last_batch)
-        return None
-        
 
     def get_sparse_vecs(self, sp_out_file, vocab_out_file, data_dir, vocab_size=2000, i_vocab=None,
                         full_histogram_file=None, pat='*.json'):
@@ -97,36 +70,31 @@ class Vectorizer(object):
             vocab = i_vocab
         files_and_vocab = [(f,vocab) for f in files]
         if self.json_rewrite:
-            vec_fn = self.task_vec_fn
+            vec_fn = self.no_return_task_vec_fn
         else:
-            vec_fn = self.direct_out_vec_fn
+            vec_fn = self.task_vec_fn
         if True:
             file_batches = list(self.chunks(files_and_vocab, max(1, len(files_and_vocab) // cpu_count())))
-            #file_batches = [files_and_vocab]
-            print("Length of file batches = {}".format(len(file_batches)))
             with mantichora() as mcore:
                 for i in range(len(file_batches)):
-                    mcore.run(vec_fn,"Vectorizing Batch {}".format(i), file_batches[i], sp_out_file, i==(len(file_batches)-1))
+                    mcore.run(vec_fn,"Vectorizing Batch {}".format(i), file_batches[i])
                 sp_vecs = mcore.returns()
-                write_queue.join()
-                self._expunge_write_queue(sp_out_file, True)
-            if self.json_rewrite:
+            ## flatten
+            if not self.json_rewrite:
                 sp_vecs = [ item for sl in sp_vecs for item in sl ]
         else:
             sp_vecs = map(self.vectorize_fn, files_and_vocab)
         ## if we're not outputing json and we used non-concurrent processing, need to print out vecs here
-        if False: # not self.json_rewrite and len(files_and_vocab) <= 2:
-            sp_list = list(sp_vecs)
+        if not self.json_rewrite:
             with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
-                for block in sp_list:
-                    for (v,l) in block:
-                        fp.write(str(l))  
-                        for (i,c) in v:
-                            fp.write(' ')
-                            fp.write(str(i))
-                            fp.write(':')
-                            fp.write(str(c))
-                        fp.write('\n')
+                for (v,l) in sp_vecs:
+                    fp.write(str(l))  
+                    for (i,c) in v:
+                        fp.write(' ')
+                        fp.write(str(i))
+                        fp.write(':')
+                        fp.write(str(c))
+                    fp.write('\n')
         if i_vocab is None: ## print out vocab if we had to create it
             with io.open(vocab_out_file, 'w', encoding=self.encoding) as fp:
                 for i in range(len(vocab.idx_to_token)):
@@ -147,14 +115,15 @@ class Vectorizer(object):
 class JsonVectorizer(Vectorizer):
 
     def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=6, label_prefix=-1,
-                 json_rewrite=False, encoding='utf-8'):
+                 json_out_dir=None, encoding='utf-8'):
         super(JsonVectorizer, self).__init__(custom_stop_word_file, encoding=encoding)
         self.encoding = encoding
         self.text_key = text_key
         self.label_key = label_key
         self.label_prefix = label_prefix
         self.min_doc_size = min_doc_size
-        self.json_rewrite = json_rewrite
+        self.json_rewrite = json_out_dir is not None
+        self.json_out_dir = json_out_dir
 
     def get_counter_file(self, json_file):
         counter = None
@@ -185,7 +154,9 @@ class JsonVectorizer(Vectorizer):
     def vectorize_fn_to_json(self, file_and_vocab):
         json_file, vocab = file_and_vocab
         json_path, file_name = os.path.split(json_file)
-        n_json_file = os.path.join(json_path, "vec_"+file_name)
+        n_json_file = os.path.join(self.json_out_dir, "vec_"+file_name)
+        if not os.path.exists(self.json_out_dir):
+            os.mkdir(self.json_out_dir)
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             with io.open(n_json_file, 'w', encoding=self.encoding) as op:
                 for l in fp:
