@@ -271,7 +271,8 @@ class MetaDataBowNTM(BowNTM):
         dec_out = self.decoder(z)
         cov_dec_out = self.cov_decoder(z, covars)
         y = F.softmax(dec_out + cov_dec_out, axis=1)
-        iii_loss, recon_loss, l1_pen, entropies, coherence_loss = self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
+        iii_loss, recon_loss, l1_pen, entropies, coherence_loss = \
+            self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
         return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, y
 
         

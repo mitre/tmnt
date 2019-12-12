@@ -81,7 +81,8 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
 
 
 
-def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False, test_dataloader=None, ctx=mx.cpu()):
+def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False,
+                      test_dataloader=None, ctx=mx.cpu()):
     if covariate_interactions:
         logging.info("Rendering interactions not supported yet")
     num_topics = model.n_latent

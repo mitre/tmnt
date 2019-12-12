@@ -76,7 +76,7 @@ class EvaluateNPMI(object):
                 if bigram_cnt < 1:
                     npmi = 0.0
                 else:
-                    npmi = (log10(n_docs) + log10(bigram_cnt) - log10(unigram_1) - log10(unigram_2)) / (log10(n_docs) - log10(bigram_cnt))
+                    npmi = (log10(n_docs) + log10(bigram_cnt) - log10(unigram_1) - log10(unigram_2)) / (log10(n_docs) - log10(bigram_cnt) + 1e-4)
                 total_topic_npmi += npmi
             total_topic_npmi *= (2 / (n_topics * (n_topics-1)))
             total_npmi += total_topic_npmi
