@@ -28,7 +28,7 @@ class BowNTM(HybridBlock):
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None,
-                 n_encoding_layers = 3, enc_dr=0.1,
+                 n_encoding_layers = 1, enc_dr=0.1,
                  wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size

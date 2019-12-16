@@ -32,18 +32,24 @@ class BowNTMInference(object):
         self.n_latent = specs['n_latent']
         enc_dim = specs['enc_hidden_dim']
         lat_distrib = specs['latent_distribution']
+        n_encoding_layers = specs.get('num_enc_layers', 0)
+        enc_dr= specs.get('enc_dr', 0.0)
         emb_size = specs['embedding_size']
         if 'n_covars' in specs:
             self.covar_model = True
             self.n_covars = specs['n_covars']
             self.label_map = specs['l_map']
             self.covar_net_layers = specs.get('covar_net_layers')
+
             self.model = MetaDataBowNTM(self.label_map, self.n_covars,
                                         self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
+                                        n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
                                         covar_net_layers = self.covar_net_layers, ctx=ctx)
         else:
             self.covar_model = False
-            self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib, ctx=ctx)
+            self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
+                                n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
+                                ctx=ctx)
         self.model.load_parameters(str(param_file), allow_missing=False)
 
 

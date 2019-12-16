@@ -31,7 +31,6 @@ def print_categorical_covar_model():
     with open(args.covariate_values, 'r') as fp:
         for c in fp:
             covars.append(str.strip(c))
-
     topk_per_covar = infer.get_top_k_words_per_topic_per_covariate(args.num_terms)
     with open(args.output_file, 'w') as out:
         for c in covars:
