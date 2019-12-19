@@ -33,8 +33,10 @@ class BowNTMInference(object):
         enc_dim = specs['enc_hidden_dim']
         lat_distrib = specs['latent_distribution']
         n_encoding_layers = specs.get('num_enc_layers', 0)
-        enc_dr= specs.get('enc_dr', 0.0)
+        enc_dr= float(specs.get('enc_dr', 0.0))
         emb_size = specs['embedding_size']
+        l1_tgt_sparsty = float(specs.get('target_sparsity', 0.0))
+        coherence_reg_penalty = float(specs.get('coherence_regularizer_penalty', 0.0))
         if 'n_covars' in specs:
             self.covar_model = True
             self.n_covars = specs['n_covars']
@@ -105,7 +107,8 @@ class BowNTMInference(object):
     def encode_csr(self, csr, labels, use_probs=False):
         batch_size = min(csr.shape[0], self.max_batch_size)
         last_batch_size = csr.shape[0] % batch_size
-        covars = mx.nd.one_hot(mx.nd.array(labels, dtype='int'), self.n_covars) if self.covar_model and labels[:-last_batch_size] is not None else None
+        covars = mx.nd.one_hot(mx.nd.array(labels, dtype='int'), self.n_covars) \
+            if self.covar_model and labels[:-last_batch_size] is not None else None
         infer_iter = DataIterLoader(mx.io.NDArrayIter(csr[:-last_batch_size], covars,
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         encodings = []
@@ -214,7 +217,7 @@ class TextEncoder(object):
             encs = mx.nd.softmax(e1 ** 0.5)
         return encs
 
-    def encode_batch(self, txts, pool_size=4):
+    def encode_batch(self, txts, covars=None, pool_size=4):
         pool = Pool(pool_size)
         ids  = pool.map(self._txt_to_vec, txts)
         # Prevent zombie threads from hanging around
@@ -224,7 +227,13 @@ class TextEncoder(object):
         for i, txt_ids in enumerate(ids):
             for t in txt_ids:
                 data[i][t] += 1.0
-        encs = self.inference.model.encode_data(data)
+        model = self.inference.model
+        if covars:
+            covar_ids = mx.nd.array([model.label_map[v] for v in covars])
+            covars = mx.nd.one_hot(covar_ids, depth=len(model.label_map))
+            encs = model.encode_data_with_covariates(data, covars)
+        else:
+            encs = model.encode_data(data)
         if self.use_probs:
             e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
             encs = mx.nd.softmax(e1 ** 0.5)
