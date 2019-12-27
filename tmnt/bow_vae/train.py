@@ -540,6 +540,8 @@ def write_model(m, model_dir, config, budget, args):
         if m.vocabulary.embedding:
             config['embedding_size'] = len(m.vocabulary.embedding.idx_to_vec[0])
         config['training_epochs'] = int(budget)
+        if 'num_enc_layers' not in config.keys():
+            config['num_enc_layers'] = m.num_enc_layers
         if isinstance(m, MetaDataBowNTM):
             config['n_covars'] = int(m.n_covars)
             config['l_map'] = m.label_map

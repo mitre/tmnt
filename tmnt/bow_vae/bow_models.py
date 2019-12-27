@@ -40,6 +40,7 @@ class BowNTM(HybridBlock):
         self.embedding_size = embedding_size
         self.target_sparsity = target_sparsity
         self.vocabulary = vocabulary
+        self.num_enc_layers = n_encoding_layers
         if vocabulary.embedding:
             assert vocabulary.embedding.idx_to_vec[0].size == embedding_size
         self.encoding_dims = [self.embedding_size + n_covars] + [enc_dim for _ in range(n_encoding_layers)]
