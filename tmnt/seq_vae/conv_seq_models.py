@@ -141,7 +141,7 @@ class DecoderBlock(HybridBlock):
         self.widths = widths
         self.heights = heights
         self.strides = strides
-        activations = [None if i == num_layers - 1 else 'relu' for i in range(num_layers)]
+        activations = ['tanh' if i == num_layers - 1 else activation for i in range(num_layers)]
         in_channels = [self._n_latent if i == 0 else filters[i-1] for i in range(num_layers)]
         self.dec_layers = nn.HybridSequential()
         with self.dec_layers.name_scope():
@@ -152,7 +152,7 @@ class DecoderBlock(HybridBlock):
                                                in_channels=in_channels[i], activation=None)) 
                 if i < num_layers-1: ## if not the last layer, add batch norm
                     self.dec_layers.add(nn.BatchNorm(axis=1, center=True, scale=True, in_channels=in_channels[i+1]))                    
-                self.dec_layers.add(nn.Activation(activation='relu'))
+                    self.dec_layers.add(nn.Activation(activation=activations[i]))
 
                     
     def __call__(self, x):

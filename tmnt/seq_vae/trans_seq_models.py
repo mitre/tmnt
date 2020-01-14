@@ -16,8 +16,8 @@ from mxnet.gluon import nn
 from mxnet.gluon.block import HybridBlock, Block
 from gluonnlp.model import TransformerEncoderCell
 from gluonnlp.loss import LabelSmoothing
-from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
-from tmnt.distributions import GaussianUnitVarLatentDistribution
+from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution
+from tmnt.distributions import GaussianUnitVarLatentDistribution, HyperSphericalLatentDistribution
 
 class PureTransformerVAE(Block):
 
@@ -186,6 +186,7 @@ class TransformerDecoder(HybridBlock):
                 scaled = True,
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
+                scale_embed=False,
                 ctx = ctx)
             self.out_projection = nn.Dense(in_units = num_units, units = wd_embed_dim, flatten=False)
 
@@ -218,9 +219,10 @@ class TransformerEncoder(HybridBlock):
                 hidden_size = hidden_size,
                 max_length = sent_size,
                 num_heads = num_heads,
-                scaled = True,
+                scaled = False,
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
+                scale_embed=False,
                 ctx = ctx)
             self.projection = nn.Dense(in_units = num_units, units = n_latent)
 
@@ -234,7 +236,7 @@ class TransformerEncoder(HybridBlock):
         y, _ = self.trans_block(x)
         first = y[:,0,:]
         encoding = self.projection(first)
-        return encoding
+        return first
     
 
 def _position_encoding_init(max_length, dim):
