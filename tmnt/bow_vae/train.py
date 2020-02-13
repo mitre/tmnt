@@ -25,7 +25,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data
-from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
+from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM, BasicAE
 from tmnt.bow_vae.topic_seeds import get_seed_matrix_from_file
 from tmnt.bow_vae.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
 from tmnt.utils.log_utils import logging_config
@@ -361,6 +361,7 @@ class BowVAEWorker(Worker):
         """
         logging.info("Evaluating with Budget {} against Config: {}".format(budget, config))
         model, trainer = self._get_model(config)
+
         batch_size = int(config['batch_size'])
         l1_coef = self.c_args.init_sparsity_pen
         num_test_batches = 0
@@ -396,7 +397,9 @@ class BowVAEWorker(Worker):
         training_epochs = budget
         if data_sensitive_budget:
             training_epochs = \
-                (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0] 
+                (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
+
+        visualized_first_batch = False
 
         for epoch in range(math.ceil(training_epochs)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,

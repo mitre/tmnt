@@ -205,9 +205,9 @@ class TransformerDecoder(HybridBlock):
 
 
 class TransformerEncoder(HybridBlock):
-    def __init__(self, wd_embed_dim, num_units, hidden_size=512, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
+    def __init__(self, wd_embed_dim, num_units, hidden_size=512, num_heads=4, n_layers=6, n_latent=256, sent_size = 30,
+                 batch_size=8, ctx=mx.cpu()):
         super(TransformerEncoder, self).__init__()
-        self._batch_size = batch_size
         self._sent_size = sent_size
         self._n_latent = n_latent
         with self.name_scope():
@@ -396,7 +396,7 @@ class TransformerBlock(HybridBlock):
 
         all_encodings_outputs = []
         additional_outputs = []
-        batch_size = inputs.shape[0]
+        #batch_size = inputs.shape[0]
         
         for i,cell in enumerate(self.transformer_cells):
             outputs, attention_weights = cell(inputs, None)
