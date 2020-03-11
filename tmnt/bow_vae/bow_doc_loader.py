@@ -19,7 +19,8 @@ from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 from tmnt.preprocess.tokenizer import BasicTokenizer
 
 
-__all__ = ['DataIterLoader', 'collect_sparse_test', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix']
+__all__ = ['DataIterLoader', 'collect_sparse_test', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix',
+           'get_single_vec']
 
 def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
     if pre_vocab:
@@ -156,6 +157,12 @@ def load_vocab(vocab_file, encoding='utf-8'):
     return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
 
 
+def get_single_vec(els_sp):
+    pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp ] )
+    inds, vs = zip(*pairs)
+    return len(pairs), inds, vs
+    
+
 def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encoding='utf-8'):
     labels = []
     indices = []
@@ -167,8 +174,7 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encod
     lm = label_map if label_map and not scalar_labels else {}
     with io.open(sp_file, 'r', encoding=encoding) as fp:
         for line in fp:
-            ndocs += 1
-            els = line.split(' ')
+            els = line.split(' ')            
             lstr = els[0]
             if scalar_labels:
                 label = float(lstr)
@@ -181,12 +187,12 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encod
                         lm[lstr] = label
                     else:
                         label = -1
-            labels.append(label)
-            els_sp = list(map(lambda e: e.split(':'), els))
-            pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp[1:] ] )
-            inds, vs = zip(*pairs)
-            cumulative += len(pairs)
+            ndocs += 1
+            els_sp = list(map(lambda e: e.split(':'), els[1:]))
+            n_pairs, inds, vs = get_single_vec(els_sp)
+            cumulative += n_pairs
             total_num_words += sum(vs)
+            labels.append(label)
             indptrs.append(cumulative)
             values.extend(vs)
             indices.extend(inds)

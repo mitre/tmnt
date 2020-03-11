@@ -2,6 +2,8 @@
 
 import os, sys
 import argparse
+import logging
+from tmnt.utils.log_utils import logging_config
 
 from tmnt.preprocess.vectorizer import JsonVectorizer, TextVectorizer
 
@@ -25,10 +27,12 @@ parser.add_argument('--min_doc_length', type=int, help='Minimum document length 
 parser.add_argument('--custom_stop_words', type=str, help='Custom stop-word file (one word per line)', default=None)
 parser.add_argument('--label_prefix_chars', type=int, help='Use first N characters of label', default=-1)
 parser.add_argument('--str_encoding', type=str, help='String/file encoding to use', default='utf-8')
+parser.add_argument('--log_dir', type=str, help='Logging directory', default='.')
 
 args = parser.parse_args()
 
 if __name__ == '__main__':
+    logging_config(folder=args.log_dir, name='vectorizer', level=logging.INFO)
     if args.vocab_file is None:
         raise Exception("Vocabulary output file name/path must be provided")
     vectorizer = \

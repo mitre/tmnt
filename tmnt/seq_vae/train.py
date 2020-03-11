@@ -111,7 +111,7 @@ def train_trans_vae(args, model, data_train, data_test=None, ctx=mx.cpu(), repor
             ls.backward()
             grads = [p.grad(ctx) for p in differentiable_params]
             gluon.utils.clip_global_norm(grads, 1)
-            gen_trainer.step(1) # step of 1 since we averaged loss over batch
+            gen_trainer.step(1, ignore_stale_grad=True) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
             step_recon_ls += recon_ls.mean().asscalar()
             step_kl_ls += kl_ls.mean().asscalar()

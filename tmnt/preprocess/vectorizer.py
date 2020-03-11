@@ -69,6 +69,7 @@ class Vectorizer(object):
         else:
             vocab = i_vocab
         files_and_vocab = [(f,vocab) for f in files]
+        
         if self.json_rewrite:
             vec_fn = self.no_return_task_vec_fn
         else:
@@ -126,12 +127,13 @@ class JsonVectorizer(Vectorizer):
         self.json_out_dir = json_out_dir
 
     def get_counter_file(self, json_file):
-        counter = None
+        counter = nlp.data.Counter()
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for l in fp:
                 js = json.loads(l)
-                txt = js[self.text_key] ## text field
-                counter = nlp.data.count_tokens(self.tokenizer.tokenize(txt), counter = counter)
+                txt = js.get(self.text_key) ## text field
+                if txt:
+                    counter = nlp.data.count_tokens(self.tokenizer.tokenize(txt), counter = counter)
         return counter
 
     def task(self, name, files):
@@ -161,7 +163,8 @@ class JsonVectorizer(Vectorizer):
             with io.open(n_json_file, 'w', encoding=self.encoding) as op:
                 for l in fp:
                     js = json.loads(l)
-                    toks = self.tokenizer.tokenize(js[self.text_key])
+                    txt = js.get(self.text_key)
+                    toks = self.tokenizer.tokenize(txt) if txt else []
                     try:
                         lstr = js[self.label_key]
                         if self.label_prefix > 0:
@@ -184,7 +187,8 @@ class JsonVectorizer(Vectorizer):
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for l in fp:
                 js = json.loads(l)
-                toks = self.tokenizer.tokenize(js[self.text_key])
+                txt = js.get(self.text_key)
+                toks = self.tokenizer.tokenize(txt) if txt else []
                 try:
                     lstr = js[self.label_key]
                     if self.label_prefix > 0:
