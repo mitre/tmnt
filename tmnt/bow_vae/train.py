@@ -61,7 +61,7 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
             labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
         data = data.as_in_context(ctx)
         labels = labels.as_in_context(ctx)
-        _, kl_loss, rec_loss, _, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
+        _, kl_loss, rec_loss, _, _, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
         ## We explicitly keep track of the last batch size        
         ## The following lets us use a "rollover" for handling the last batch,
         ## enabling the symbolic computation graph (via hybridize)
@@ -172,7 +172,7 @@ class BowVAEWorker(Worker):
         
         self.seed_matrix = None
         if c_args.topic_seed_file:
-            self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary)
+            self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
 
     def set_heldout_data_as_test(self):
         """Load in the heldout test data for final model evaluation
@@ -221,7 +221,7 @@ class BowVAEWorker(Worker):
                 if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
                     logging.info("Term {} is OOV".format(word))
                     num_oov += 1
-                    vocab.embedding[word] = mx.nd.random.normal(0, 1.0, emb_size)
+                    vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
             logging.info(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
         else:
             vocab.set_embedding(None) ## unset embedding
@@ -229,7 +229,7 @@ class BowVAEWorker(Worker):
         return vocab, emb_size
 
 
-    def _update_details(self, details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss):
+    def _update_details(self, details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss):
         """Update loss details during training for logging and analysis
         """
         details['kl_loss']  += kl_loss.sum().asscalar()
@@ -239,6 +239,8 @@ class BowVAEWorker(Worker):
             details['coherence_loss'] += coherence_loss.sum().asscalar()
         if entropies is not None:
             details['entropies_loss'] += entropies.sum().asscalar()
+        if redundancy_loss is not None:
+            details['redundancy_loss'] += redundancy_loss.sum().asscalar()
         details['epoch_loss'] += elbo.sum().asscalar()
 
     def _log_details(self, details, epoch):
@@ -254,9 +256,9 @@ class BowVAEWorker(Worker):
             nd = {}
             for (k,v) in details.items():
                 nd[k] = v / tr_size
-            logging.info(
-                "Epoch {}: Loss = {}, [ KL loss = {:8.4f} ] [ Rec loss = {:8.4f}] [ Entropy losss = {:8.4f} ]".
-                format(epoch, nd['epoch_loss'], nd['kl_loss'], nd['rec_loss'], nd['entropies_loss']))
+            logging.info("Epoch {}: Loss = {}".format(epoch, nd['epoch_loss']))
+            logging.info("[Rec loss = {:8.4f}] [KL loss = {:8.4f}] [Entropy loss = {:8.4f}] [Coh. loss = {:8.4f}] [Red. loss = {:8.4f}]".
+                format(nd['rec_loss'], nd['kl_loss'], nd['entropies_loss'], nd['coherence_loss'], nd['redundancy_loss']))
         else:
             logging.info("WARNING: Training set size = {}".format(tr_size))
 
@@ -278,6 +280,7 @@ class BowVAEWorker(Worker):
         enc_hidden_dim = int(config['enc_hidden_dim'])
         target_sparsity = float(config.get('target_sparsity', 0.0))
         coherence_reg_penalty = float(config.get('coherence_regularizer_penalty', 0.0))
+        redundancy_reg_penalty = float(config.get('redundancy_regularizer_penalty', 0.0))        
         batch_size = int(config['batch_size'])
 
         l1_coef = self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
@@ -287,13 +290,13 @@ class BowVAEWorker(Worker):
         covar_net_layers = config.get('covar_net_layers')
         n_encoding_layers = config.get('num_enc_layers', 1)
         enc_dr = config.get('enc_dr', 0.0)
-        
+
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             n_covars = len(self.label_map) if self.label_map else 1
             model = \
                 MetaDataBowNTM(self.label_map, n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
                                fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa, alpha=alpha,
-                               init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, 
+                               init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, redundancy_reg_penalty=redundancy_reg_penalty,
                                batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
                                wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
                                ctx=self.ctx)
@@ -301,8 +304,8 @@ class BowVAEWorker(Worker):
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
                        fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
-                       init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, target_sparsity=target_sparsity,
-                       kappa=kappa, alpha=alpha,
+                       init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, redundancy_reg_penalty=redundancy_reg_penalty,
+                       target_sparsity=target_sparsity, kappa=kappa, alpha=alpha,
                        batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
                        wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
@@ -403,7 +406,7 @@ class BowVAEWorker(Worker):
 
         for epoch in range(math.ceil(training_epochs)):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
-                       'entropies_loss': 0.0, 'coherence_loss': 0.0, 'tr_size': 0.0}
+                       'entropies_loss': 0.0, 'coherence_loss': 0.0, 'redundancy_loss': 0.0, 'tr_size': 0.0}
             for i, (data, labels) in enumerate(train_dataloader):
                 details['tr_size'] += data.shape[0]
                 if labels is None or labels.size == 0:
@@ -411,12 +414,12 @@ class BowVAEWorker(Worker):
                 labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
                 with autograd.record():
-                    elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, _ = \
+                    elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, _ = \
                         model(data, labels) if self.c_args.use_labels_as_covars else model(data)
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
                 trainer.step(data.shape[0]) 
-                self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss)
+                self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss)
             self._log_details(details, epoch)
             if not self.search_mode and (test_dataloader is not None):
                 self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)

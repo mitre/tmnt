@@ -27,8 +27,8 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None,
-                 n_encoding_layers = 1, enc_dr=0.1,
+                 init_l1=0.0, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
+                 kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None, n_encoding_layers = 1, enc_dr=0.1,
                  wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
@@ -37,6 +37,7 @@ class BowNTM(HybridBlock):
         self.model_ctx = ctx
         self.vocab_size = len(vocabulary)
         self.coherence_reg_penalty = coherence_reg_penalty
+        self.redundancy_reg_penalty = redundancy_reg_penalty
         self.embedding_size = embedding_size
         self.target_sparsity = target_sparsity
         self.vocabulary = vocabulary
@@ -67,7 +68,7 @@ class BowNTM(HybridBlock):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
-            self.coherence_regularization = CoherenceRegularizer(coherence_reg_penalty)
+            self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         if vocabulary.embedding:            
             emb = vocabulary.embedding.idx_to_vec.transpose()
@@ -134,11 +135,10 @@ class BowNTM(HybridBlock):
             else:
                 w = self.decoder.params.get('weight').var()
                 emb = self.embedding.params.get('weight').var()
-            c = (self.coherence_regularization(w, emb) * self.coherence_reg_penalty)
-            return (cur_loss + c), c
+            c, d = self.coherence_regularization(w, emb)
+            return (cur_loss + c + d), c, d
         else:
-            #return (cur_loss, None)
-            return (cur_loss, F.zeros_like(cur_loss))
+            return (cur_loss, F.zeros_like(cur_loss), F.zeros_like(cur_loss))
 
     def add_seed_constraint_loss(self, F, cur_loss):
         # G - number of seeded topics
@@ -188,7 +188,6 @@ class BowNTM(HybridBlock):
         #print("Entropies term = {}".format(entropies_term[:20].asnumpy()))
         return (F.broadcast_add(cur_loss, entropies), entropies)
 
-
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
         #z_do = self.post_sample_dr_o(z)
@@ -199,10 +198,10 @@ class BowNTM(HybridBlock):
         rr = data * F.log(y+1e-12)
         recon_loss = -F.sparse.sum( rr, axis=1 )
         i_loss = F.broadcast_plus(recon_loss, F.broadcast_plus(l1_pen, KL))
-        ii_loss, coherence_loss = self.add_coherence_reg_penalty(F, i_loss)
+        ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(F, i_loss)
         iii_loss, entropies = self.add_seed_constraint_loss(F, ii_loss)
         #iv_loss, entropies = self.general_entropy_min_loss(F, iii_loss)
-        return iii_loss, recon_loss, l1_pen, entropies, coherence_loss
+        return iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss
 
     def hybrid_forward(self, F, data, l1_pen_const=None):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
@@ -210,15 +209,15 @@ class BowNTM(HybridBlock):
         z, KL = self.run_encode(F, emb_out, batch_size)
         dec_out = self.decoder(z)
         y = F.softmax(dec_out, axis=1)
-        iii_loss, recon_loss, l1_pen, entropies, coherence_loss = self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
-        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, y
+        iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss = self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
+        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss, y
 
 
 class MetaDataBowNTM(BowNTM):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers=1,
+                 init_l1=0.0, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers=1,
                  enc_dr=0.1, wd_freqs=None, seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
@@ -273,9 +272,9 @@ class MetaDataBowNTM(BowNTM):
         dec_out = self.decoder(z)
         cov_dec_out = self.cov_decoder(z, covars)
         y = F.softmax(dec_out + cov_dec_out, axis=1)
-        iii_loss, recon_loss, l1_pen, entropies, coherence_loss = \
+        iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
-        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, y
+        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss, y
 
         
 class CovariateModel(HybridBlock):
@@ -339,33 +338,37 @@ class ContinuousCovariateModel(HybridBlock):
 
 class CoherenceRegularizer(HybridBlock):
 
-    ## Follows paper: http://aclweb.org/anthology/D18-1096
+    ## Follows paper to add coherence loss: http://aclweb.org/anthology/D18-1096
 
-    def __init__(self, regularizer_pen):
+    def __init__(self, coherence_pen=1.0, redundancy_pen=1.0):
         super(CoherenceRegularizer, self).__init__()
-        self.regularizer_pen = regularizer_pen
+        self.coherence_pen = coherence_pen
+        self.redundancy_pen = redundancy_pen
         
 
     def hybrid_forward(self, F, w, emb):
-        ## emb should have shape (V x D)
+        ## emb should have shape (D x V)
         ## w should have shape (V x K)
         # w NORM over columns
-            
-        w_norm_val = F.norm(w, keepdims=True, axis=0)
-        #emb_norm_val = F.norm(emb, keepdims=True, axis=1)
+        w_min = F.min(w, keepdims=True, axis=0)
+        ww = w - w_min # ensure weights are non-negative
+        w_norm_val = F.norm(ww, keepdims=True, axis=0)
+        emb_norm_val = F.norm(emb, keepdims=True, axis=1)
         
-        w_norm = F.broadcast_div(w, w_norm_val)
-        #emb_norm = F.broadcast_div(emb, emb_norm_val)
-        emb_norm = emb  ## assume this is normalized up front (esp. if fixed)
+        w_norm = F.broadcast_div(ww, w_norm_val)
+        emb_norm = F.broadcast_div(emb, emb_norm_val)
 
         T = F.linalg.gemm2(emb_norm, w_norm)
-        
         T_norm_vals = F.norm(T, keepdims=True, axis=0)
         T_norm = F.broadcast_div(T, T_norm_vals)
+
         S = F.linalg.gemm2(F.transpose(emb_norm), T_norm) # (V x K)
-        C = F.sum(S * w_norm)
-        return C
-        
+        C = -F.sum(S * w_norm)
+        ## diversity component
+        D1 = F.linalg.gemm2(F.transpose(T_norm), T_norm)
+        D = F.sum(D1)
+        return C * self.coherence_pen , D * self.redundancy_pen
+
 
 
 class BasicAE(HybridBlock):

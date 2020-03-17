@@ -126,8 +126,7 @@ class JsonVectorizer(Vectorizer):
         self.json_rewrite = json_out_dir is not None
         self.json_out_dir = json_out_dir
 
-    def get_counter_file(self, json_file):
-        counter = nlp.data.Counter()
+    def get_counter_file(self, json_file, counter):
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for l in fp:
                 js = json.loads(l)
@@ -137,10 +136,10 @@ class JsonVectorizer(Vectorizer):
         return counter
 
     def task(self, name, files):
-        counters = []
+        counter = nlp.data.Counter()
         for i in atpbar(range(len(files)), name=name):
-            counters.append(self.get_counter_file(files[i]))
-        return counters
+            self.get_counter_file(files[i], counter)
+        return counter
 
     def get_counter_dir_parallel(self, data_dir, pat):
         files = glob.glob(data_dir + '/' + pat)
@@ -149,8 +148,7 @@ class JsonVectorizer(Vectorizer):
         with mantichora() as mcore:
             for i in range(len(file_batches)):
                 mcore.run(self.task,"Counting Vocab Items - Batch {}".format(i), file_batches[i])
-            counter_cs = mcore.returns()
-        counters = [ item for sl in counter_cs for item in sl ]
+            counters = mcore.returns()
         return sum(counters, Counter())
 
     def vectorize_fn_to_json(self, file_and_vocab):

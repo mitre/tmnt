@@ -23,6 +23,7 @@ parser = argparse.ArgumentParser('Reformat text files with each sentence/sample 
 parser.add_argument('--input_dir', type=str, help='Input .txt files')
 parser.add_argument('--mode', type=str, help='json or txt/text', default='json')
 parser.add_argument('--output_dir', type=str, help='Output directory with reformatted files')
+parser.add_argument('--lowercase', action='store_true', help='Lowercase the data')
 
 args = parser.parse_args()
 
@@ -52,6 +53,7 @@ if __name__ == '__main__':
                         sents = splitter.split(data)
                         for s in sents:
                             if len(s) > 10:
+                                s = s.lower() if args.lowercase else s
                                 ostr.write(s)
                                 ostr.write('\n')
                                 total_lines += 1
@@ -61,6 +63,7 @@ if __name__ == '__main__':
                     sents = splitter.split(data)
                     for s in sents:
                         if len(s) > 10:
+                            s = s.lower() if args.lowercase else s
                             ostr.write(s)
                             ostr.write('\n')
                             total_lines += 1

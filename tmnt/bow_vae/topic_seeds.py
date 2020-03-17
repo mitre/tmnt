@@ -9,7 +9,7 @@ import io
 
 __all__ = ['get_seed_matrix_from_file']
 
-def get_seed_matrix_from_file(f, vocab):
+def get_seed_matrix_from_file(f, vocab, ctx=mx.cpu()):
     with io.open(f, 'r') as fi:
         s_terms = json.loads(fi.read())
     ## s_terms will be a dictionary with topic names/indices as keys and term lists as values
@@ -22,5 +22,5 @@ def get_seed_matrix_from_file(f, vocab):
     for ind_set in inds:
         d = mx_len - len(ind_set)
         ind_set = ind_set + [0] * d
-    return mx.nd.array(inds, dtype='int32')
+    return mx.nd.array(inds, dtype='int32', ctx=ctx)
 

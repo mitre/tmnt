@@ -10,7 +10,8 @@ import io
 import datetime
 import multiprocessing
 
-from tmnt.embeddings.data import transform_data_fasttext, transform_data_word2vec, preprocess_dataset_stream, preprocess_dataset, CustomDataSet
+from tmnt.embeddings.data import transform_data_fasttext, transform_data_word2vec, preprocess_dataset_stream
+from tmnt.embeddings.data import preprocess_dataset, CustomDataSet
 from tmnt.utils.log_utils import logging_config
 from tmnt.embeddings.model import SG, CBOW
 
@@ -52,7 +53,8 @@ def train_embeddings(args, exp_folder):
 
 
     data = CustomDataSet(args.data_root,args.file_pattern, '<bos>', '<eos>', skip_empty=True)
-    data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size, pre_embedding=pt_embedding)
+    data, vocab, idx_to_counts = preprocess_dataset_stream(data, logging, max_vocab_size = args.max_vocab_size,
+                                                           pre_embedding=pt_embedding)
 
     logging.info('Data pre-processing complete.  Data transform beginning...')
 
@@ -169,7 +171,8 @@ def train_embeddings(args, exp_folder):
         f.write(js_vocab)
     embedding.embedding.save_parameters(os.path.join(exp_folder, 'embedding.params'))
     if args.token_embedding:
-        tok_embedding = nlp.embedding.TokenEmbedding(idx_to_vec=embedding.embedding.weight.data(), idx_to_token=vocab.idx_to_token)
+        tok_embedding = nlp.embedding.TokenEmbedding(idx_to_vec=embedding.embedding.weight.data(),
+                                                     idx_to_token=vocab.idx_to_token)
         tok_embedding.serialize(args.token_embedding)
     if args.model_export:
         idx_to_vec = embedding.embedding.weight.data()
@@ -177,7 +180,7 @@ def train_embeddings(args, exp_folder):
             for i in range(len(vocab.idx_to_token)):
                 f.write(vocab.idx_to_token[i])
                 f.write(' ')
-                astr = np.array2string(idx_to_vec[i].asnumpy())[1:-1]
+                astr = np.array2string(idx_to_vec[i].asnumpy(), max_line_width=10000000)[1:-1]
                 f.write(astr)
                 f.write('\n')
 

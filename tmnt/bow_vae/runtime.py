@@ -196,7 +196,8 @@ class TextEncoder(object):
     use_probs - boolean that indicates whether raw topic scores should be converted to probabilities or not (default = True)
     pool_size - integer that specifies the number of processes to use for concurrent text pre-processing
     """
-    def __init__(self, inference, use_probs=True):
+    def __init__(self, inference, use_probs=True, temp=0.5):
+        self.temp      = temp
         self.inference = inference
         self.use_probs = use_probs
         self.vocab_len = len(self.inference.vocab.idx_to_token)
@@ -236,5 +237,5 @@ class TextEncoder(object):
             encs = model.encode_data(data)
         if self.use_probs:
             e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
-            encs = mx.nd.softmax(e1 ** 0.5)
+            encs = mx.nd.softmax(e1 ** self.temp)
         return encs
