@@ -1,7 +1,7 @@
 ## Learnable hyper-parameters 
 ---
   lr: {range: [1e-6, 1e-2]}
-  batch_size: {i_range: [100, 400], step: 100}  ## batch size should be larger for larger datasets (as long as vocabulary isn't too large)
+  batch_size: {i_range: [1000, 4000], step: 1000}  ## batch size should be larger for larger datasets (as long as vocabulary isn't too large)
   latent_distribution: [vmf, gaussian, logistic_gaussian]
   optimizer: [adam]
   n_latent: {i_range: [20]}

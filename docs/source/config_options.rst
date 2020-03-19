@@ -19,11 +19,17 @@ lr                   real           Learning rate
 optimizer            categorical    MXNet optimizer (adam, sgd, etc.)
 n_latent             integer        Number of latent topics
 enc_hidden_dim       integer        Number of dimensions for encoding layer
+num_enc_layers       integer        Number of encoder fully connected layers
+enc_dr               real           Dropout used for encoder layers
+coherence_loss_wt    real           Coefficient to weight coherence loss term
+redundancy_loss_wt   real           Coefficient to weight redundancy loss term
 batch_size           integer        Batch size to use during learning
 embedding_size       integer        Number of embedding dimensions if pre-trained embedding not used
 embedding_source     categorical    MXNet pre-trained embedding registered name or file-path
 fixed_embedding      categorical    Either ``True`` or ``False``; fixes weights of embedding layer
 latent_distribution  categorical    Either ``vmf``, ``gaussian`` or ``logistic_gaussian``
+kappa                real           Concentration parameter when using ``vmf`` latent distribution
+alpha                real           Prior variance when using ``logistic_gaussian`` latent distribution
 ===================  ===========    =================================================================
 
 Some details on these options follows.
@@ -49,12 +55,8 @@ trained on 42 billion tokens. Available Glove embeddings can be obtained via::
 See ``https://gluon-nlp.mxnet.io/api/modules/embedding.html#gluonnlp.embedding.TokenEmbedding`` for other embeddings
 available.  
 
-It is also possible to use custom user-pretrained embeddings using the ``file`` source. The embeddings
-should be in a file where each token in the embedding appears as the first entry on a line, followed
-by a space, followed by the floating points that make up its embedding vector, all space separated.
-An example::
-
-  ‘hello 0.1 0.2 0.3 0.4 0.5\nworld 1.1 1.2 1.3 1.4 1.5\n’
+It is also possible to use custom user-pretrained embeddings using the ``file`` source. These embeddings
+should be in a compressed ``.npz`` file as generated using the ``train_embeddings.py`` script.
 
 Latent Distributions
 ~~~~~~~~~~~~~~~~~~~~

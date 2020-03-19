@@ -93,11 +93,11 @@ class TMNTConfig(object):
         if target_sparsity_c:
             cs.add_hyperparameters([target_sparsity_c])
 
-        coherence_reg_penalty_c = self._get_range_uniform('coherence_regularizer_penalty', cd)        
+        coherence_reg_penalty_c = self._get_range_uniform('coherence_loss_wt', cd)        
         if coherence_reg_penalty_c:
             cs.add_hyperparameters([coherence_reg_penalty_c])
 
-        redundancy_reg_penalty_c = self._get_range_uniform('redundancy_regularizer_penalty', cd)
+        redundancy_reg_penalty_c = self._get_range_uniform('redundancy_loss_wt', cd)
         if redundancy_reg_penalty_c:
             cs.add_hyperparameters([redundancy_reg_penalty_c])
 

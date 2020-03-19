@@ -279,8 +279,8 @@ class BowVAEWorker(Worker):
         alpha = float(config.get('alpha', 1.0))
         enc_hidden_dim = int(config['enc_hidden_dim'])
         target_sparsity = float(config.get('target_sparsity', 0.0))
-        coherence_reg_penalty = float(config.get('coherence_regularizer_penalty', 0.0))
-        redundancy_reg_penalty = float(config.get('redundancy_regularizer_penalty', 0.0))        
+        coherence_reg_penalty = float(config.get('coherence_loss_wt', 0.0))
+        redundancy_reg_penalty = float(config.get('redundancy_loss_wt', 0.0))        
         batch_size = int(config['batch_size'])
 
         l1_coef = self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
