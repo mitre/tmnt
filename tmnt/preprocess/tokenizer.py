@@ -139,7 +139,7 @@ class BasicTokenizer(object):
         if (group0 or group1 or group2 or group3):
             return True
         cat = unicodedata.category(char)
-        if cat.startswith('P'):
+        if cat.startswith('P') or cat.startswith('S') or cat.startswith('C') or cat.startswith('M'):
             return True
         return False
 

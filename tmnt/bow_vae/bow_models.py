@@ -167,30 +167,20 @@ class BowNTM(HybridBlock):
             return (F.broadcast_add(cur_loss, entropies), entropies)
         else:
             return (cur_loss, F.zeros_like(cur_loss))
-            #return (cur_loss, None)
+
 
     def general_entropy_min_loss(self, F, cur_loss):
         if F is mx.ndarray:
             w = self.decoder.params.get('weight').data()
         else:
             w = self.decoder.params.get('weight').var()
-        #print("Shape w = {}".format(w.shape))
         w_term_probs = F.softmax(w, axis=1) ** 4.0
-
-        #w_topic_probs = F.softmax(w, axis=0) ** 2.0
-        #print("Term 1 = {}".format(w_term_probs[0].asnumpy()))
-
         entropies = -F.sum(w_term_probs * F.log(w_term_probs))
 
-        #entropies = -F.sum(w_topic_probs * F.log(w_topic_probs))
-        #entropies_term = -F.sum(w_term_probs * F.log(w_term_probs), axis=1)
-        #print("Shape entropies = {}".format(entropies_term.shape))        
-        #print("Entropies term = {}".format(entropies_term[:20].asnumpy()))
         return (F.broadcast_add(cur_loss, entropies), entropies)
 
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
-        #z_do = self.post_sample_dr_o(z)
         return self.latent_dist(enc_out, batch_size)
 
     def get_loss_terms(self, F, data, y, KL, l1_pen_const, batch_size):
