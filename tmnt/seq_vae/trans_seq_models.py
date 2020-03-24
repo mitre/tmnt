@@ -167,7 +167,8 @@ class BertTransVAE(Block):
         
 
 class TransformerDecoder(HybridBlock):
-    def __init__(self, wd_embed_dim, num_units, hidden_size=512, num_heads=4, n_layers=6, n_latent=256, sent_size = 30, batch_size=8, ctx=mx.cpu()):
+    def __init__(self, wd_embed_dim, num_units, hidden_size=512, num_heads=4, n_layers=6, n_latent=256, sent_size = 30,
+                 scale_embed=True, batch_size=8, ctx=mx.cpu()):
         super(TransformerDecoder, self).__init__()
         self._batch_size = batch_size
         self._sent_size = sent_size
@@ -186,7 +187,7 @@ class TransformerDecoder(HybridBlock):
                 scaled = True,
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
-                scale_embed=False,
+                scale_embed=scale_embed,
                 ctx = ctx)
             self.out_projection = nn.Dense(in_units = num_units, units = wd_embed_dim, flatten=False)
 
@@ -206,7 +207,7 @@ class TransformerDecoder(HybridBlock):
 
 class TransformerEncoder(HybridBlock):
     def __init__(self, wd_embed_dim, num_units, hidden_size=512, num_heads=4, n_layers=6, n_latent=256, sent_size = 30,
-                 batch_size=8, ctx=mx.cpu()):
+                 scale_embed=True, batch_size=8, ctx=mx.cpu()):
         super(TransformerEncoder, self).__init__()
         self._sent_size = sent_size
         self._n_latent = n_latent
@@ -219,10 +220,10 @@ class TransformerEncoder(HybridBlock):
                 hidden_size = hidden_size,
                 max_length = sent_size,
                 num_heads = num_heads,
-                scaled = False,
+                scaled = True,
                 dropout = 0.0,
                 use_residual=True, output_attention=False,
-                scale_embed=False,
+                scale_embed=scale_embed,
                 ctx = ctx)
             self.projection = nn.Dense(in_units = num_units, units = n_latent)
 
@@ -231,12 +232,11 @@ class TransformerEncoder(HybridBlock):
 
 
     def hybrid_forward(self, F, x):
-        ## x is shape (N, sent_size, wd_embed_dim)
         x = self.in_projection(x)
         y, _ = self.trans_block(x)
         first = y[:,0,:]
         encoding = self.projection(first)
-        return first
+        return encoding
     
 
 def _position_encoding_init(max_length, dim):
