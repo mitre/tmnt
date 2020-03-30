@@ -24,10 +24,12 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
-from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data
+from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, load_vocab
 from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM, BasicAE
 from tmnt.bow_vae.topic_seeds import get_seed_matrix_from_file
 from tmnt.bow_vae.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
+
+#from tmnt.seq_bow_ved.sb_data_loader import load_dataset_basic_seq_bow
 from tmnt.utils.log_utils import logging_config
 from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
 from tmnt.utils.random import seed_rng
@@ -301,6 +303,7 @@ class BowVAEWorker(Worker):
                                wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
                                ctx=self.ctx)
         else:
+            logging.info("shape freqs = {}".format(self.wd_freqs.shape))
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
                        fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
@@ -573,8 +576,16 @@ def get_worker(args, budget, id_str, ns_port):
         if not (vpath.is_file() and tpath.is_file()):
             raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
     logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
-    vocab, tr_csr_mat, total_tr_words, tr_labels, label_map = \
-        collect_sparse_data(args.tr_vec_file, args.vocab_file, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
+    if args.override_tr_data:
+        _, _, tr_csr_mat, total_tr_words = load_dataset_basic_seq_bow(args.override_tr_data, 1000,
+                                                       vocab=None, json_text_key='text', max_len=32,
+                                                                          max_vocab_size=10000, ctx=mx.cpu())
+        vocab = load_vocab(args.vocab_file)
+        tr_labels = None
+        label_map = None
+    else:
+        vocab, tr_csr_mat, total_tr_words, tr_labels, label_map = \
+            collect_sparse_data(args.tr_vec_file, args.vocab_file, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
     if args.val_vec_file:
         tst_csr_mat, total_tst_words, tst_labels = \
             collect_sparse_test(args.val_vec_file, vocab, scalar_labels=args.scalar_covars, encoding=args.str_encoding)

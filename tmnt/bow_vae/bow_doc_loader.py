@@ -20,7 +20,7 @@ from tmnt.preprocess.tokenizer import BasicTokenizer
 
 
 __all__ = ['DataIterLoader', 'collect_sparse_test', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix',
-           'get_single_vec']
+           'get_single_vec', 'load_vocab']
 
 def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
     if pre_vocab:
