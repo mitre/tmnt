@@ -20,9 +20,9 @@ from mxnet.gluon import nn
 from mxnet import autograd as ag
 from tmnt.coherence.npmi import EvaluateNPMI
 from tmnt.bow_vae.bow_doc_loader import load_vocab
-from tmnt.seq_bow_ved.models import TransformerBowVED, TransformerBowVEDTest
+from tmnt.seq_bow_ved.models import TransformerBowVED, TransformerBowVEDTest, BertBowVED
 from tmnt.utils.log_utils import logging_config
-from tmnt.seq_bow_ved.sb_data_loader import load_dataset_basic_seq_bow
+from tmnt.seq_bow_ved.sb_data_loader import load_dataset_basic_seq_bow, load_dataset_bert
 
 def get_wd_freqs(data_csr, max_sample_size=1000000):
     sample_size = min(max_sample_size, data_csr.shape[0])
@@ -39,7 +39,17 @@ def get_basic_model(args, bow_vocab_size, vocab, emb_dim, wd_freqs, ctx):
                               transformer_layers=args.transformer_layers,
                               kappa = args.kappa, 
                               batch_size=args.batch_size,
+                              wd_freqs=wd_freqs,
                               kld=args.kld_wt, ctx=ctx)
+    return model
+
+
+def get_bert_model(args, bert_base, bow_vocab_size, wd_freqs, ctx):
+    model = BertBowVED(bert_base, bow_vocab_size, args.latent_dist, 
+                              n_latent=args.latent_dim, max_sent_len=args.sent_size,
+                              kappa = args.kappa, 
+                              batch_size=args.batch_size,
+                              kld=args.kld_wt, wd_freqs=wd_freqs, ctx=ctx)
     return model
 
 
@@ -100,9 +110,10 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 if use_bert:
-                    input_ids, output_vocab, valid_length, type_ids = seqs
+                    input_ids, valid_length, type_ids, output_vocab = seqs
                     ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
-                                valid_length.astype('float32').as_in_context(ctx))
+                                                             valid_length.astype('float32').as_in_context(ctx),
+                                                             output_vocab.as_in_context(ctx))
                 else:
                     input_ids, output_vocab = seqs
                     ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), output_vocab.as_in_context(ctx))
@@ -152,7 +163,6 @@ def write_model(m, args, epoch_id=0):
             f.write(m.vocabulary.to_json())
 
 
-
 def train_main(args):
     i_dt = datetime.datetime.now()
     train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
@@ -160,19 +170,21 @@ def train_main(args):
     logging_config(folder=train_out_dir, name='train_trans_vae', level=logging.INFO, no_console=False)
     logging.info(args)
     context = mx.cpu() if args.gpus is None or args.gpus == '' else mx.gpu(int(args.gpus))
+    bow_vocab = load_vocab(args.bow_vocab_file)
+    
     if args.use_bert:
-        data_train, bert_base, vocab = load_dataset_bert(args.input_file, max_len=args.sent_size, ctx=context)
-        model = get_bert_model(args, bert_base, context)
+        data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab), max_len=args.sent_size, ctx=context)
+        wd_freqs = get_wd_freqs(data_csr)
+        model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context)
         pad_id = vocab[vocab.padding_token]
-        train_bow_seq_ved(args, model, data_train, data_test=None, ctx=context, use_bert=True)
+        train_bow_seq_ved(args, model, bow_vocab, data_train, data_csr, data_test=None, ctx=context, use_bert=True)
     else:
+        data_train, vocab, data_csr, _ = load_dataset_basic_seq_bow(args.input_file, len(bow_vocab),
+                                                       vocab=None, json_text_key=args.json_text_key, max_len=args.sent_size,
+                                                                    max_vocab_size=args.max_vocab_size, ctx=context)
         emb = None
         if args.embedding_source:
             emb = nlp.embedding.create('glove', source = args.embedding_source)
-        bow_vocab = load_vocab(args.bow_vocab_file)
-        data_train, vocab, data_csr, _ = load_dataset_basic_seq_bow(args.input_file, len(bow_vocab),
-                                                       vocab=None, json_text_key=args.json_text_key, max_len=args.sent_size,
-                                                       max_vocab_size=args.max_vocab_size, ctx=context)
         if emb:
             vocab.set_embedding(emb)
             _, emb_size = vocab.embedding.idx_to_vec.shape

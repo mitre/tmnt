@@ -125,6 +125,88 @@ class TransformerBowVED(Block):
         return loss, recon_loss, KL_loss, y
 
 
+class BertBowVED(Block):
+    def __init__(self, bert_base, bow_vocab_size, latent_distrib='vmf', 
+                 n_latent=256, max_sent_len=32, 
+                 kappa = 100.0,
+                 batch_size=16, kld=0.1, wd_freqs=None,
+                 ctx = mx.cpu(),
+                 prefix=None, params=None):
+        super(BertBowVED, self).__init__(prefix=prefix, params=params)
+        self.kld_wt = kld
+        self.n_latent = n_latent
+        self.model_ctx = ctx
+        self.max_sent_len = max_sent_len
+        self.batch_size = batch_size
+        self.bow_vocab_size = bow_vocab_size
+        self.latent_distrib = latent_distrib
+        self.kappa = kappa
+        with self.name_scope():
+            self.encoder = bert_base            
+            if latent_distrib == 'logistic_gaussian':
+                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, dr=0.0)
+            elif latent_distrib == 'vmf':
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx, dr=0.0)
+            elif latent_distrib == 'gaussian':
+                self.latent_dist = GaussianLatentDistribution(n_latent, ctx, dr=0.0)
+            elif latent_distrib == 'gaussian_unitvar':
+                self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx, dr=0.0, var=0.05)
+            else:
+                raise Exception("Invalid distribution ==> {}".format(latent_distrib))
+            self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.bow_vocab_size, activation=None)
+        self.latent_dist.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        self.decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        if wd_freqs is not None:
+            freq_nd = wd_freqs + 1
+            total = freq_nd.sum()
+            log_freq = freq_nd.log() - freq_nd.sum().log()
+            bias_param = self.decoder.collect_params().get('bias')
+            bias_param.set_data(log_freq)
+            bias_param.grad_req = 'null'
+            self.out_bias = bias_param.data()
+
+    def get_top_k_terms(self, k):
+        """
+        Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
+        probability increases the most for a unit increase in a given topic score/probability
+        are those most associated with the topic. This is just the topic-term weights for a 
+        linear decoder - but code here will work with arbitrary decoder.
+        """
+        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
+        jacobian = mx.nd.zeros(shape=(self.bow_vocab_size, self.n_latent), ctx=self.model_ctx)
+        z.attach_grad()        
+        for i in range(self.bow_vocab_size):
+            with mx.autograd.record():
+                y = self.decoder(z)
+                yi = y[0][i]
+            yi.backward()
+            jacobian[i] = z.grad
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
+        return sorted_j
+
+    def __call__(self, toks, tok_types, valid_length, bow):
+        return super(BertBowVED, self).__call__(toks, tok_types, valid_length, bow)
+
+    def set_kl_weight(self, epoch, max_epochs):
+        burn_in = int(max_epochs / 10)
+        eps = 1e-6
+        if epoch > burn_in:
+            self.kld_wt = ((epoch - burn_in) / (max_epochs - burn_in)) + eps
+        else:
+            self.kld_wt = eps
+        return self.kld_wt
+
+    def forward(self, toks, tok_types, valid_length, bow):
+        _, enc = self.encoder(toks, tok_types, valid_length)
+        z, KL = self.latent_dist(enc, self.batch_size)
+        y = self.decoder(z)
+        y = mx.nd.softmax(y, axis=1)
+        rr = bow * mx.nd.log(y+1e-12)
+        recon_loss = -mx.nd.sparse.sum( rr, axis=1 )
+        KL_loss = ( KL * self.kld_wt )
+        loss = recon_loss + KL_loss
+        return loss, recon_loss, KL_loss, y
+    
 
 class TransformerBowVEDTest(Block):
 
