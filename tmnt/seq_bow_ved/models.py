@@ -131,6 +131,7 @@ class BertBowVED(Block):
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_freqs=None,
                  ctx = mx.cpu(),
+                 dropout=0.2,
                  prefix=None, params=None):
         super(BertBowVED, self).__init__(prefix=prefix, params=params)
         self.kld_wt = kld
@@ -142,7 +143,10 @@ class BertBowVED(Block):
         self.latent_distrib = latent_distrib
         self.kappa = kappa
         with self.name_scope():
-            self.encoder = bert_base            
+            self.encoder = bert_base
+            self.projection = gluon.nn.HybridSequential()
+            self.projection.add(gluon.nn.Dropout(rate=dropout))
+            self.projection.add(gluon.nn.Dense(units=256, activation='softrelu'))
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, dr=0.0)
             elif latent_distrib == 'vmf':
@@ -154,6 +158,7 @@ class BertBowVED(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.bow_vocab_size, activation=None)
+        self.projection.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         self.latent_dist.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         self.decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         if wd_freqs is not None:
@@ -198,7 +203,8 @@ class BertBowVED(Block):
 
     def forward(self, toks, tok_types, valid_length, bow):
         _, enc = self.encoder(toks, tok_types, valid_length)
-        z, KL = self.latent_dist(enc, self.batch_size)
+        proj = self.projection(enc)
+        z, KL = self.latent_dist(proj, self.batch_size)
         y = self.decoder(z)
         y = mx.nd.softmax(y, axis=1)
         rr = bow * mx.nd.log(y+1e-12)

@@ -92,7 +92,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
         v.wd_mult = 0.0
 
-    for p in model.encoder.collect_params().values():
+    for p in model.collect_params().values():
         if p.grad_req != 'null':
             differentiable_params.append(p)
     
