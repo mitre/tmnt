@@ -44,12 +44,12 @@ def get_basic_model(args, bow_vocab_size, vocab, emb_dim, wd_freqs, ctx):
     return model
 
 
-def get_bert_model(args, bert_base, bow_vocab_size, wd_freqs, ctx):
+def get_bert_model(args, bert_base, bow_vocab_size, wd_freqs, ctx, dr=0.1):
     model = BertBowVED(bert_base, bow_vocab_size, args.latent_dist, 
                               n_latent=args.latent_dim, max_sent_len=args.sent_size,
                               kappa = args.kappa, 
                               batch_size=args.batch_size,
-                              kld=args.kld_wt, wd_freqs=wd_freqs, ctx=ctx)
+                              kld=args.kld_wt, wd_freqs=wd_freqs, ctx=ctx, dropout=dr)
     return model
 
 
@@ -175,7 +175,7 @@ def train_main(args):
     if args.use_bert:
         data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab), max_len=args.sent_size, ctx=context)
         wd_freqs = get_wd_freqs(data_csr)
-        model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context)
+        model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context, dr=args.dr)
         pad_id = vocab[vocab.padding_token]
         train_bow_seq_ved(args, model, bow_vocab, data_train, data_csr, data_test=None, ctx=context, use_bert=True)
     else:
