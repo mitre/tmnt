@@ -199,8 +199,7 @@ class BertBowVED(Block):
 
     def forward(self, toks, tok_types, valid_length, bow):
         _, enc = self.encoder(toks, tok_types, valid_length)
-        proj = self.projection(enc)
-        z, KL = self.latent_dist(proj, self.batch_size)
+        z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
         y = mx.nd.softmax(y, axis=1)
         rr = bow * mx.nd.log(y+1e-12)
