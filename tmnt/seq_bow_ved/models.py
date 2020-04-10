@@ -158,9 +158,9 @@ class BertBowVED(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.bow_vocab_size, activation=None)
-        self.projection.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-        self.latent_dist.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-        self.decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        self.projection.initialize(mx.init.Normal(0.02), ctx=self.model_ctx)
+        self.latent_dist.initialize(mx.init.Normal(0.02), ctx=self.model_ctx)
+        self.decoder.initialize(mx.init.Normal(0.02), ctx=self.model_ctx)
         if wd_freqs is not None:
             freq_nd = wd_freqs + 1
             total = freq_nd.sum()
