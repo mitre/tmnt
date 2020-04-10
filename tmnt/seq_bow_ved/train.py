@@ -130,7 +130,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
                 logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, args.epochs, batch_id + 1, len(dataloader),
                                      step_loss / args.log_interval, step_recon_ls / args.log_interval, step_kl_ls / args.log_interval,
-                                     gen_trainer.learning_rate))
+                                     enc_trainer.learning_rate))
                 step_loss = 0
                 step_recon_ls = 0
                 step_kl_ls = 0
