@@ -85,14 +85,15 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
     
     lr = args.gen_lr
     
-    gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
+    enc_trainer = gluon.Trainer(model.encoder.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
+    
 
     # Do not apply weight decay on LayerNorm and bias terms
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
         v.wd_mult = 0.0
 
-    for p in model.collect_params().values():
+    for p in model.encoder.collect_params().values():
         if p.grad_req != 'null':
             differentiable_params.append(p)
     
@@ -107,7 +108,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             else:
                 offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
                 new_lr = max(lr - offset, args.min_lr)
-            gen_trainer.set_learning_rate(new_lr)
+            enc_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 if use_bert:
                     input_ids, valid_length, type_ids, output_vocab = seqs
@@ -121,7 +122,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             ls.backward()
             grads = [p.grad(ctx) for p in differentiable_params]
             gluon.utils.clip_global_norm(grads, 1)
-            gen_trainer.step(1) # step of 1 since we averaged loss over batch
+            enc_trainer.step(1) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
             step_recon_ls += recon_ls.mean().asscalar()
             step_kl_ls += kl_ls.mean().asscalar()
