@@ -44,7 +44,7 @@ def get_basic_model(args, bow_vocab_size, vocab, emb_dim, wd_freqs, ctx):
     return model
 
 
-def get_bert_model(args, bert_base, bow_vocab_size, wd_freqs, ctx, dr=0.1):
+def get_bert_model(args, bert_base, bow_vocab_size, wd_freqs, ctx, dr=0.0):
     model = BertBowVED(bert_base, bow_vocab_size, args.latent_dist, 
                               n_latent=args.latent_dim, max_sent_len=args.sent_size,
                               kappa = args.kappa, 

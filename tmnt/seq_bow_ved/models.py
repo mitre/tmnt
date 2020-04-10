@@ -131,7 +131,7 @@ class BertBowVED(Block):
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_freqs=None,
                  ctx = mx.cpu(),
-                 dropout=0.2,
+                 dropout=0.0,
                  prefix=None, params=None):
         super(BertBowVED, self).__init__(prefix=prefix, params=params)
         self.kld_wt = kld
@@ -144,13 +144,10 @@ class BertBowVED(Block):
         self.kappa = kappa
         with self.name_scope():
             self.encoder = bert_base
-            self.projection = gluon.nn.HybridSequential()
-            self.projection.add(gluon.nn.Dropout(rate=dropout))
-            self.projection.add(gluon.nn.Dense(units=256, activation='softrelu'))
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, dr=0.0)
             elif latent_distrib == 'vmf':
-                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx, dr=0.0)
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx, dr=dropout)
             elif latent_distrib == 'gaussian':
                 self.latent_dist = GaussianLatentDistribution(n_latent, ctx, dr=0.0)
             elif latent_distrib == 'gaussian_unitvar':
@@ -158,9 +155,8 @@ class BertBowVED(Block):
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.bow_vocab_size, activation=None)
-        self.projection.initialize(mx.init.Normal(0.02), ctx=self.model_ctx)
-        self.latent_dist.initialize(mx.init.Normal(0.02), ctx=self.model_ctx)
-        self.decoder.initialize(mx.init.Normal(0.02), ctx=self.model_ctx)
+        self.latent_dist.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        self.decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         if wd_freqs is not None:
             freq_nd = wd_freqs + 1
             total = freq_nd.sum()
