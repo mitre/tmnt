@@ -11,6 +11,7 @@ parser.add_argument('--input_file', type=str, help='Directory containing a Recor
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, bertadam)', default='bertadam')
 parser.add_argument('--gen_lr', type=float, help='General learning rate', default=0.00001)
+parser.add_argument('--dec_lr', type=float, help='Decoder learning rate', default=0.001)
 parser.add_argument('--gpus',type=str, help='GPU device ids', default='')
 parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='seqvae_exp_logs')
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=32)
