@@ -85,12 +85,11 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
     
     lr = args.gen_lr
 
-    non_encoder_params = list(model.latent_dist.collect_params().values())
-    non_encoder_params.extend(list(model.decoder.collect_params().values()))
     
-    gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
+    gen_trainer = gluon.Trainer(model.encoder.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
-    dec_trainer = gluon.Trainer(non_encoder_params, 'adam', {'learning_rate': args.gen_lr, 'epsilon': 1e-6})
+    lat_trainer = gluon.Trainer(mode.latent_dist.collect_params(), 'adam', {'learning_rate': args.gen_lr, 'epsilon': 1e-6})
+    dec_trainer = gluon.Trainer(mode.decoder.collect_params(), 'adam', {'learning_rate': args.gen_lr, 'epsilon': 1e-6})    
 
     # Do not apply weight decay on LayerNorm and bias terms
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
@@ -126,6 +125,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             grads = [p.grad(ctx) for p in differentiable_params]
             gluon.utils.clip_global_norm(grads, 1)
             gen_trainer.step(1) # step of 1 since we averaged loss over batch
+            lat_trainer.step(1)
             dec_trainer.step(1) # update decoder trainer associated weights
             step_loss += ls.asscalar()
             step_recon_ls += recon_ls.mean().asscalar()
