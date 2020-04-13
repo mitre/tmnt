@@ -44,12 +44,12 @@ def get_basic_model(args, bow_vocab_size, vocab, emb_dim, wd_freqs, ctx):
     return model
 
 
-def get_bert_model(args, bert_base, bow_vocab_size, wd_freqs, ctx, dr=0.0):
+def get_bert_model(args, bert_base, bow_vocab_size, wd_freqs, ctx):
     model = BertBowVED(bert_base, bow_vocab_size, args.latent_dist, 
                               n_latent=args.latent_dim, max_sent_len=args.sent_size,
                               kappa = args.kappa, 
                               batch_size=args.batch_size,
-                              kld=args.kld_wt, wd_freqs=wd_freqs, ctx=ctx, dropout=dr)
+                              kld=args.kld_wt, wd_freqs=wd_freqs, ctx=ctx)
     return model
 
 
@@ -85,9 +85,8 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
     
     lr = args.gen_lr
     
-    enc_trainer = gluon.Trainer(model.encoder.collect_params(), args.optimizer,
+    gen_trainer = gluon.Trainer(model.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
-    
 
     # Do not apply weight decay on LayerNorm and bias terms
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
@@ -108,7 +107,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             else:
                 offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
                 new_lr = max(lr - offset, args.min_lr)
-            enc_trainer.set_learning_rate(new_lr)
+            gen_trainer.set_learning_rate(new_lr)
             with mx.autograd.record():
                 if use_bert:
                     input_ids, valid_length, type_ids, output_vocab = seqs
@@ -122,7 +121,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             ls.backward()
             grads = [p.grad(ctx) for p in differentiable_params]
             gluon.utils.clip_global_norm(grads, 1)
-            enc_trainer.step(1) # step of 1 since we averaged loss over batch
+            gen_trainer.step(1) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
             step_recon_ls += recon_ls.mean().asscalar()
             step_kl_ls += kl_ls.mean().asscalar()
@@ -130,7 +129,7 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
                 logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, args.epochs, batch_id + 1, len(dataloader),
                                      step_loss / args.log_interval, step_recon_ls / args.log_interval, step_kl_ls / args.log_interval,
-                                     enc_trainer.learning_rate))
+                                     gen_trainer.learning_rate))
                 step_loss = 0
                 step_recon_ls = 0
                 step_kl_ls = 0
@@ -176,7 +175,7 @@ def train_main(args):
     if args.use_bert:
         data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab), max_len=args.sent_size, ctx=context)
         wd_freqs = get_wd_freqs(data_csr)
-        model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context, dr=args.dr)
+        model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context)
         pad_id = vocab[vocab.padding_token]
         train_bow_seq_ved(args, model, bow_vocab, data_train, data_csr, data_test=None, ctx=context, use_bert=True)
     else:

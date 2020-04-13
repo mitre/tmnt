@@ -131,7 +131,6 @@ class BertBowVED(Block):
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_freqs=None,
                  ctx = mx.cpu(),
-                 dropout=0.0,
                  prefix=None, params=None):
         super(BertBowVED, self).__init__(prefix=prefix, params=params)
         self.kld_wt = kld
@@ -143,11 +142,11 @@ class BertBowVED(Block):
         self.latent_distrib = latent_distrib
         self.kappa = kappa
         with self.name_scope():
-            self.encoder = bert_base
+            self.encoder = bert_base            
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, dr=0.0)
             elif latent_distrib == 'vmf':
-                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx, dr=dropout)
+                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx, dr=0.0)
             elif latent_distrib == 'gaussian':
                 self.latent_dist = GaussianLatentDistribution(n_latent, ctx, dr=0.0)
             elif latent_distrib == 'gaussian_unitvar':

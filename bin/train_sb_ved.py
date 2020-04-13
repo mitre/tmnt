@@ -37,7 +37,6 @@ parser.add_argument('--embedding_source', type=str, help='Word embedding source 
 parser.add_argument('--max_vocab_size', type=int, help='Maximum size of vocabulary (if not using BERT)', default=20000)
 parser.add_argument('--json_text_key', type=str, help='Assume json list format and select text using this key', default=None)
 parser.add_argument('--bow_vocab_file', type=str, help='Vocabulary for BOW in decoder', default=None)
-parser.add_argument('--dr', type=float, help='Dropout for projection', default=0.1)
 
 
 args = parser.parse_args()

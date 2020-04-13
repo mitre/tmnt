@@ -13,11 +13,14 @@ import re
 import string
 import gluonnlp as nlp
 import mxnet as mx
+
 from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet import autograd as ag
 from tmnt.bow_vae.bow_doc_loader import get_single_vec
 from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform, BasicTokenizer
+
+from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 
 __all__ = ['load_dataset_bert', 'load_dataset_basic', 'load_dataset_basic_seq_bow']
 
@@ -41,8 +44,10 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
                                              dataset_name=dname,
                                              pretrained=True, ctx=ctx, use_pooler=True,
                                              use_decoder=False, use_classifier=False)
-    tokenizer = FullTokenizer(vocab, do_lower_case=True)
-    transformer = EncoderTransform(tokenizer, max_len, clean_fn=remove_punct_and_urls)
+    #tokenizer = FullTokenizer(vocab, do_lower_case=True)
+    #transformer = EncoderTransform(tokenizer, max_len, clean_fn=remove_punct_and_urls)
+    tokenizer = BERTTokenizer(vocab)
+    transform = BERTSentenceTransform(tokenizer, max_len, pair=False) 
     x_ids = []
     x_val_lens = []
     x_segs = []
@@ -52,7 +57,7 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
                 js = json.loads(line)
                 line = js[json_text_key]
             if len(line.split(' ')) > 4:
-                ids, lens, segs = transformer(line) # create BERT-ready inputs
+                ids, lens, segs = transform((line,)) # create BERT-ready inputs
                 x_ids.append(ids)
                 x_val_lens.append(lens)
                 x_segs.append(segs)
