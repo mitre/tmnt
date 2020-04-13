@@ -124,9 +124,9 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             ls.backward()
             grads = [p.grad(ctx) for p in differentiable_params]
             gluon.utils.clip_global_norm(grads, 1)
-            gen_trainer.step(1) # step of 1 since we averaged loss over batch
             lat_trainer.step(1)
             dec_trainer.step(1) # update decoder trainer associated weights
+            gen_trainer.step(1) # step of 1 since we averaged loss over batch
             step_loss += ls.asscalar()
             step_recon_ls += recon_ls.mean().asscalar()
             step_kl_ls += kl_ls.mean().asscalar()
