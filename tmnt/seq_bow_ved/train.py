@@ -88,8 +88,8 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
     
     gen_trainer = gluon.Trainer(model.encoder.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
-    lat_trainer = gluon.Trainer(model.latent_dist.collect_params(), 'adam', {'learning_rate': args.gen_lr, 'epsilon': 1e-6})
-    dec_trainer = gluon.Trainer(model.decoder.collect_params(), 'adam', {'learning_rate': args.gen_lr, 'epsilon': 1e-6})    
+    lat_trainer = gluon.Trainer(model.latent_dist.collect_params(), 'adam', {'learning_rate': args.min_lr, 'epsilon': 1e-6})
+    dec_trainer = gluon.Trainer(model.decoder.collect_params(), 'adam', {'learning_rate': args.min_lr, 'epsilon': 1e-6})    
 
     # Do not apply weight decay on LayerNorm and bias terms
     for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
