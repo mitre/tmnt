@@ -44,8 +44,6 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
                                              dataset_name=dname,
                                              pretrained=True, ctx=ctx, use_pooler=True,
                                              use_decoder=False, use_classifier=False)
-    #tokenizer = FullTokenizer(vocab, do_lower_case=True)
-    #transformer = EncoderTransform(tokenizer, max_len, clean_fn=remove_punct_and_urls)
     tokenizer = BERTTokenizer(vocab)
     transform = BERTSentenceTransform(tokenizer, max_len, pair=False) 
     x_ids = []

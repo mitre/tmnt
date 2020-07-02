@@ -7,7 +7,7 @@ from tmnt.seq_bow_ved.train import train_main
 
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational Encoder-Decoder on Context-aware Encodings with BOW decoding')
 
-parser.add_argument('--input_file', type=str, help='Directory containing a RecordIO file representing the input data')
+parser.add_argument('--input_file', type=str, help='Directory containing a JSON list file representing the input data')
 parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
 parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, bertadam)', default='bertadam')
 parser.add_argument('--gen_lr', type=float, help='General learning rate', default=0.00001)
@@ -16,7 +16,7 @@ parser.add_argument('--gpus',type=str, help='GPU device ids', default='')
 parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='seqvae_exp_logs')
 parser.add_argument('--batch_size',type=int, help='Training batch size', default=32)
 parser.add_argument('--latent_dim',type=int, help='Encoder dimensionality', default=32)
-parser.add_argument('--num_units', type=int, help='Hidden dimensions in Transformer Decoder', default=256)
+parser.add_argument('--num_units', type=int, help='Hidden dimensions in Transformer Encoder', default=256)
 parser.add_argument('--num_heads', type=int, help='Number of heads in Transformer self-attention', default=8)
 parser.add_argument('--hidden_size', type=int, help='Size of hidden dim in Transformer blocks', default=512)
 parser.add_argument('--transformer_layers',type=int, help='Decoder transformer layers', default=6)

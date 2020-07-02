@@ -85,7 +85,6 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
     
     lr = args.gen_lr
 
-    
     gen_trainer = gluon.Trainer(model.encoder.collect_params(), args.optimizer,
                             {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
     lat_trainer = gluon.Trainer(model.latent_dist.collect_params(), 'adam', {'learning_rate': args.dec_lr, 'epsilon': 1e-6})
@@ -133,7 +132,8 @@ def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=N
             if (batch_id + 1) % (args.log_interval) == 0:
                 logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, gen_lr={:.7f}'
                              .format(epoch_id, args.epochs, batch_id + 1, len(dataloader),
-                                     step_loss / args.log_interval, step_recon_ls / args.log_interval, step_kl_ls / args.log_interval,
+                                     step_loss / args.log_interval, step_recon_ls / args.log_interval,
+                                     step_kl_ls / args.log_interval,
                                      gen_trainer.learning_rate))
                 step_loss = 0
                 step_recon_ls = 0
@@ -170,7 +170,8 @@ def write_model(m, args, epoch_id=0):
 
 def train_main(args):
     i_dt = datetime.datetime.now()
-    train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
+    train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,
+                                                        i_dt.minute,i_dt.second)
     print("Set logging config to {}".format(train_out_dir))
     logging_config(folder=train_out_dir, name='train_trans_vae', level=logging.INFO, no_console=False)
     logging.info(args)
@@ -178,7 +179,8 @@ def train_main(args):
     bow_vocab = load_vocab(args.bow_vocab_file)
     
     if args.use_bert:
-        data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab), max_len=args.sent_size, ctx=context)
+        data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab),
+                                                                   max_len=args.sent_size, ctx=context)
         wd_freqs = get_wd_freqs(data_csr)
         model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context)
         pad_id = vocab[vocab.padding_token]

@@ -168,17 +168,6 @@ class BowNTM(HybridBlock):
         else:
             return (cur_loss, F.zeros_like(cur_loss))
 
-
-    def general_entropy_min_loss(self, F, cur_loss):
-        if F is mx.ndarray:
-            w = self.decoder.params.get('weight').data()
-        else:
-            w = self.decoder.params.get('weight').var()
-        w_term_probs = F.softmax(w, axis=1) ** 4.0
-        entropies = -F.sum(w_term_probs * F.log(w_term_probs))
-
-        return (F.broadcast_add(cur_loss, entropies), entropies)
-
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
         return self.latent_dist(enc_out, batch_size)
@@ -190,7 +179,6 @@ class BowNTM(HybridBlock):
         i_loss = F.broadcast_plus(recon_loss, F.broadcast_plus(l1_pen, KL))
         ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(F, i_loss)
         iii_loss, entropies = self.add_seed_constraint_loss(F, ii_loss)
-        #iv_loss, entropies = self.general_entropy_min_loss(F, iii_loss)
         return iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss
 
     def hybrid_forward(self, F, data, l1_pen_const=None):
@@ -199,7 +187,8 @@ class BowNTM(HybridBlock):
         z, KL = self.run_encode(F, emb_out, batch_size)
         dec_out = self.decoder(z)
         y = F.softmax(dec_out, axis=1)
-        iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss = self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
+        iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss = \
+            self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
         return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss, y
 
 
@@ -207,9 +196,11 @@ class MetaDataBowNTM(BowNTM):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers=1,
+                 init_l1=0.0, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0,
+                 batch_size=None, n_encoding_layers=1,
                  enc_dr=0.1, wd_freqs=None, seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
-        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding, latent_distrib, init_l1,
+        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
+                                             latent_distrib, init_l1,
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
                                              wd_freqs, seed_mat, n_covars, ctx)
         self.n_covars = n_covars
