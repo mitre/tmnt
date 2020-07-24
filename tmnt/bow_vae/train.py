@@ -35,13 +35,6 @@ from tmnt.utils.random import seed_rng
 from tmnt.coherence.npmi import EvaluateNPMI
 from tmnt.modsel.configuration import TMNTConfig
 
-import ConfigSpace as CS
-import ConfigSpace.hyperparameters as CSH
-from hpbandster.core.worker import Worker
-import hpbandster.core.nameserver as hpns
-import hpbandster.core.result as hpres
-from hpbandster.optimizers import BOHB as BOHB
-
 __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
 MAX_DESIGN_MATRIX = 250000000 
@@ -148,11 +141,9 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
 
 
 
-class BowVAEWorker(Worker):
+class BowVAETrainer():
     def __init__(self, model_out_dir, c_args, vocabulary, data_train_csr, total_tr_words,
-                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, ctx=mx.cpu(),
-                 max_budget=27, **kwargs):
-        super().__init__(**kwargs)
+                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, ctx=mx.cpu()):
         self.model_out_dir = model_out_dir
         self.c_args = c_args
         self.total_tr_words = total_tr_words
@@ -186,7 +177,7 @@ class BowVAEWorker(Worker):
         self.total_tst_words = total_tst_words
         
 
-    def _initialize_embedding_layer(self, embedding_source, config):
+    def _initialize_embedding_layer(self, embedding_config):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
         
         Parameters
@@ -202,7 +193,8 @@ class BowVAEWorker(Worker):
         emb_size: Size of embedding (based on pre-trained embedding or specified)
         """
         vocab = self.vocabulary
-        if embedding_source and embedding_source != 'random':
+        embedding_source = config.embedding[0]
+        if embedding_source != 'random':
             if self.vocab_cache.get(embedding_source):
                 vocab = copy.deepcopy(self.vocab_cache[embedding_source])
             else:
@@ -226,7 +218,7 @@ class BowVAEWorker(Worker):
             logging.info(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
         else:
             vocab.set_embedding(None) ## unset embedding
-            emb_size = int(config['embedding_size'])
+            emb_size = config.embedding[1]
         return vocab, emb_size
 
 
@@ -272,25 +264,25 @@ class BowVAEWorker(Worker):
         config: a `ConfigSpace` object
         """
         
-        lr = config['lr']
-        latent_distrib = config['latent_distribution']
-        optimizer = config['optimizer']
-        n_latent = int(config['n_latent'])
-        kappa = float(config.get('kappa', 100.0))
-        alpha = float(config.get('alpha', 1.0))
-        enc_hidden_dim = int(config['enc_hidden_dim'])
-        target_sparsity = float(config.get('target_sparsity', 0.0))
-        coherence_reg_penalty = float(config.get('coherence_loss_wt', 0.0))
-        redundancy_reg_penalty = float(config.get('redundancy_loss_wt', 0.0))        
-        batch_size = int(config['batch_size'])
+        lr = config.or
+        latent_distrib = config.latent_distribution
+        optimizer = config.optimizer
+        n_latent = int(config.n_latent)
+        kappa = float(config.kappa)
+        alpha = float(config.alpha)
+        enc_hidden_dim = int(config.enc_hidden_dim)
+        target_sparsity = float(config.target_sparsity)
+        coherence_reg_penalty = float(config.coherence_loss_wt)
+        redundancy_reg_penalty = float(config.redundancy_loss_wt)
+        batch_size = int(config.batch_size)
 
-        l1_coef = self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
-        embedding_source = config.get('embedding_source')
-        fixed_embedding = config.get('fixed_embedding') == 'True'
-        vocab, emb_size = self._initialize_embedding_layer(embedding_source, config)
-        covar_net_layers = config.get('covar_net_layers')
-        n_encoding_layers = config.get('num_enc_layers', 1)
-        enc_dr = config.get('enc_dr', 0.0)
+        l1_coef = 0.0 ## self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
+            
+        vocab, emb_size = self._initialize_embedding_layer(config.embedding)
+        fixed_embedding = config.embedding[1] == True
+        covar_net_layers = config.covar_net_layers
+        n_encoding_layers = config.num_enc_layers
+        enc_dr = config.enc_dr
 
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             n_covars = len(self.label_map) if self.label_map else 1
@@ -302,7 +294,6 @@ class BowVAEWorker(Worker):
                                wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
                                ctx=self.ctx)
         else:
-            logging.info("shape freqs = {}".format(self.wd_freqs.shape))
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
                        fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
@@ -350,14 +341,13 @@ class BowVAEWorker(Worker):
         model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
         return l1_coef
 
-    def _train_model(self, config, budget, data_sensitive_budget=True):
+    def train_model(self, config, reporter):
         """Main training function which takes a single model configuration and a budget (i.e. number of epochs) and
         fits the model to the training data.
         
         Parameters
         ----------
         config: `Configuration` object within the specified `ConfigSpace`
-        budget: int - Number of iterations to use when building the model
 
         Returns
         -------
@@ -367,7 +357,7 @@ class BowVAEWorker(Worker):
         logging.info("Evaluating with Budget {} against Config: {}".format(budget, config))
         model, trainer = self._get_model(config)
 
-        batch_size = int(config['batch_size'])
+        batch_size = int(config.batch_size)
         l1_coef = self.c_args.init_sparsity_pen
         num_test_batches = 0
 
@@ -399,14 +389,14 @@ class BowVAEWorker(Worker):
             last_batch_size = 0
             test_array, test_dataloader = None, None
 
-        training_epochs = budget
-        if data_sensitive_budget:
-            training_epochs = \
-                (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
+
+        training_epochs = config.epochs
+        #training_epochs = \
+        #        (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
 
         visualized_first_batch = False
 
-        for epoch in range(math.ceil(training_epochs)):
+        for epoch in range(training_epochs):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'redundancy_loss': 0.0, 'tr_size': 0.0}
             for i, (data, labels) in enumerate(train_dataloader):
@@ -438,58 +428,38 @@ class BowVAEWorker(Worker):
                 coherence_coefficient = self.c_args.coherence_coefficient
             except AttributeError:
                 coherence_coefficient = 1.0
-            res = {
-                'loss': 1.0 - (npmi_to_optimize * coherence_coefficient) + (redundancy * coherence_coefficient) + (perplexity / 1000),
-                'info': {
-                    'test_perplexity': perplexity,
-                    'redundancy': redundancy,
-                    'test_npmi': npmi,
-                    'test_enc_npmi': (enc_npmi if enc_npmi else 0.0)
-                }
-            }
+            obj = (npmi_to_optimize - redundancy) * coherence_coefficient - (perplexity / 1000)
+            if reporter:
+                reporter(epoch=epoch+1, objective=obj, test_perplexity=perplexity, redundancy=redundancy, test_npmi=npmi, test_enc_npmi=(enc_npmi or 0.0))
         else:
             ## in this case, we're only training a model; no model selection, validation or held out test data
             logging.info('Warning: training finished with no evaluation/validation dataset')
-            res = {'loss': 100000000.0}
-        return model, res
+        return model
 
 
-    def compute(self, config, budget, working_directory, *args, **kwargs):
-        """Worker method used within HPBandSter model selection.
-        
-        Parameters
-        ---------
-        config: `Configuration` to use to train/evaluate the model
-        budget: int - number of iterations to train
-        working_directory: string - optional directory (not used by this worker)
-
-        Returns
-        -------
-        Result dictionary for use in model selection
-        """
-        _, res = self._train_model(config, budget)
-        return res
-
-    def retrain_best_config(self, config, budget, rng_seed, ntimes=1, data_sensitive_budget=True):
+    def retrain_best_config(self, config_dict, rng_seed, ntimes=1, data_sensitive_budget=True):
         """Train a model as per the provided `Configuration` and `budget` and write to file.
         
         Parameters
         ----------
-        config: `Configuration` to use to train/evaluate the model
+        config_dict: Plain dictionary representation of config
         budget: int - number of iterations to train
         """
-        best_loss = 100000000.0
+        best_loss = -math.inf
         best_model = None
         npmis = []
         enc_npmis = []
         perplexities = []
         redundancies = []
+        ## map back to autogluon config
+        config = ag.space.Dict(**config_dict)
+        
         if self.c_args.tst_vec_file:
             self.set_heldout_data_as_test()
         if self.c_args.val_vec_file:
             for i in range(ntimes):
                 seed_rng(rng_seed+i)
-                model, results = self._train_model(config, budget, data_sensitive_budget=data_sensitive_budget)
+                model = self.train_model(config, None) ### This avoids using a scheduler
                 loss = results['loss']
                 npmis.append(results['info']['test_npmi'])
                 enc_npmis.append(results['info']['test_enc_npmi'])
@@ -520,24 +490,8 @@ class BowVAEWorker(Worker):
         write_model(best_model, self.model_out_dir, config, budget, self.c_args)
         
 
-def select_model(worker, tmnt_config_space, total_iterations, result_logger, id_str, ns_port):
-    """
-    Top level call to model selection. 
-    """
-    tmnt_config = TMNTConfig(tmnt_config_space)
-    worker.run(background=True)
-    cs = tmnt_config.get_configspace() 
-    config = cs.sample_configuration().get_dictionary()
-    logging.info(config)
-    bohb = BOHB(  configspace = cs,
-                  run_id = id_str, nameserver='127.0.0.1', result_logger=result_logger, nameserver_port=ns_port,
-                  min_budget=2, max_budget=worker.max_budget
-           )
-    res = bohb.run(n_iterations=total_iterations)
-    bohb.shutdown(shutdown_workers=True)
-    return res
 
-def write_model(m, model_dir, config, budget, args):
+def write_model(m, model_dir, config_dict, budget, args):
     if model_dir:
         pfile = os.path.join(model_dir, 'model.params')
         sp_file = os.path.join(model_dir, 'model.config')
@@ -561,7 +515,7 @@ def write_model(m, model_dir, config, budget, args):
             f.write(m.vocabulary.to_json())
 
 
-def get_worker(args, budget, id_str, ns_port):
+def get_trainer(args):
     i_dt = datetime.datetime.now()
     train_out_dir = \
         os.path.join(args.save_dir,
@@ -594,87 +548,78 @@ def get_worker(args, budget, id_str, ns_port):
         else:
             tr_labels = mx.nd.expand_dims(tr_labels, 1)
             tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
-    worker = BowVAEWorker(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
-                          label_map, ctx=ctx, max_budget=budget, nameserver='127.0.0.1', run_id=id_str, nameserver_port=ns_port)
+    worker = BowVAETrainer(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
+                          label_map, ctx=ctx)
     return worker, train_out_dir
 
 
-def usedPort(port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    result = True
-    try:
-        sock.bind(("0.0.0.0", port))
-        result = False
-    except:
-        result = True
-    sock.close()
-    return result
-
-def get_port(p=None):
-    p = 9090 if p is None else p
-    while usedPort(p):
-        logging.info("Port {} is currently used trying {}".format(p, p+1))
-        time.sleep(random.random() * 4)
-        p += 1
-    return p
-
-def robust_start(id_str, p=None):
-    p = get_port(p)
-    try:
-        NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=p)
-        NS.start()
-        logging.info("Starting nameserver on port {}".format(p))
-        return NS, p
-    except Exception as e:
-        logging.info("Exception CAUGHT: {}".format(e))
-        logging.info("Re-attempting to start nameserver")
-        return robust_start(id_str,p)
+def select_model(trainer, tmnt_config_space, total_iterations, result_logger, id_str, ns_port):
+    """
+    Top level call to model selection. 
+    """
+    tmnt_config = TMNTConfig(tmnt_config_space).get_configspace()
+    @ag.args(**tmnt_config)
+    def exec_train_fn(args, reporter):
+        trainer.train_model(args,reporter)
+    #logging.info(config)
+    search_options = {
+        'num_init_random': 2,
+        'debug_log': True}
     
+    hpb_scheduler = ag.scheduler.HyperbandScheduler(
+        exec_train_fn,
+        resource={'num_cpus': 2, 'num_gpus': 0},
+        searcher='bayesopt',
+        search_options=search_options,
+        #time_out=120,
+        num_trials=total_iterations,
+        time_attr='epoch',
+        reward_attr='objective',
+        type='stopping',
+        grace_period=1,
+        reduction_factor=3,
+        brackets=1)
+    hpb_scheduler.run()
+    hpb_scheduler.join_jobs()
+    return hpb_scheduler
+
+def train_with_single_config(c_args, scheduler, worker, best_config):
+    if c_args.tst_vec_file:
+        worker.set_heldout_data_as_test()
+    rng_seed = c_args.seed
+    if c_args.val_vec_file:
+        for i in range(int(c_args.num_final_evals)):
+            seed_rng(rng_seed+1) # update RNG
+            scheduler.run_with_config(best_config)
+        logging.info("************************************")
+
 
 def model_select_bow_vae(args):
     dd = datetime.datetime.now()
-    id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
-    NS, ns_port = robust_start(id_str)
-    worker, log_dir = get_worker(args, args.budget, id_str, ns_port)
-    worker.search_mode = True
-    result_logger = hpres.json_result_logger(directory=log_dir, overwrite=True)
-    #NS = hpns.NameServer(run_id=id_str, host='127.0.0.1', port=ns_port)
-    #NS.start()
-    res = select_model(worker, args.config_space, args.iterations, result_logger, id_str, ns_port)
-    id2config = res.get_id2config_mapping()
-    incumbent = res.get_incumbent_id()
-    logging.info('Best found configuration:', id2config[incumbent]['config'])
-    logging.info('Total budget corresponds to %.1f full function evaluations.'%(sum([r.budget for r in res.get_all_runs()])/32))
-    inc_runs = res.get_runs_by_id(incumbent)
-    inc_run = inc_runs[-1]
-    inc_loss = inc_run.loss
-    inc_config = id2config[incumbent]['config']
-    logging.info("Best configuration loss = {}".format(inc_loss))
-    logging.info("Best configuration {}".format(inc_config))
-    with open(os.path.join(log_dir, 'model_selection_results.pkl'), 'wb') as fh:
-        pickle.dump(res, fh)
+    trainer, log_dir = get_trainer(args)
+    scheduler = select_model(worker, args.config_space, args.iterations)
+    logging.info('Best found configuration:', scheduler.get_best_config())
+    logging.info("Best configuration objective = {}".format(scheduler.get_best_reward()))
     with open(os.path.join(log_dir, 'best.model.config'), 'w') as fp:
-        inc_config['training_epochs'] = args.budget
-        specs = json.dumps(inc_config)
+        specs = json.dumps(scheduler.get_best_config())
         fp.write(specs)
-    worker.retrain_best_config(inc_config, inc_run.budget, args.seed, args.num_final_evals)
+    train_with_single_config(args, scheduler, trainer, scheduler.get_best_config())
     dd_finish = datetime.datetime.now()
     logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
-    NS.shutdown()
+    scheduler.shutdown()
 
 def train_bow_vae(args):
     try:
         with open(args.config, 'r') as f:
-            config = json.loads(f.read())
+            config_dict = json.loads(f.read())
     except:
         logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(args.config))
         raise Exception("Invalid Json Configuration File")
     dd = datetime.datetime.now()
-    id_str = dd.strftime("%Y-%m-%d_%H-%M-%S")
-    ns_port = get_port()
-    worker, log_dir = get_worker(args, int(config['training_epochs']), id_str, ns_port)
-    worker.retrain_best_config(config, int(config['training_epochs']), args.seed, args.num_final_evals,
-                               data_sensitive_budget=(not args.exact_epochs))
+    worker, log_dir = get_trainer(args)
+    config = ag.space.Dict(**config_dict)
+    ## Don't use AutoGluon here; just fake it
+    worker.train_model(config, ag.scheduler.FakeReporter())
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 
