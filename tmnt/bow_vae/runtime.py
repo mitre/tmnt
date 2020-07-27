@@ -31,12 +31,10 @@ class BowNTMInference(object):
         self.ctx = ctx
         self.n_latent = specs['n_latent']
         enc_dim = specs['enc_hidden_dim']
-        lat_distrib = specs['latent_distribution']
+        lat_distrib = specs['latent_distribution']['dist_type']
         n_encoding_layers = specs.get('num_enc_layers', 0)
         enc_dr= float(specs.get('enc_dr', 0.0))
-        emb_size = specs['embedding_size']
-        l1_tgt_sparsty = float(specs.get('target_sparsity', 0.0))
-        coherence_reg_penalty = float(specs.get('coherence_regularizer_penalty', 0.0))
+        emb_size = specs['derived_info']['embedding_size']
         if 'n_covars' in specs:
             self.covar_model = True
             self.n_covars = specs['n_covars']

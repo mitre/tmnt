@@ -46,19 +46,19 @@ class TMNTConfig(object):
             upp = int(p['i_range'][1])
             default_val = p.get('default')
             q_val_s = p.get('step')
-            if q_val_s:
-                q_val = int(q_val_s)
-            else:
-                q_val = 1
             if default_val:
                 default = float(default_val)
             else:
                 default = int((upp + low) / 2)
-            use_log = False
-            if low == upp:
-                return low
+            if q_val_s:
+                ivals = list(range(low, upp+1, int(q_val_s)))
+                return ag.space.Categorical(*ivals)
             else:
-                return ag.space.Int(low, upp, default=default)
+                q_val = 1                
+                if low == upp:
+                    return low
+                else:
+                    return ag.space.Int(low, upp, default=default)
         else:
             return None
 
@@ -72,8 +72,8 @@ class TMNTConfig(object):
     def get_configspace(self):
         cd = self.cd
         sp_dict = {}
+        sp_dict['epochs'] = int(cd['epochs'])
         sp_dict['lr'] = self._get_range_uniform('lr', cd)
-        sp_dict['latent_distribution'] = self._get_categorical('latent_distribution', cd)
         sp_dict['optimizer'] = self._get_categorical('optimizer', cd)
         sp_dict['n_latent'] = self._get_range_integer('n_latent',cd)
         sp_dict['enc_hidden_dim'] = self._get_range_integer('enc_hidden_dim', cd)
@@ -84,25 +84,31 @@ class TMNTConfig(object):
         sp_dict['redundancy_loss_wt'] = self._get_range_uniform('redundancy_loss_wt', cd) or 0.0
         sp_dict['num_enc_layers'] = self._get_range_integer('num_enc_layers', cd) or 1
         sp_dict['enc_dr'] = self._get_range_uniform('enc_dr', cd) or 0.0
+        sp_dict['covar_net_layers'] = self._get_range_integer('covar_net_layers', cd) or 1
 
-        embedding_types = cd['embedding_source']
+        embedding_types = cd['embedding']
         embedding_space = []
         for et in embedding_types:
-            if et == 'random':
-                embedding_space.append(ag.space.List('random', self._get_range_integer('embedding_size', cd)))
+            if et['source'] == 'random':
+                embedding_space.append(ag.space.Dict(**{'source': 'random', 'size': self._get_range_integer('embedding_size', cd)}))
             else:
-                embedding_space.append(ag.space.List(et, self._get_categorical('fixed_embedding', cd)))
+                fixed_assigned = et.get('fixed')
+                if fixed_assigned is None:
+                    embedding_space.append(ag.space.Dict(**{'source': et['source'], 'fixed': ag.space.Bool()}))
+                else:
+                    embedding_space.append(ag.space.Dict(**{'source': et['source'], 'fixed': fixed_assigned.lower()}))
         sp_dict['embedding'] = ag.space.Categorical(*embedding_space)
 
         latent_types = cd['latent_distribution']
         latent_space = []
         for lt in latent_types:
-            if lt == 'vmf':
-                latent_space.append(ag.space.List('vmf', self._get_range_uniform('kappa', cd)))
-            elif lt == 'logistic_gaussian':
-                latent_space.append(ag.space.List('logistic_gaussian', self._get_range_uniform('alpha', cd)))
+            dist_type = lt['dist_type']
+            if dist_type == 'vmf':
+                latent_space.append(ag.space.Dict(**{'dist_type': 'vmf', 'kappa': self._get_range_uniform('kappa', lt)}))
+            elif dist_type == 'logistic_gaussian':
+                latent_space.append(ag.space.Dict(**{'dist_type': 'logistic_gaussian', 'alpha': self._get_range_uniform('alpha', lt)}))
             else:
-                latent_space.append(lt)
-        sp_dict['latent_dist'] = ag.space.Categorical(*latent_space)
+                latent_space.append(ag.space.Dict(**{'dist_type': 'gaussian'}))
+        sp_dict['latent_distribution'] = ag.space.Categorical(*latent_space)
 
         return sp_dict

@@ -35,6 +35,9 @@ from tmnt.utils.random import seed_rng
 from tmnt.coherence.npmi import EvaluateNPMI
 from tmnt.modsel.configuration import TMNTConfig
 
+import autogluon as ag
+from autogluon.scheduler.reporter import FakeReporter
+
 __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
 MAX_DESIGN_MATRIX = 250000000 
@@ -150,7 +153,6 @@ class BowVAETrainer():
         self.total_tst_words = total_tst_words
         self.vocabulary = vocabulary
         self.ctx = ctx
-        self.max_budget = max_budget
         self.train_labels = train_labels
         self.test_labels = test_labels
         self.data_train_csr   = data_train_csr
@@ -158,7 +160,6 @@ class BowVAETrainer():
         self.data_heldout_csr = None
         self.label_map = label_map
         self.search_mode = False
-        
         self.wd_freqs = get_wd_freqs(data_train_csr)
         self.vocab_cache = {}
         
@@ -193,7 +194,7 @@ class BowVAETrainer():
         emb_size: Size of embedding (based on pre-trained embedding or specified)
         """
         vocab = self.vocabulary
-        embedding_source = config.embedding[0]
+        embedding_source = embedding_config['source']
         if embedding_source != 'random':
             if self.vocab_cache.get(embedding_source):
                 vocab = copy.deepcopy(self.vocab_cache[embedding_source])
@@ -218,7 +219,7 @@ class BowVAETrainer():
             logging.info(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
         else:
             vocab.set_embedding(None) ## unset embedding
-            emb_size = config.embedding[1]
+            emb_size = int(embedding_config['size'])
         return vocab, emb_size
 
 
@@ -261,15 +262,13 @@ class BowVAETrainer():
 
         Parameters
         ----------
-        config: a `ConfigSpace` object
+        config: an autogluon configuration/argument object 
         """
         
-        lr = config.or
+        lr = config.lr
         latent_distrib = config.latent_distribution
         optimizer = config.optimizer
         n_latent = int(config.n_latent)
-        kappa = float(config.kappa)
-        alpha = float(config.alpha)
         enc_hidden_dim = int(config.enc_hidden_dim)
         target_sparsity = float(config.target_sparsity)
         coherence_reg_penalty = float(config.coherence_loss_wt)
@@ -279,10 +278,19 @@ class BowVAETrainer():
         l1_coef = 0.0 ## self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
             
         vocab, emb_size = self._initialize_embedding_layer(config.embedding)
-        fixed_embedding = config.embedding[1] == True
+        fixed_embedding = config.embedding.get('fixed') == True
         covar_net_layers = config.covar_net_layers
         n_encoding_layers = config.num_enc_layers
         enc_dr = config.enc_dr
+
+        ldist_def = config.latent_distribution
+        kappa = 0.0
+        alpha = 1.0
+        latent_distrib = ldist_def.dist_type
+        if latent_distrib == 'vmf':
+            kappa = ldist_def.kappa
+        elif latent_distrib == 'logistic_gaussian':
+            alpha = ldist_def.alpha
 
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             n_covars = len(self.label_map) if self.label_map else 1
@@ -354,7 +362,7 @@ class BowVAETrainer():
         model: VAE model with trained parameters
         res: Result dictionary with details of training run for use in model selection
         """
-        logging.info("Evaluating with Budget {} against Config: {}".format(budget, config))
+        logging.info("Evaluating with Config: {}".format(config))
         model, trainer = self._get_model(config)
 
         batch_size = int(config.batch_size)
@@ -433,8 +441,9 @@ class BowVAETrainer():
                 reporter(epoch=epoch+1, objective=obj, test_perplexity=perplexity, redundancy=redundancy, test_npmi=npmi, test_enc_npmi=(enc_npmi or 0.0))
         else:
             ## in this case, we're only training a model; no model selection, validation or held out test data
+            obj = 0.0
             logging.info('Warning: training finished with no evaluation/validation dataset')
-        return model
+        return model, obj
 
 
     def retrain_best_config(self, config_dict, rng_seed, ntimes=1, data_sensitive_budget=True):
@@ -491,56 +500,56 @@ class BowVAETrainer():
         
 
 
-def write_model(m, model_dir, config_dict, budget, args):
+def write_model(m, model_dir, config):
     if model_dir:
         pfile = os.path.join(model_dir, 'model.params')
         sp_file = os.path.join(model_dir, 'model.config')
         vocab_file = os.path.join(model_dir, 'vocab.json')
         logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
         m.save_parameters(pfile)
-        ## if the embedding_size wasn't set explicitly (e.g. determined via pre-trained embedding), then set it here
-        if m.vocabulary.embedding:
-            config['embedding_size'] = len(m.vocabulary.embedding.idx_to_vec[0])
-        config['training_epochs'] = int(budget)
+        ## additional derived information from auto-searched configuration
+        ## helpful to have for runtime use of model (e.g. embedding size)
+        derived_info = {}
+        derived_info['embedding_size'] = m.embedding_size
+        config['derived_info'] = derived_info
         if 'num_enc_layers' not in config.keys():
             config['num_enc_layers'] = m.num_enc_layers
-        if isinstance(m, MetaDataBowNTM):
             config['n_covars'] = int(m.n_covars)
             config['l_map'] = m.label_map
             config['covar_net_layers'] = m.covar_net_layers
-        specs = json.dumps(config)
+        specs = json.dumps(config, sort_keys=True, indent=4)
         with open(sp_file, 'w') as f:
             f.write(specs)
         with open(vocab_file, 'w') as f:
             f.write(m.vocabulary.to_json())
 
 
-def get_trainer(args):
+def get_trainer(c_args):
     i_dt = datetime.datetime.now()
     train_out_dir = \
-        os.path.join(args.save_dir,
+        os.path.join(c_args.save_dir,
                      "train_{}_{}_{}_{}_{}_{}_{}".format(i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond))
     logging_config(folder=train_out_dir, name='tmnt', level=logging.INFO)
-    logging.info(args)
-    seed_rng(args.seed)
-    if args.vocab_file and args.tr_vec_file:
-        vpath = Path(args.vocab_file)
-        tpath = Path(args.tr_vec_file)
+    logging.info(c_args)
+    seed_rng(c_args.seed)
+    if c_args.vocab_file and c_args.tr_vec_file:
+        vpath = Path(c_args.vocab_file)
+        tpath = Path(c_args.tr_vec_file)
         if not (vpath.is_file() and tpath.is_file()):
-            raise Exception("Vocab file {} and/or training vector file {} do not exist".format(args.vocab_file, args.tr_vec_file))
+            raise Exception("Vocab file {} and/or training vector file {} do not exist".format(c_args.vocab_file, c_args.tr_vec_file))
     logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
     vocab, tr_csr_mat, total_tr_words, tr_labels, label_map = \
-        collect_sparse_data(args.tr_vec_file, args.vocab_file, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
-    if args.val_vec_file:
+        collect_sparse_data(c_args.tr_vec_file, c_args.vocab_file, scalar_labels=c_args.scalar_covars, encoding=c_args.str_encoding)
+    if c_args.val_vec_file:
         tst_csr_mat, total_tst_words, tst_labels = \
-            collect_sparse_test(args.val_vec_file, vocab, scalar_labels=args.scalar_covars, encoding=args.str_encoding)
+            collect_sparse_test(c_args.val_vec_file, vocab, scalar_labels=c_args.scalar_covars, encoding=c_args.str_encoding)
     else:
         tst_csr_mat, total_tst_words, tst_labels = None, None, None
-    ctx = mx.cpu() if args.gpu is None or args.gpu == '' or int(args.gpu) < 0 else mx.gpu(int(args.gpu))
-    model_out_dir = args.model_dir if args.model_dir else os.path.join(train_out_dir, 'MODEL')
+    ctx = mx.cpu() if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else mx.gpu(int(c_args.gpu))
+    model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
-    if args.use_labels_as_covars and tr_labels is not None:
+    if c_args.use_labels_as_covars and tr_labels is not None:
         if label_map is not None:
             n_covars = len(label_map)
             tr_labels = mx.nd.one_hot(tr_labels, n_covars)
@@ -548,27 +557,28 @@ def get_trainer(args):
         else:
             tr_labels = mx.nd.expand_dims(tr_labels, 1)
             tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
-    worker = BowVAETrainer(model_out_dir, args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
+    worker = BowVAETrainer(model_out_dir, c_args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
                           label_map, ctx=ctx)
     return worker, train_out_dir
 
 
-def select_model(trainer, tmnt_config_space, total_iterations, result_logger, id_str, ns_port):
+def select_model(trainer, tmnt_config_space, total_iterations):
     """
     Top level call to model selection. 
     """
+    trainer.search_mode = True
     tmnt_config = TMNTConfig(tmnt_config_space).get_configspace()
     @ag.args(**tmnt_config)
     def exec_train_fn(args, reporter):
-        trainer.train_model(args,reporter)
-    #logging.info(config)
+        return trainer.train_model(args, reporter)
+
     search_options = {
-        'num_init_random': 2,
+        'num_init_random': 1,
         'debug_log': True}
-    
+
     hpb_scheduler = ag.scheduler.HyperbandScheduler(
         exec_train_fn,
-        resource={'num_cpus': 2, 'num_gpus': 0},
+        resource={'num_cpus': 1, 'num_gpus': 0},
         searcher='bayesopt',
         search_options=search_options,
         #time_out=120,
@@ -584,26 +594,39 @@ def select_model(trainer, tmnt_config_space, total_iterations, result_logger, id
     return hpb_scheduler
 
 def train_with_single_config(c_args, scheduler, worker, best_config):
-    if c_args.tst_vec_file:
-        worker.set_heldout_data_as_test()
     rng_seed = c_args.seed
+    best_obj = -1000000000.0
+    best_model = None
     if c_args.val_vec_file:
+        if c_args.tst_vec_file:
+            worker.set_heldout_data_as_test()
+        logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
         for i in range(int(c_args.num_final_evals)):
             seed_rng(rng_seed+1) # update RNG
-            scheduler.run_with_config(best_config)
-        logging.info("************************************")
-
-
-def model_select_bow_vae(args):
+            model, obj = scheduler.run_with_config(best_config)
+            if obj > best_obj:
+                best_obj = obj
+                best_model = model
+        return best_model, best_obj
+    else:
+        return scheduler.run_with_config(best_config)
+        
+    
+def model_select_bow_vae(c_args):
     dd = datetime.datetime.now()
-    trainer, log_dir = get_trainer(args)
-    scheduler = select_model(worker, args.config_space, args.iterations)
-    logging.info('Best found configuration:', scheduler.get_best_config())
+    trainer, log_dir = get_trainer(c_args)
+    scheduler = select_model(trainer, c_args.config_space, c_args.iterations)
+    best_config_spec = scheduler.get_best_config()
+    args_dict = ag.space.Dict(**scheduler.train_fn.args)
+    best_config = args_dict.sample(**best_config_spec)
+    logging.info("Best configuration = {}".format(best_config))
     logging.info("Best configuration objective = {}".format(scheduler.get_best_reward()))
+    model, obj = train_with_single_config(c_args, scheduler, trainer, scheduler.get_best_config())
+    logging.info("Objective with final retrained model: {}".format(obj))
+    write_model(model, trainer.model_out_dir, best_config)
     with open(os.path.join(log_dir, 'best.model.config'), 'w') as fp:
-        specs = json.dumps(scheduler.get_best_config())
+        specs = json.dumps(best_config)
         fp.write(specs)
-    train_with_single_config(args, scheduler, trainer, scheduler.get_best_config())
     dd_finish = datetime.datetime.now()
     logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
     scheduler.shutdown()
@@ -611,15 +634,16 @@ def model_select_bow_vae(args):
 def train_bow_vae(args):
     try:
         with open(args.config, 'r') as f:
-            config_dict = json.loads(f.read())
+            config_dict = json.load(f)
     except:
         logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(args.config))
         raise Exception("Invalid Json Configuration File")
     dd = datetime.datetime.now()
     worker, log_dir = get_trainer(args)
+    #tmnt_config = TMNTConfig(config_dict).get_configspace()
     config = ag.space.Dict(**config_dict)
     ## Don't use AutoGluon here; just fake it
-    worker.train_model(config, ag.scheduler.FakeReporter())
+    worker.train_model(config, FakeReporter())
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 
