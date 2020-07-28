@@ -90,7 +90,7 @@ class TMNTConfig(object):
         embedding_space = []
         for et in embedding_types:
             if et['source'] == 'random':
-                embedding_space.append(ag.space.Dict(**{'source': 'random', 'size': self._get_range_integer('embedding_size', cd)}))
+                embedding_space.append(ag.space.Dict(**{'source': 'random', 'size': self._get_range_integer('size', et)}))
             else:
                 fixed_assigned = et.get('fixed')
                 if fixed_assigned is None:

@@ -1,33 +1,15 @@
 from setuptools import setup, find_packages
 
-
 requirements = [
     'autogluon==0.0.12',
-    'gluonnlp>=0.8.1',
     'mantichora==0.9.5',
-    'mxnet==1.6.0',
+    'pandas<1.0',
     'pyLDAvis==2.1.2',
     'pyOpenSSL==18.0.0',
     'PySocks==1.6.8',
-    'sacremoses==0.0.35',
+    'sacremoses>=0.0.35',
     'sentence-splitter==1.4',
-    'sphinx-gallery==0.2.0',
-    'sphinx-rtd-theme==0.4.3',
-    'umap-learn==0.3.7' 
-    ]
-
-requirements_gpu = [
-    'autogluon==0.0.12',
-    'gluonnlp>=0.8.1',
-    'mantichora==0.9.5',
-    'mxnet_cu101==1.6.0',
-    'pyLDAvis==2.1.2',
-    'pyOpenSSL==18.0.0',
-    'PySocks==1.6.8',
-    'sacremoses==0.0.35',
-    'sentence-splitter==1.4',
-    'sphinx-gallery==0.2.0',
-    'sphinx-rtd-theme==0.4.3',
+    'scikit-learn<0.23',
     'umap-learn==0.3.7' 
     ]
 
