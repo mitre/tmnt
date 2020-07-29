@@ -333,6 +333,7 @@ class BowVAETrainer():
                     if otype == 'w+':
                         fp.write("Epoch,PPL,NPMI\n")
                     fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
+            return npmi, perplexity
 
     def _l1_regularize(self, model, cur_l1_coef):
         """Apply a regularization term based on magnitudes of the decoder (topic-term) weights.
@@ -397,13 +398,9 @@ class BowVAETrainer():
             last_batch_size = 0
             test_array, test_dataloader = None, None
 
-
         training_epochs = config.epochs
         #training_epochs = \
         #        (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
-
-        visualized_first_batch = False
-
         for epoch in range(training_epochs):
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'redundancy_loss': 0.0, 'tr_size': 0.0}
@@ -421,8 +418,14 @@ class BowVAETrainer():
                 trainer.step(data.shape[0]) 
                 self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss)
             self._log_details(details, epoch)
-            if not self.search_mode and (test_dataloader is not None):
-                self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)
+            #if not self.search_mode and (test_dataloader is not None):
+            if test_dataloader is not None:
+                mx.nd.waitall()
+                tst_npmi, tst_ppl = self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)
+                if reporter:
+                    obj = tst_npmi * 4 - (tst_ppl / 1000)
+                    #if epoch+1 == training_epochs or math.log(epoch+1,3) == round(math.log(epoch+1,3)):
+                    reporter(epoch=epoch+1, objective=obj)
             if model.target_sparsity > 0.0:
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
@@ -437,8 +440,9 @@ class BowVAETrainer():
             except AttributeError:
                 coherence_coefficient = 1.0
             obj = (npmi_to_optimize - redundancy) * coherence_coefficient - (perplexity / 1000)
-            if reporter:
-                reporter(epoch=epoch+1, objective=obj, test_perplexity=perplexity, redundancy=redundancy, test_npmi=npmi, test_enc_npmi=(enc_npmi or 0.0))
+            if False:
+                reporter(epoch=training_epochs+1,
+                         objective=obj, test_perplexity=perplexity, redundancy=redundancy, test_npmi=npmi, test_enc_npmi=(enc_npmi or 0.0))
         else:
             ## in this case, we're only training a model; no model selection, validation or held out test data
             obj = 0.0
@@ -578,12 +582,13 @@ def select_model(trainer, tmnt_config_space, total_iterations):
 
     hpb_scheduler = ag.scheduler.HyperbandScheduler(
         exec_train_fn,
-        resource={'num_cpus': 1, 'num_gpus': 0},
-        searcher='bayesopt',
+        resource={'num_cpus': 2, 'num_gpus': 0},
+        searcher='random', ## searcher='bayesopt',
         search_options=search_options,
         #time_out=120,
         num_trials=total_iterations,
         time_attr='epoch',
+        #max_t = 9,
         reward_attr='objective',
         type='stopping',
         grace_period=1,
@@ -591,6 +596,7 @@ def select_model(trainer, tmnt_config_space, total_iterations):
         brackets=1)
     hpb_scheduler.run()
     hpb_scheduler.join_jobs()
+    #hpb_scheduler.get_training_curves(plot=True)
     return hpb_scheduler
 
 def train_with_single_config(c_args, scheduler, worker, best_config):
@@ -629,6 +635,8 @@ def model_select_bow_vae(c_args):
         fp.write(specs)
     dd_finish = datetime.datetime.now()
     logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
+    logging.info("Providing model selection plot")
+    scheduler.get_training_curves(plot=True)
     scheduler.shutdown()
 
 def train_bow_vae(args):
