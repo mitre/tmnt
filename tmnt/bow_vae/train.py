@@ -667,8 +667,8 @@ def model_select_bow_vae(c_args):
     logging.info("Printing hyperparameter results")
     out_html = os.path.join(log_dir, 'selection.html')
     results_df.to_html(out_html)
-    logging.info("Providing model selection plot")
-    scheduler.get_training_curves(plot=True)
+    #logging.info("Providing model selection plot")
+    #scheduler.get_training_curves(plot=True)
     scheduler.shutdown()
 
 def train_bow_vae(args):
