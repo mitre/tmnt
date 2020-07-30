@@ -3,7 +3,6 @@
 Copyright (c) 2019-2020 The MITRE Corporation.
 """
 
-
 import math
 import logging
 import datetime
@@ -18,6 +17,7 @@ import copy
 import socket
 import statistics
 import random
+import pandas as pd
 
 from mxnet import autograd
 from mxnet import gluon
@@ -399,9 +399,16 @@ class BowVAETrainer():
             test_array, test_dataloader = None, None
 
         training_epochs = config.epochs
+        
+        try:
+            coherence_coefficient = self.c_args.coherence_coefficient
+        except AttributeError:
+            coherence_coefficient = 1.0
+
         #training_epochs = \
         #        (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
         for epoch in range(training_epochs):
+            ts_epoch = time.time()
             details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
                        'entropies_loss': 0.0, 'coherence_loss': 0.0, 'redundancy_loss': 0.0, 'tr_size': 0.0}
             for i, (data, labels) in enumerate(train_dataloader):
@@ -423,9 +430,11 @@ class BowVAETrainer():
                 mx.nd.waitall()
                 tst_npmi, tst_ppl = self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)
                 if reporter:
-                    obj = tst_npmi * 4 - (tst_ppl / 1000)
+                    ts_now = time.time()
+                    eval_time = ts_now - ts_epoch
+                    obj = tst_npmi * coherence_coefficient - (tst_ppl / 1000)
                     #if epoch+1 == training_epochs or math.log(epoch+1,3) == round(math.log(epoch+1,3)):
-                    reporter(epoch=epoch+1, objective=obj)
+                    reporter(epoch=epoch+1, objective=obj, time_step=ts_now, eval_time=eval_time)
             if model.target_sparsity > 0.0:
                 l1_coef = self._l1_regularize(model, l1_coef)
         mx.nd.waitall()
@@ -435,10 +444,6 @@ class BowVAETrainer():
             npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld,
                                                            ctx=model.model_ctx)
             npmi_to_optimize = enc_npmi if enc_npmi and self.c_args.optimize_encoder_coherence else npmi
-            try:
-                coherence_coefficient = self.c_args.coherence_coefficient
-            except AttributeError:
-                coherence_coefficient = 1.0
             obj = (npmi_to_optimize - redundancy) * coherence_coefficient - (perplexity / 1000)
             if False:
                 reporter(epoch=training_epochs+1,
@@ -566,10 +571,33 @@ def get_trainer(c_args):
     return worker, train_out_dir
 
 
-def select_model(trainer, tmnt_config_space, total_iterations):
+def process_training_history(task_dicts, start_timestamp):
+    task_dfs = []
+    for task_id in task_dicts:
+        task_df = pd.DataFrame(task_dicts[task_id])
+        task_df = task_df.assign(task_id=task_id,
+                                 runtime=task_df["time_step"] - start_timestamp,
+                                 objective=task_df["objective"],
+                                 target_epoch=task_df["epoch"].iloc[-1])
+        task_dfs.append(task_df)
+
+    result = pd.concat(task_dfs, axis="index", ignore_index=True, sort=True)
+    # re-order by runtime
+    result = result.sort_values(by="runtime")
+    # calculate incumbent best -- the cumulative minimum of the error.
+    result = result.assign(best=result["objective"].cummax())
+    return result
+
+
+def select_model(trainer, c_args):
     """
     Top level call to model selection. 
     """
+    tmnt_config_space = c_args.config_space
+    total_iterations = c_args.iterations
+    cpus_per_task = c_args.cpus_per_task
+    searcher = c_args.searcher
+    brackets = c_args.brackets
     trainer.search_mode = True
     tmnt_config = TMNTConfig(tmnt_config_space).get_configspace()
     @ag.args(**tmnt_config)
@@ -582,21 +610,19 @@ def select_model(trainer, tmnt_config_space, total_iterations):
 
     hpb_scheduler = ag.scheduler.HyperbandScheduler(
         exec_train_fn,
-        resource={'num_cpus': 2, 'num_gpus': 0},
-        searcher='random', ## searcher='bayesopt',
+        resource={'num_cpus': cpus_per_task, 'num_gpus': 0},
+        searcher=searcher,
         search_options=search_options,
         #time_out=120,
         num_trials=total_iterations,
         time_attr='epoch',
-        #max_t = 9,
         reward_attr='objective',
         type='stopping',
         grace_period=1,
         reduction_factor=3,
-        brackets=1)
+        brackets=brackets)
     hpb_scheduler.run()
     hpb_scheduler.join_jobs()
-    #hpb_scheduler.get_training_curves(plot=True)
     return hpb_scheduler
 
 def train_with_single_config(c_args, scheduler, worker, best_config):
@@ -617,11 +643,10 @@ def train_with_single_config(c_args, scheduler, worker, best_config):
     else:
         return scheduler.run_with_config(best_config)
         
-    
 def model_select_bow_vae(c_args):
     dd = datetime.datetime.now()
     trainer, log_dir = get_trainer(c_args)
-    scheduler = select_model(trainer, c_args.config_space, c_args.iterations)
+    scheduler = select_model(trainer, c_args)
     best_config_spec = scheduler.get_best_config()
     args_dict = ag.space.Dict(**scheduler.train_fn.args)
     best_config = args_dict.sample(**best_config_spec)
@@ -635,6 +660,13 @@ def model_select_bow_vae(c_args):
         fp.write(specs)
     dd_finish = datetime.datetime.now()
     logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
+
+    results_df = process_training_history(
+                scheduler.training_history.copy(),
+                start_timestamp=scheduler._start_time)
+    logging.info("Printing hyperparameter results")
+    out_html = os.path.join(log_dir, 'selection.html')
+    results_df.to_html(out_html)
     logging.info("Providing model selection plot")
     scheduler.get_training_curves(plot=True)
     scheduler.shutdown()
