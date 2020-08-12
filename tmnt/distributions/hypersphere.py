@@ -7,10 +7,12 @@ Copyright (c) 2019 The MITRE Corporation.
 import mxnet as mx
 import numpy as np
 from scipy import special as sp
-from mxnet import gluon
+from mxnet import gluon, init
 from tmnt.distributions.latent_distrib import LatentDistribution
 
 __all__ = ['HyperSphericalLatentDistribution']
+
+
 
 class HyperSphericalLatentDistribution(LatentDistribution):
 
@@ -35,9 +37,11 @@ class HyperSphericalLatentDistribution(LatentDistribution):
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
-        self.vmf_samples.initialize(ctx=self.ctx)
+        #self.vmf_samples.initialize(ctx=self.ctx, force_reinit=True)
+        #self.vmf_samples.set_data(self.w_samples)
+
+    def post_init(self):
         self.vmf_samples.set_data(self.w_samples)
-        
 
     def hybrid_forward(self, F, data, batch_size, kld_const, vmf_samples):
         mu = self.mu_encoder(data)

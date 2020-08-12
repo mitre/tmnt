@@ -17,7 +17,6 @@ import threading
 import logging
 import threading
 from queue import Queue
-from tmnt.utils.log_utils import logging_config
 
 from tmnt.preprocess import BasicTokenizer
 

@@ -9,8 +9,8 @@ __all__ = ['logging_config']
 
 
 def logging_config(folder=None, name=None,
-                   level=logging.DEBUG,
-                   console_level=logging.INFO,
+                   level=40,
+                   console_level=40,
                    no_console=False):
     """ Config the logging.
 

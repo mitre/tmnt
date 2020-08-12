@@ -81,7 +81,7 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
 def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False,
                       test_dataloader=None, ctx=mx.cpu()):
     if covariate_interactions:
-        logging.info("Rendering interactions not supported yet")
+        logging.debug("Rendering interactions not supported yet")
     num_topics = model.n_latent
 
     if test_dataloader is not None:
@@ -113,7 +113,7 @@ def compute_coherence(model, k, test_data, log_terms=False, covariate_interactio
     if log_terms:
         top_k_tokens = [list(map(lambda x: model.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
         for i in range(num_topics):
-            logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
+            logging.debug("Topic {}: {}".format(i, top_k_tokens[i]))
     return npmi, enc_npmi, redundancy
 
 
@@ -140,7 +140,7 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
     for t in range(num_topics):
         top_k = [ vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]
         term_str = ' '.join(top_k)
-        logging.info("Topic {}: {}".format(str(t), term_str))
+        logging.debug("Topic {}: {}".format(str(t), term_str))
 
 
 
@@ -162,10 +162,13 @@ class BowVAETrainer():
         self.search_mode = False
         self.wd_freqs = get_wd_freqs(data_train_csr)
         self.vocab_cache = {}
-        
+        self.validate_each_epoch = True
         self.seed_matrix = None
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
+
+    def set_validate_each_epoch(self, v):
+        self.validate_each_epoch = v
 
     def set_heldout_data_as_test(self):
         """Load in the heldout test data for final model evaluation
@@ -213,10 +216,10 @@ class BowVAETrainer():
             num_oov = 0
             for word in vocab.embedding._idx_to_token:
                 if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                    logging.info("Term {} is OOV".format(word))
+                    logging.debug("Term {} is OOV".format(word))
                     num_oov += 1
                     vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
-            logging.info(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
+            logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
         else:
             vocab.set_embedding(None) ## unset embedding
             emb_size = int(embedding_config['size'])
@@ -250,11 +253,11 @@ class BowVAETrainer():
             nd = {}
             for (k,v) in details.items():
                 nd[k] = v / tr_size
-            logging.info("Epoch {}: Loss = {}".format(epoch, nd['epoch_loss']))
-            logging.info("[Rec loss = {:8.4f}] [KL loss = {:8.4f}] [Entropy loss = {:8.4f}] [Coh. loss = {:8.4f}] [Red. loss = {:8.4f}]".
+            logging.debug("Epoch {}: Loss = {}".format(epoch, nd['epoch_loss']))
+            logging.debug("[Rec loss = {:8.4f}] [KL loss = {:8.4f}] [Entropy loss = {:8.4f}] [Coh. loss = {:8.4f}] [Red. loss = {:8.4f}]".
                 format(nd['rec_loss'], nd['kl_loss'], nd['entropies_loss'], nd['coherence_loss'], nd['redundancy_loss']))
         else:
-            logging.info("WARNING: Training set size = {}".format(tr_size))
+            logging.warning("WARNING: Training set size = {}".format(tr_size))
 
     def _get_model(self, config):
         """Take a model configuration - specified by a config file or as determined by model selection and 
@@ -314,6 +317,7 @@ class BowVAETrainer():
             model.hybridize()
         return model, trainer
 
+    
     def _eval_trace(self, model, epoch, test_dataloader, last_batch_size, num_test_batches):
         """Evaluate the model against test/validation data and optionally write to a trace file.
         
@@ -326,14 +330,16 @@ class BowVAETrainer():
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
                                   self.c_args, self.ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi, _, _ = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld, ctx=model.model_ctx)
+            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld, ctx=model.model_ctx)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
                     if otype == 'w+':
                         fp.write("Epoch,PPL,NPMI\n")
                     fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
-            return npmi, perplexity
+            return npmi, perplexity, redundancy
+        else:
+            return None, None, None
 
     def _l1_regularize(self, model, cur_l1_coef):
         """Apply a regularization term based on magnitudes of the decoder (topic-term) weights.
@@ -346,7 +352,7 @@ class BowVAETrainer():
         dec_weights = model.decoder.collect_params().get('weight').data().abs()
         ratio_small_weights = (dec_weights < self.c_args.sparsity_threshold).sum().asscalar() / dec_weights.size
         l1_coef = cur_l1_coef * math.pow(2.0, model.target_sparsity - ratio_small_weights)
-        logging.info("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(l1_coef, ratio_small_weights))
+        logging.debug("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(l1_coef, ratio_small_weights))
         model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
         return l1_coef
 
@@ -363,7 +369,7 @@ class BowVAETrainer():
         model: VAE model with trained parameters
         res: Result dictionary with details of training run for use in model selection
         """
-        logging.info("Evaluating with Config: {}".format(config))
+        logging.debug("Evaluating with Config: {}".format(config))
         model, trainer = self._get_model(config)
 
         batch_size = int(config.batch_size)
@@ -381,7 +387,7 @@ class BowVAETrainer():
                     DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size,
                                                      last_batch_handle='pad', shuffle=False))
             else:
-                logging.info("Warning: Test dataset is very large." + \
+                logging.warning("Warning: Test dataset is very large." + \
                              "Using sparse representation which may result in approximation to Perplexity.")
                 test_dataloader = \
                     DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size,
@@ -390,7 +396,7 @@ class BowVAETrainer():
             num_test_batches = self.data_test_csr.shape[0] // batch_size
             if last_batch_size > 0:
                 num_test_batches += 1
-            logging.info("Total validation/test instances = {}, batch_size = {}, last_batch = {}, num batches = {}"
+            logging.debug("Total validation/test instances = {}, batch_size = {}, last_batch = {}, num batches = {}"
                          .format(self.data_test_csr.shape[0], batch_size, last_batch_size, num_test_batches))
         else:
             logging.warning("**** No validation/evaluation available for model validation test csr = {} ******"
@@ -425,18 +431,16 @@ class BowVAETrainer():
                 trainer.step(data.shape[0]) 
                 self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss)
             self._log_details(details, epoch)
-            #if not self.search_mode and (test_dataloader is not None):
-            if test_dataloader is not None:
+            if model.target_sparsity > 0.0:
+                l1_coef = self._l1_regularize(model, l1_coef)
+            if test_dataloader is not None and self.validate_each_epoch:
                 mx.nd.waitall()
-                tst_npmi, tst_ppl = self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)
+                tst_npmi, tst_ppl, redundancy = self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)
                 if reporter:
                     ts_now = time.time()
                     eval_time = ts_now - ts_epoch
-                    obj = tst_npmi * coherence_coefficient - (tst_ppl / 1000)
-                    #if epoch+1 == training_epochs or math.log(epoch+1,3) == round(math.log(epoch+1,3)):
-                    reporter(epoch=epoch+1, objective=obj, time_step=ts_now, eval_time=eval_time)
-            if model.target_sparsity > 0.0:
-                l1_coef = self._l1_regularize(model, l1_coef)
+                    obj = (tst_npmi - redundancy) * coherence_coefficient - (tst_ppl / 1000)
+                    reporter(epoch=epoch+1, objective=obj, time_step=ts_now, coherence=tst_npmi, perplexity=tst_ppl, redundancy=redundancy)
         mx.nd.waitall()
         if test_dataloader is not None:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
@@ -450,63 +454,10 @@ class BowVAETrainer():
                          objective=obj, test_perplexity=perplexity, redundancy=redundancy, test_npmi=npmi, test_enc_npmi=(enc_npmi or 0.0))
         else:
             ## in this case, we're only training a model; no model selection, validation or held out test data
-            obj = 0.0
-            logging.info('Warning: training finished with no evaluation/validation dataset')
-        return model, obj
+            obj, npmi, perplexity, redundancy = 0.0, 0.0, 0.0, 0.0
+            logging.warning('Warning: training finished with no evaluation/validation dataset')
+        return model, obj, npmi, perplexity, redundancy
 
-
-    def retrain_best_config(self, config_dict, rng_seed, ntimes=1, data_sensitive_budget=True):
-        """Train a model as per the provided `Configuration` and `budget` and write to file.
-        
-        Parameters
-        ----------
-        config_dict: Plain dictionary representation of config
-        budget: int - number of iterations to train
-        """
-        best_loss = -math.inf
-        best_model = None
-        npmis = []
-        enc_npmis = []
-        perplexities = []
-        redundancies = []
-        ## map back to autogluon config
-        config = ag.space.Dict(**config_dict)
-        
-        if self.c_args.tst_vec_file:
-            self.set_heldout_data_as_test()
-        if self.c_args.val_vec_file:
-            for i in range(ntimes):
-                seed_rng(rng_seed+i)
-                model = self.train_model(config, None) ### This avoids using a scheduler
-                loss = results['loss']
-                npmis.append(results['info']['test_npmi'])
-                enc_npmis.append(results['info']['test_enc_npmi'])
-                perplexities.append(results['info']['test_perplexity'])
-                redundancies.append(results['info']['redundancy'])
-                if loss < best_loss:
-                    best_loss = loss
-                    best_model = model
-            logging.info("******************************************")
-            test_type = "HELDOUT" if self.c_args.tst_vec_file else "VALIDATATION"
-            if ntimes > 1:
-                logging.info("Final {} NPMI         ==> Mean: {}, StdDev: {}"
-                             .format(test_type, statistics.mean(npmis), statistics.stdev(npmis)))
-                logging.info("Final {} Perplexity   ==> Mean: {}, StdDev: {}"
-                             .format(test_type, statistics.mean(perplexities), statistics.stdev(perplexities)))
-                logging.info("Final {} Redundancy   ==> Mean: {}, StdDev: {}"
-                             .format(test_type, statistics.mean(redundancies), statistics.stdev(redundancies)))
-                logging.info("Final {} Encoder NPMI ==> Mean: {}, StdDev: {}"
-                             .format(test_type, statistics.mean(enc_npmis), statistics.stdev(enc_npmis)))
-            else:
-                logging.info("Final {} NPMI         ==> {}".format(test_type, npmis[0]))
-                logging.info("Final {} Perplexity   ==> {}".format(test_type, perplexities[0]))
-                logging.info("Final {} Redundancy   ==> {}".format(test_type, redundancies[0]))
-                logging.info("Final {} Encoder NPMI ==> {}".format(test_type, enc_npmis[0]))
-        else:
-            ## in this case, no validation test data supplied
-            best_model, _ = self._train_model(config, budget)
-        write_model(best_model, self.model_out_dir, config, budget, self.c_args)
-        
 
 
 def write_model(m, model_dir, config):
@@ -576,6 +527,9 @@ def process_training_history(task_dicts, start_timestamp):
     for task_id in task_dicts:
         task_df = pd.DataFrame(task_dicts[task_id])
         task_df = task_df.assign(task_id=task_id,
+                                 coherence=task_df["coherence"],
+                                 perplexity=task_df["perplexity"],
+                                 redundancy=task_df["redundancy"],
                                  runtime=task_df["time_step"] - start_timestamp,
                                  objective=task_df["objective"],
                                  target_epoch=task_df["epoch"].iloc[-1])
@@ -625,23 +579,48 @@ def select_model(trainer, c_args):
     hpb_scheduler.join_jobs()
     return hpb_scheduler
 
-def train_with_single_config(c_args, scheduler, worker, best_config):
+def train_with_single_config(c_args, trainer, best_config):
     rng_seed = c_args.seed
     best_obj = -1000000000.0
     best_model = None
     if c_args.val_vec_file:
+        trainer.set_validate_each_epoch(False)
         if c_args.tst_vec_file:
-            worker.set_heldout_data_as_test()
+            trainer.set_heldout_data_as_test()
         logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
-        for i in range(int(c_args.num_final_evals)):
-            seed_rng(rng_seed+1) # update RNG
-            model, obj = scheduler.run_with_config(best_config)
+        logging.info("Best config: {}".format(best_config))
+        npmis, perplexities, redundancies, objectives = [],[],[],[]
+        ntimes = int(c_args.num_final_evals)
+        for i in range(ntimes):
+            seed_rng(rng_seed) # update RNG
+            rng_seed += 1
+            model, obj, npmi, perplexity, redundancy = trainer.train_model(best_config, FakeReporter())
+            npmis.append(npmi)
+            perplexities.append(perplexity)
+            redundancies.append(redundancy)
+            objectives.append(obj)
             if obj > best_obj:
                 best_obj = obj
                 best_model = model
+        test_type = "HELDOUT" if c_args.tst_vec_file else "VALIDATION"
+        if ntimes > 1:
+            logging.info("Final {} NPMI         ==> Mean: {}, StdDev: {}"
+                         .format(test_type, statistics.mean(npmis), statistics.stdev(npmis)))
+            logging.info("Final {} Perplexity   ==> Mean: {}, StdDev: {}"
+                         .format(test_type, statistics.mean(perplexities), statistics.stdev(perplexities)))
+            logging.info("Final {} Redundancy   ==> Mean: {}, StdDev: {}"
+                         .format(test_type, statistics.mean(redundancies), statistics.stdev(redundancies)))
+            logging.info("Final {} Objective    ==> Mean: {}, StdDev: {}"
+                         .format(test_type, statistics.mean(objectives), statistics.stdev(objectives)))
+        else:
+            logging.info("Final {} NPMI         ==> {}".format(test_type, npmis[0]))
+            logging.info("Final {} Perplexity   ==> {}".format(test_type, perplexities[0]))
+            logging.info("Final {} Redundancy   ==> {}".format(test_type, redundancies[0]))
+            logging.info("Final {} Objective    ==> {}".format(test_type, objectives[0]))            
         return best_model, best_obj
     else:
-        return scheduler.run_with_config(best_config)
+        model, obj, _, _, _ = trainer.train_model(best_config, FakeReporter())
+        return model, obj
         
 def model_select_bow_vae(c_args):
     dd = datetime.datetime.now()
@@ -652,7 +631,8 @@ def model_select_bow_vae(c_args):
     best_config = args_dict.sample(**best_config_spec)
     logging.info("Best configuration = {}".format(best_config))
     logging.info("Best configuration objective = {}".format(scheduler.get_best_reward()))
-    model, obj = train_with_single_config(c_args, scheduler, trainer, scheduler.get_best_config())
+    best_config_dict = ag.space.Dict(**best_config)
+    model, obj = train_with_single_config(c_args, trainer, best_config_dict)
     logging.info("Objective with final retrained model: {}".format(obj))
     write_model(model, trainer.model_out_dir, best_config)
     with open(os.path.join(log_dir, 'best.model.config'), 'w') as fp:
@@ -660,7 +640,6 @@ def model_select_bow_vae(c_args):
         fp.write(specs)
     dd_finish = datetime.datetime.now()
     logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
-
     results_df = process_training_history(
                 scheduler.training_history.copy(),
                 start_timestamp=scheduler._start_time)
@@ -679,11 +658,10 @@ def train_bow_vae(args):
         logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(args.config))
         raise Exception("Invalid Json Configuration File")
     dd = datetime.datetime.now()
-    worker, log_dir = get_trainer(args)
-    #tmnt_config = TMNTConfig(config_dict).get_configspace()
+    trainer, log_dir = get_trainer(args)
     config = ag.space.Dict(**config_dict)
-    ## Don't use AutoGluon here; just fake it
-    worker.train_model(config, FakeReporter())
+    model, obj = train_with_single_config(args, trainer, config)
+    write_model(model, trainer.model_out_dir, config_dict)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 
