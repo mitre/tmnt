@@ -6,6 +6,7 @@ import argparse
 
 def get_base_argparser():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--log_level', type=str, help='Logging level (info, debug, error, warning)', default='info')
     parser.add_argument('--tr_vec_file', type=str, help='Training file in sparse vector format')
     parser.add_argument('--val_vec_file', type=str, help='Test/validation file in sparse vector format')
     parser.add_argument('--tst_vec_file', type=str, help='Helout test file in sparse vector format')

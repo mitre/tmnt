@@ -489,7 +489,19 @@ def get_trainer(c_args):
     train_out_dir = \
         os.path.join(c_args.save_dir,
                      "train_{}_{}_{}_{}_{}_{}_{}".format(i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond))
-    logging_config(folder=train_out_dir, name='tmnt', level=logging.INFO)
+    ll = c_args.log_level
+    log_level = logging.INFO
+    if ll.lower() == 'info':
+        log_level = logging.INFO
+    elif ll.lower() == 'debug':
+        log_level = logging.DEBUG
+    elif ll.lower() == 'error':
+        log_level = logging.ERROR
+    elif ll.lower() == 'warning':
+        log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
+    logging_config(folder=train_out_dir, name='tmnt', level=log_level)
     logging.info(c_args)
     seed_rng(c_args.seed)
     if c_args.vocab_file and c_args.tr_vec_file:
@@ -562,9 +574,11 @@ def select_model(trainer, c_args):
         'num_init_random': 1,
         'debug_log': True}
 
+    num_gpus = 0 if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else 1
+
     hpb_scheduler = ag.scheduler.HyperbandScheduler(
         exec_train_fn,
-        resource={'num_cpus': cpus_per_task, 'num_gpus': 0},
+        resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
         searcher=searcher,
         search_options=search_options,
         #time_out=120,
