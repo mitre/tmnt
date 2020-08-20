@@ -16,7 +16,7 @@ class LatentDistribution(nn.HybridBlock):
         self.model_ctx = ctx
 
     ## perform any postinitialization setup
-    def post_init(self):
+    def post_init(self, ctx):
         pass
 
     ## this is required by most priors

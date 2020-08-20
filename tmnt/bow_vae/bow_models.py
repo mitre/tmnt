@@ -71,7 +71,7 @@ class BowNTM(HybridBlock):
             self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         ## vmf needs to set weight values post-initialization
-        self.latent_dist.post_init()
+        self.latent_dist.post_init(self.model_ctx)
         if vocabulary.embedding:            
             emb = vocabulary.embedding.idx_to_vec.transpose()
             emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10

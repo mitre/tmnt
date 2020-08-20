@@ -40,8 +40,8 @@ class HyperSphericalLatentDistribution(LatentDistribution):
         #self.vmf_samples.initialize(ctx=self.ctx, force_reinit=True)
         #self.vmf_samples.set_data(self.w_samples)
 
-    def post_init(self):
-        self.vmf_samples.set_data(self.w_samples)
+    def post_init(self, ctx):
+        self.vmf_samples.set_data(self.w_samples.as_in_context(ctx))
 
     def hybrid_forward(self, F, data, batch_size, kld_const, vmf_samples):
         mu = self.mu_encoder(data)

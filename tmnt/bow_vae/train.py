@@ -143,16 +143,28 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
         logging.debug("Topic {}: {}".format(str(t), term_str))
 
 
+def get_mxnet_visible_gpus():
+    import mxnet as mx
+    gpu_count = 0
+    while True:
+        try:
+            arr = mx.np.array(1.0, ctx=mx.gpu(gpu_count))
+            arr.asnumpy()
+            gpu_count += 1
+        except Exception:
+            break
+    return [mx.gpu(i) for i in range(gpu_count)]
+        
 
 class BowVAETrainer():
     def __init__(self, model_out_dir, c_args, vocabulary, data_train_csr, total_tr_words,
-                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, ctx=mx.cpu()):
+                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, use_gpu=False):
         self.model_out_dir = model_out_dir
         self.c_args = c_args
+        self.use_gpu = use_gpu
         self.total_tr_words = total_tr_words
         self.total_tst_words = total_tst_words
         self.vocabulary = vocabulary
-        self.ctx = ctx
         self.train_labels = train_labels
         self.test_labels = test_labels
         self.data_train_csr   = data_train_csr
@@ -259,7 +271,7 @@ class BowVAETrainer():
         else:
             logging.warning("WARNING: Training set size = {}".format(tr_size))
 
-    def _get_model(self, config):
+    def _get_model(self, config, ctx):
         """Take a model configuration - specified by a config file or as determined by model selection and 
         return a VAE topic model ready for training.
 
@@ -303,7 +315,7 @@ class BowVAETrainer():
                                init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, redundancy_reg_penalty=redundancy_reg_penalty,
                                batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
                                wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
-                               ctx=self.ctx)
+                               ctx=ctx)
         else:
             model = \
                 BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
@@ -311,14 +323,14 @@ class BowVAETrainer():
                        init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, redundancy_reg_penalty=redundancy_reg_penalty,
                        target_sparsity=target_sparsity, kappa=kappa, alpha=alpha,
                        batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
-                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=ctx)
         trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
         if self.c_args.hybridize:
             model.hybridize()
         return model, trainer
 
     
-    def _eval_trace(self, model, epoch, test_dataloader, last_batch_size, num_test_batches):
+    def _eval_trace(self, model, epoch, test_dataloader, last_batch_size, num_test_batches, ctx):
         """Evaluate the model against test/validation data and optionally write to a trace file.
         
         Parameters
@@ -328,9 +340,9 @@ class BowVAETrainer():
         """
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
-                                  self.c_args, self.ctx)
+                                  self.c_args, ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld, ctx=model.model_ctx)
+            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld, ctx=ctx)
             if self.c_args.trace_file:
                 otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
                 with io.open(self.c_args.trace_file, otype) as fp:
@@ -370,7 +382,9 @@ class BowVAETrainer():
         res: Result dictionary with details of training run for use in model selection
         """
         logging.debug("Evaluating with Config: {}".format(config))
-        model, trainer = self._get_model(config)
+        ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
+        ctx = ctx_list[0]
+        model, trainer = self._get_model(config, ctx)
 
         batch_size = int(config.batch_size)
         l1_coef = self.c_args.init_sparsity_pen
@@ -421,8 +435,8 @@ class BowVAETrainer():
                 details['tr_size'] += data.shape[0]
                 if labels is None or labels.size == 0:
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                labels = labels.as_in_context(self.ctx)
-                data = data.as_in_context(self.ctx)
+                labels = labels.as_in_context(ctx)
+                data = data.as_in_context(ctx)
                 with autograd.record():
                     elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, _ = \
                         model(data, labels) if self.c_args.use_labels_as_covars else model(data)
@@ -435,7 +449,7 @@ class BowVAETrainer():
                 l1_coef = self._l1_regularize(model, l1_coef)
             if test_dataloader is not None and self.validate_each_epoch:
                 mx.nd.waitall()
-                tst_npmi, tst_ppl, redundancy = self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches)
+                tst_npmi, tst_ppl, redundancy = self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches, ctx)
                 if reporter:
                     ts_now = time.time()
                     eval_time = ts_now - ts_epoch
@@ -443,10 +457,10 @@ class BowVAETrainer():
                     reporter(epoch=epoch+1, objective=obj, time_step=ts_now, coherence=tst_npmi, perplexity=tst_ppl, redundancy=redundancy)
         mx.nd.waitall()
         if test_dataloader is not None:
-            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, self.ctx)
+            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
             npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld,
-                                                           ctx=model.model_ctx)
+                                                           ctx=ctx)
             npmi_to_optimize = enc_npmi if enc_npmi and self.c_args.optimize_encoder_coherence else npmi
             obj = (npmi_to_optimize - redundancy) * coherence_coefficient - (perplexity / 1000)
             if False:
@@ -518,6 +532,7 @@ def get_trainer(c_args):
     else:
         tst_csr_mat, total_tst_words, tst_labels = None, None, None
     ctx = mx.cpu() if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else mx.gpu(int(c_args.gpu))
+    use_gpu = True if c_args.gpu and int(c_args.gpu) >= 0 else False
     model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
@@ -530,7 +545,7 @@ def get_trainer(c_args):
             tr_labels = mx.nd.expand_dims(tr_labels, 1)
             tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
     worker = BowVAETrainer(model_out_dir, c_args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
-                          label_map, ctx=ctx)
+                           label_map, use_gpu=use_gpu)
     return worker, train_out_dir
 
 
