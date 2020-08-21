@@ -454,7 +454,9 @@ class BowVAETrainer():
                     ts_now = time.time()
                     eval_time = ts_now - ts_epoch
                     obj = (tst_npmi - redundancy) * coherence_coefficient - (tst_ppl / 1000)
-                    reporter(epoch=epoch+1, objective=obj, time_step=ts_now, coherence=tst_npmi, perplexity=tst_ppl, redundancy=redundancy)
+                    b_obj = math.max(math.min(obj, 100.0), -100)
+                    sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+                    reporter(epoch=epoch+1, objective=sc_obj, time_step=ts_now, coherence=tst_npmi, perplexity=tst_ppl, redundancy=redundancy)
         mx.nd.waitall()
         if test_dataloader is not None:
             perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, ctx)
@@ -591,19 +593,29 @@ def select_model(trainer, c_args):
 
     num_gpus = 0 if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else 1
 
-    hpb_scheduler = ag.scheduler.HyperbandScheduler(
-        exec_train_fn,
-        resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
-        searcher=searcher,
-        search_options=search_options,
-        #time_out=120,
-        num_trials=total_iterations,
-        time_attr='epoch',
-        reward_attr='objective',
-        type='stopping',
-        grace_period=1,
-        reduction_factor=3,
-        brackets=brackets)
+    if c_args.scheduler == 'hyperband':
+        hpb_scheduler = ag.scheduler.HyperbandScheduler(
+            exec_train_fn,
+            resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
+            searcher=searcher,
+            search_options=search_options,
+            num_trials=total_iterations,             #time_out=120,
+            time_attr='epoch',
+            reward_attr='objective',
+            type='stopping',
+            grace_period=1,
+            reduction_factor=3,
+            brackets=brackets)
+    else:
+        hpb_scheduler = ag.scheduler.FIFOScheduler(
+            exec_train_fn,
+            resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
+            searcher=searcher,
+            search_options=search_options,
+            num_trials=total_iterations,             #time_out=120
+            time_attr='epoch',
+            reward_attr='objective',
+            )
     hpb_scheduler.run()
     hpb_scheduler.join_jobs()
     return hpb_scheduler
