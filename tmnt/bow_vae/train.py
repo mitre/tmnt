@@ -143,7 +143,7 @@ def log_top_k_words_per_topic(model, vocab, num_topics, k):
         logging.debug("Topic {}: {}".format(str(t), term_str))
 
 
-def get_mxnet_visible_gpus():
+def x_get_mxnet_visible_gpus():
     import mxnet as mx
     gpu_count = 0
     while True:
@@ -154,6 +154,19 @@ def get_mxnet_visible_gpus():
         except Exception:
             break
     return [mx.gpu(i) for i in range(gpu_count)]
+
+
+def get_mxnet_visible_gpus():
+    ln = 0
+    t = datetime.datetime.now()
+    while ln < 1 and ((datetime.datetime.now() - t).seconds < 30):
+        time.sleep(1)
+        gpus = x_get_mxnet_visible_gpus()
+        ln = len(gpus)
+    if ln > 0:
+        return gpus
+    else:
+        raise Exception("Unable to get a gpu after 30 tries")
         
 
 class BowVAETrainer():
