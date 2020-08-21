@@ -602,9 +602,10 @@ def select_model(trainer, c_args):
 
     search_options = {
         'num_init_random': 2,
+        'opt_skip_period': 4,
         'debug_log': True}
 
-    num_gpus = 0 if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else 2
+    num_gpus = 0 if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else 1
 
     if c_args.scheduler == 'hyperband':
         hpb_scheduler = ag.scheduler.HyperbandScheduler(
