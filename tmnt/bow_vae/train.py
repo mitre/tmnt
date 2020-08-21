@@ -601,10 +601,10 @@ def select_model(trainer, c_args):
         return trainer.train_model(args, reporter)
 
     search_options = {
-        'num_init_random': 1,
+        'num_init_random': 2,
         'debug_log': True}
 
-    num_gpus = 0 if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else 1
+    num_gpus = 0 if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else 2
 
     if c_args.scheduler == 'hyperband':
         hpb_scheduler = ag.scheduler.HyperbandScheduler(
@@ -619,13 +619,6 @@ def select_model(trainer, c_args):
             grace_period=1,
             reduction_factor=3,
             brackets=brackets)
-    elif c_args.scheduler == 'rl':
-        hpb_scheduler = ag.scheduler.RLScheduler(
-            exec_train_fn,
-            resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
-            num_trials=total_iterations,             #time_out=120,
-            time_attr='epoch',
-            reward_attr='objective')
     else:
         hpb_scheduler = ag.scheduler.FIFOScheduler(
             exec_train_fn,
