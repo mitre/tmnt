@@ -619,6 +619,13 @@ def select_model(trainer, c_args):
             grace_period=1,
             reduction_factor=3,
             brackets=brackets)
+    elif c_args.scheduler == 'rl':
+        hpb_scheduler = ag.scheduler.RLScheduler(
+            exec_train_fn,
+            resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
+            num_trials=total_iterations,             #time_out=120,
+            time_attr='epoch',
+            reward_attr='objective')
     else:
         hpb_scheduler = ag.scheduler.FIFOScheduler(
             exec_train_fn,
