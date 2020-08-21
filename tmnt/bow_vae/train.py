@@ -454,7 +454,7 @@ class BowVAETrainer():
                     ts_now = time.time()
                     eval_time = ts_now - ts_epoch
                     obj = (tst_npmi - redundancy) * coherence_coefficient - (tst_ppl / 1000)
-                    b_obj = math.max(math.min(obj, 100.0), -100)
+                    b_obj = max(min(obj, 100.0), -100)
                     sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
                     reporter(epoch=epoch+1, objective=sc_obj, time_step=ts_now, coherence=tst_npmi, perplexity=tst_ppl, redundancy=redundancy)
         mx.nd.waitall()
