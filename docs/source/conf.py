@@ -22,7 +22,7 @@
 import sphinx_rtd_theme
 
 project = 'TMNT'
-copyright = '2019, The MITRE Corporation'
+copyright = '2019-2020, The MITRE Corporation'
 author = 'Ben Wellner'
 
 # The short X.Y version

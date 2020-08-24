@@ -38,6 +38,8 @@ from tmnt.modsel.configuration import TMNTConfig
 import autogluon as ag
 from autogluon.scheduler.reporter import FakeReporter
 
+from tabulate import tabulate
+
 __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
 MAX_DESIGN_MATRIX = 250000000 
@@ -428,6 +430,7 @@ class BowVAETrainer():
             logging.warning("**** No validation/evaluation available for model validation test csr = {} ******"
                             .format(self.data_test_csr))
             last_batch_size = 0
+            num_test_batches = self.data_train_csr.shape[0] // batch_size
             test_array, test_dataloader = None, None
 
         training_epochs = config.epochs
@@ -459,32 +462,18 @@ class BowVAETrainer():
             self._log_details(details, epoch)
             if model.target_sparsity > 0.0:
                 l1_coef = self._l1_regularize(model, l1_coef)
-            if test_dataloader is not None and self.validate_each_epoch:
+            if (self.validate_each_epoch or (epoch == (training_epochs-1))):
                 mx.nd.waitall()
-                tst_npmi, tst_ppl, redundancy = self._eval_trace(model, epoch, test_dataloader, last_batch_size, num_test_batches, ctx)
+                data_loader = test_dataloader if test_dataloader is not None else train_dataloader
+                npmi, perplexity, redundancy = self._eval_trace(model, epoch, data_loader, last_batch_size, num_test_batches, ctx)
                 if reporter:
                     ts_now = time.time()
                     eval_time = ts_now - ts_epoch
-                    obj = (tst_npmi - redundancy) * coherence_coefficient - (tst_ppl / 1000)
+                    obj = (npmi - redundancy) * coherence_coefficient - (perplexity / 1000)
                     b_obj = max(min(obj, 100.0), -100)
                     sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
-                    reporter(epoch=epoch+1, objective=sc_obj, time_step=ts_now, coherence=tst_npmi, perplexity=tst_ppl, redundancy=redundancy)
-        mx.nd.waitall()
-        if test_dataloader is not None:
-            perplexity = evaluate(model, training_epochs, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, ctx)
-            tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld,
-                                                           ctx=ctx)
-            npmi_to_optimize = enc_npmi if enc_npmi and self.c_args.optimize_encoder_coherence else npmi
-            obj = (npmi_to_optimize - redundancy) * coherence_coefficient - (perplexity / 1000)
-            if False:
-                reporter(epoch=training_epochs+1,
-                         objective=obj, test_perplexity=perplexity, redundancy=redundancy, test_npmi=npmi, test_enc_npmi=(enc_npmi or 0.0))
-        else:
-            ## in this case, we're only training a model; no model selection, validation or held out test data
-            obj, npmi, perplexity, redundancy = 0.0, 0.0, 0.0, 0.0
-            logging.warning('Warning: training finished with no evaluation/validation dataset')
-        return model, obj, npmi, perplexity, redundancy
+                    reporter(epoch=epoch+1, objective=sc_obj, time_step=ts_now, coherence=npmi, perplexity=perplexity, redundancy=redundancy)
+        return model, sc_obj, npmi, perplexity, redundancy
 
 
 
@@ -593,7 +582,8 @@ def select_model(trainer, c_args):
     searcher = c_args.searcher
     brackets = c_args.brackets
     tmnt_config = TMNTConfig(tmnt_config_space).get_configspace()
-    if not (c_args.scheduler == 'hyperband') or searcher == 'random':
+    ##
+    if not (c_args.scheduler == 'hyperband'):
         trainer.set_validate_each_epoch(False)
     
     @ag.args(**tmnt_config)

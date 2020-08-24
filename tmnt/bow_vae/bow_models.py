@@ -1,6 +1,6 @@
 # coding: utf-8
 """
-Copyright (c) 2019 The MITRE Corporation.
+Copyright (c) 2019-2020. The MITRE Corporation.
 """
 
 import mxnet as mx
