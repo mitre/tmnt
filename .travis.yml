@@ -37,7 +37,6 @@ script:
 
   - cd docs
   - make clean
-  - make apidoc
   - make html
   - mv build/html ../public
 
