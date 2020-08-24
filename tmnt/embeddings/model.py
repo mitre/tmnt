@@ -9,6 +9,7 @@ import numpy as np
 
 import gluonnlp as nlp
 
+__all__ = []
 
 class Net(mx.gluon.HybridBlock):
     """Base class for word2vec and fastText SkipGram and CBOW networks.

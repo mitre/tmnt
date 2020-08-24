@@ -19,6 +19,7 @@ import mxnet as mx
 import numpy as np
 import gluonnlp as nlp
 
+__all__ = []
 
 def get_context(args):
     if args.gpu is None or args.gpu == '':

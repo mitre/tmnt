@@ -11,6 +11,8 @@ from mxnet.gluon import nn
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
 import math
 
+__all__ = ['SeqVAE']
+
 
 class SeqVAE(HybridBlock):
     

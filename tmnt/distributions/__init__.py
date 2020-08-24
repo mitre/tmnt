@@ -3,7 +3,6 @@
 Copyright (c) 2019 The MITRE Corporation.
 """
 
-
 from .hypersphere import *
 from .logistic_gaussian import *
 from .latent_distrib import *

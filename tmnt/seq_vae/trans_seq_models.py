@@ -19,6 +19,8 @@ from gluonnlp.loss import LabelSmoothing
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution
 from tmnt.distributions import GaussianUnitVarLatentDistribution, HyperSphericalLatentDistribution
 
+__all__ = ['PureTransformerVAE', 'BertTransVAE']
+
 class PureTransformerVAE(Block):
 
     def __init__(self, vocabulary, emb_dim, latent_distrib='vmf', num_units=512, hidden_size=512, num_heads=4,

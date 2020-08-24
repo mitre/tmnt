@@ -24,6 +24,8 @@ from tmnt.seq_vae.trans_seq_models import BertTransVAE, PureTransformerVAE
 from tmnt.utils.log_utils import logging_config
 from tmnt.seq_vae.seq_data_loader import load_dataset_bert, load_dataset_basic
 
+__all__ = []
+
 
 def get_bert_model(args, bert_base, ctx):
     model = BertTransVAE(bert_base, args.latent_dist, wd_embed_dim=args.wd_embed_dim, num_units=args.num_units, num_heads=args.num_heads,

@@ -10,6 +10,8 @@ import io
 from tmnt.seq_vae.tokenization import BasicTokenizer
 from tmnt.seq_vae.trans_seq_models import PureTransformerVAE
 
+__all__ = ['SeqVAEInference']
+
 class SeqVAEInference(object):
 
     def __init__(self, param_file, config_file, vocab_file, sent_size=None, ctx=mx.cpu()):

@@ -3,6 +3,7 @@ import itertools
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+__all__ = []
 
 class LazyThreadPoolExecutor(ThreadPoolExecutor):
     """ThreadPoolExecutor with lazy iterable collection in map().

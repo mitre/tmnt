@@ -7,6 +7,7 @@ import yaml
 import io
 import autogluon as ag
 
+__all__ = ['TMNTConfig']
 
 class TMNTConfig(object):
 
