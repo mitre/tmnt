@@ -545,7 +545,7 @@ def get_trainer(c_args):
             collect_sparse_test(c_args.val_vec_file, vocab, scalar_labels=c_args.scalar_covars, encoding=c_args.str_encoding)
     else:
         tst_csr_mat, total_tst_words, tst_labels = None, None, None
-    ctx = mx.cpu() if not c_args.use_gpu else mx.gpu(0))
+    ctx = mx.cpu() if not c_args.use_gpu else mx.gpu(0)
     model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
