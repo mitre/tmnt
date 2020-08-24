@@ -25,7 +25,7 @@ def get_base_argparser():
     parser.add_argument('--sparsity_threshold', type=float, default = 0.001)
     parser.add_argument('--str_encoding', type=str, default='utf-8')
     parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
-    parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
+    parser.add_argument('--use_gpu', action='store_true', help='Use GPU for fitting models', default=False)
     parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch, perplexity, NPMI) on validation data into a separate file')
     parser.add_argument('--scheduler', type=str, default='hyperband', help='Scheduler: (hyperband or fifo)')
     return parser

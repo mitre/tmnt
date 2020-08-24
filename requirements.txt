@@ -10,3 +10,4 @@ sacremoses>=0.0.35
 sentence-splitter==1.4
 scikit-learn<0.23
 umap-learn==0.3.7
+tabulate>=0.8.7

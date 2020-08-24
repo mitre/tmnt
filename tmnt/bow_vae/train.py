@@ -49,7 +49,7 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
     return sums
 
 
-def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words, args, ctx=mx.cpu()):
+def evaluate(model, epoch, data_loader, last_batch_size, num_test_batches, total_words, args, ctx=mx.cpu()):
     total_rec_loss = 0
     total_kl_loss  = 0
     batch_size = 0
@@ -72,8 +72,8 @@ def evaluate(model, data_loader, last_batch_size, num_test_batches, total_words,
         perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
     else:
         perplexity = 1e300
-    logging.info("TEST/VALIDATION Perplexity = {} [ Rec Loss = {} + KL loss = {} / Total test words = {}]".
-                 format(perplexity, total_rec_loss, total_kl_loss, total_words))
+    logging.info("TEST/VALIDATION (Epoch {}) Perplexity = {} [ Rec Loss = {} + KL loss = {} / Total test words = {}]".
+                 format(epoch, perplexity, total_rec_loss, total_kl_loss, total_words))
     return perplexity
 
 
@@ -184,7 +184,6 @@ class BowVAETrainer():
         self.data_test_csr    = data_test_csr
         self.data_heldout_csr = None
         self.label_map = label_map
-        self.search_mode = False
         self.wd_freqs = get_wd_freqs(data_train_csr)
         self.vocab_cache = {}
         self.validate_each_epoch = True
@@ -352,7 +351,7 @@ class BowVAETrainer():
         epoch: int - the current epoch
         """
         if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
-            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
+            perplexity = evaluate(model, epoch, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
                                   self.c_args, ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
             npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld, ctx=ctx)
@@ -472,7 +471,7 @@ class BowVAETrainer():
                     reporter(epoch=epoch+1, objective=sc_obj, time_step=ts_now, coherence=tst_npmi, perplexity=tst_ppl, redundancy=redundancy)
         mx.nd.waitall()
         if test_dataloader is not None:
-            perplexity = evaluate(model, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, ctx)
+            perplexity = evaluate(model, training_epochs, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words, self.c_args, ctx)
             tst_ld = test_dataloader if self.c_args.encoder_coherence else None
             npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld,
                                                            ctx=ctx)
@@ -546,8 +545,7 @@ def get_trainer(c_args):
             collect_sparse_test(c_args.val_vec_file, vocab, scalar_labels=c_args.scalar_covars, encoding=c_args.str_encoding)
     else:
         tst_csr_mat, total_tst_words, tst_labels = None, None, None
-    ctx = mx.cpu() if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else mx.gpu(int(c_args.gpu))
-    use_gpu = True if c_args.gpu and int(c_args.gpu) >= 0 else False
+    ctx = mx.cpu() if not c_args.use_gpu else mx.gpu(0))
     model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
@@ -560,7 +558,7 @@ def get_trainer(c_args):
             tr_labels = mx.nd.expand_dims(tr_labels, 1)
             tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
     worker = BowVAETrainer(model_out_dir, c_args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
-                           label_map, use_gpu=use_gpu)
+                           label_map, use_gpu=c_args.use_gpu)
     return worker, train_out_dir
 
 
@@ -594,8 +592,10 @@ def select_model(trainer, c_args):
     cpus_per_task = c_args.cpus_per_task
     searcher = c_args.searcher
     brackets = c_args.brackets
-    trainer.search_mode = True
     tmnt_config = TMNTConfig(tmnt_config_space).get_configspace()
+    if not (c_args.scheduler == 'hyperband') or searcher == 'random':
+        trainer.set_validate_each_epoch(False)
+    
     @ag.args(**tmnt_config)
     def exec_train_fn(args, reporter):
         return trainer.train_model(args, reporter)
@@ -604,8 +604,7 @@ def select_model(trainer, c_args):
         'num_init_random': 2,
         'debug_log': True}
 
-    num_gpus = 0 if c_args.gpu is None or c_args.gpu == '' or int(c_args.gpu) < 0 else 1
-
+    num_gpus = 1 if c_args.use_gpu else 0
     if c_args.scheduler == 'hyperband':
         hpb_scheduler = ag.scheduler.HyperbandScheduler(
             exec_train_fn,
@@ -700,6 +699,9 @@ def model_select_bow_vae(c_args):
     logging.info("Printing hyperparameter results")
     out_html = os.path.join(log_dir, 'selection.html')
     results_df.to_html(out_html)
+    out_pretty = os.path.join(log_dir, 'selection.table.txt')
+    with io.open(out_pretty, 'w') as fp:
+        fp.write(tabulate(results_df, headers='keys', tablefmt='pqsl'))
     #logging.info("Providing model selection plot")
     #scheduler.get_training_curves(plot=True)
     scheduler.shutdown()
