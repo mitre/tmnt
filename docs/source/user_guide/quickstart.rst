@@ -11,14 +11,15 @@ map token indices back to their string representations.  See preparing data (bel
 process a corpus of text data into this sparse vector format.
 
 Once the prepared files are in place, training a model invovles invoking the ``train_model.py`` script
-found in the ``bin/`` directory.  Using the example data provided (20 news corpus), we can build
-a model as follows::
+found in the ``bin/`` directory.  Using the example data provided (20 news corpus), 
+a model is built on the data as follows::
 
   mkdir _experiments
 
   python bin/train_model.py --tr_vec_file ./data/train.vec \
   --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
-  --save_dir ./_exps/ --config ./examples/train_model/model.config 
+  --config ./examples/train_model/model.config \
+  --save_dir ./_exps/ --log_level info
 
 In general, TMNT assumes a test/validation corpus is available to determine the validation perplexity
 and coherence, specified with the ``val_vec_file`` option.  If a validation file is not available/needed

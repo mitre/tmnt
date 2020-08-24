@@ -15,7 +15,7 @@ help:
 .PHONY: help Makefile
 
 buildapi:
-	sphinx-apidoc -fePTMo apidoc ../tmnt/
+	sphinx-apidoc -fePTMo ./source/apidoc ../tmnt/
 	for f in apidoc/*;   \
 	do                   \
 	  sed -i '/Submodules/d' $$f; \

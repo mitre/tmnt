@@ -10,19 +10,8 @@ Topic Modeling Neural Toolkit Documentation
    :maxdepth: 2
    :titlesonly:
 
-   overview.rst
-   installation.rst
-   quickstart.rst
-   training.rst
-   command_options.rst
-   config_options.rst
-   model_selection.rst   
-   evaluation.rst
-   inference.rst   
-   hpc.rst
-   modeling_covariates.rst
-   guided.rst
-   sequence_vae.rst
+   user_guide.rst
+   api.rst
 
 
 Indices and tables

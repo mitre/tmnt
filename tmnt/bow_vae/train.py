@@ -518,7 +518,7 @@ def get_trainer(c_args):
         log_level = logging.WARNING
     else:
         log_level = logging.INFO
-    logging_config(folder=train_out_dir, name='tmnt', level=log_level)
+    logging_config(folder=train_out_dir, name='tmnt', level=log_level, console_level=log_level)
     logging.info(c_args)
     seed_rng(c_args.seed)
     if c_args.vocab_file and c_args.tr_vec_file:
@@ -629,9 +629,8 @@ def train_with_single_config(c_args, trainer, best_config):
     if c_args.val_vec_file:
         trainer.set_validate_each_epoch(False)
         if c_args.tst_vec_file:
-            trainer.set_heldout_data_as_test()
-        logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
-        logging.info("Best config: {}".format(best_config))
+            trainer.set_heldout_data_as_test()        
+        logging.info("Training with config: {}".format(best_config))
         npmis, perplexities, redundancies, objectives = [],[],[],[]
         ntimes = int(c_args.num_final_evals)
         for i in range(ntimes):
@@ -675,6 +674,7 @@ def model_select_bow_vae(c_args):
     logging.info("Best configuration = {}".format(best_config))
     logging.info("Best configuration objective = {}".format(scheduler.get_best_reward()))
     best_config_dict = ag.space.Dict(**best_config)
+    logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
     model, obj = train_with_single_config(c_args, trainer, best_config_dict)
     logging.info("Objective with final retrained model: {}".format(obj))
     write_model(model, trainer.model_out_dir, best_config)
