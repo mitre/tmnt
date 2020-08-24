@@ -55,7 +55,7 @@ Table of Contents
    :caption: API
    :maxdepth: 3
 	      
-   apidoc/tmnt
+   autoapi/index
 
 
 Indices and tables

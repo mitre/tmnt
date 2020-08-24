@@ -47,6 +47,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx_gallery.gen_gallery',
+    'autoapi.extension'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -199,5 +200,9 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ['search.html']
 
+
+# -- AutoAPI ---
+
+autoapi_dirs = ['../../tmnt']
 
 # -- Extension configuration -------------------------------------------------
