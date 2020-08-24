@@ -7,9 +7,6 @@ import yaml
 import io
 import autogluon as ag
 
-#import ConfigSpace as CS
-#import ConfigSpace.hyperparameters as CSH
-
 
 class TMNTConfig(object):
 
