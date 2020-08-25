@@ -45,16 +45,12 @@ Below are the additional arguments used by ``select_model.py``.
 Argument               Type           Description
 =====================  ===========    =================================================================
 config_space           string/path    Path to the YAML file specifying the configuration space (:ref:`model-selection-label`)
-budget                 integer        The budget which corresponds to the maximum number of training epochs
 iterations             integer        The number of hyperband iterations
 coherence_coefficient  float          The weight for coherence in the model search objective function
-ns_port                integer        Force the HPBandster nameserver to use this port (default is first free port > 9000)
+searcher               string         Search algortihm used by scheduler (random, bayesopt, skopt)
+scheduler              string         Scheduling algorithm (hyperband or fifo)
+brackets               integer        Number of hyperband brackets (if Hyperband algorithm used)
+cpus_per_task          integer        Number of CPUs to use per task (per model being trained/evaluated)
 =====================  ===========    =================================================================
 
-Each model selection iteration does a full hyperband sweep which involves training a number of models
-with different numbers of training epochs.  For a given budget :math:`B`,
-the total number of trained models is given by:
-
-.. math::
-   \sum_{x=m}^{m|3^{m+1} > B}3^m
 

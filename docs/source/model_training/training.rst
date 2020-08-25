@@ -21,13 +21,20 @@ see :ref:`model-selection-label`.
 Let's start with the example configuration provided in ``examples/train_model/model.config``.
 The configuration is a JSON object::
 
-  {"enc_hidden_dim": 150,
-  "latent_distribution": "vmf",
+  {"enc_hidden_dim": 250,
+  "latent_distribution": {"dist_type": "vmf", "kappa": 32.0},
   "lr": 0.005,
   "n_latent": 20,
   "optimizer": "adam",
-  "kappa": 64.0,
-  "embedding_size": 300,
-  "training_epochs": 40}
+  "embedding": {"source": "random", "size":200},
+  "epochs": 24,
+  "batch_size": 1000,
+  "num_enc_layers": 2,
+  "enc_dr": 0.0,
+  "target_sparsity":0.0,
+  "coherence_loss_wt":0.0,
+  "redundancy_loss_wt":0.0,
+  "covar_net_layers": 1} 
+
 
 These are common configuration options used in most topic models. 

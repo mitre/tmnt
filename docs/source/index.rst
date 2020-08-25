@@ -8,45 +8,70 @@ Topic Modeling Neural Toolkit Documentation
 
 The Topic Modeling Neural Toolkit (TMNT) provides implementations for
 training and applying neural network variational autoencoders (VAEs) on text data in order to
-model latent topics in large documents collections.  The toolkit makes use of
-a number of approaches outlined in recent papers as well as some novel additions.
-
-A few highlights include:
-
-* Use of HPBandster for Bayesian hyperparameter optimization
-
-* Ability to perform Guided Topic Modeling by explicitly adding topic terms and the
-  use of a novel regularization method
-
-* Dynamic topic modeling (of topics over time) through the use of `covariates`
-
-* Multiple latent distributions, including the von Mises Fisher distribution 
-
-* Ability to use pre-trained word embeddings in the encoder
-
-* Use of the ``PyLDAvis`` library to visualize learned topics
-
-* Runtime/inference API to allow for easy deployment of learned topic models
-
-* Experimental Transformer-based Sequence Variational Auto-Encoder
+model latent topics in large documents collections.
 
 
 Table of Contents
 =================
 
 .. toctree::
-   :caption: User Guide
+   :caption: About
    :maxdepth: 3
 
-   user_guide/installation
-   user_guide/quickstart
-   user_guide/training
-   user_guide/command_options
-   user_guide/config_options
-   user_guide/model_selection
-   user_guide/evaluation
-   user_guide/inference
-   user_guide/hpc
+   about/what_is
+   about/licensing
+
+.. toctree::
+   :caption: Getting Started
+   :maxdepth: 3
+
+   getting_started/quickstart
+
+
+.. toctree::
+   :caption: Installation
+   :maxdepth: 3
+
+   installing/installation
+
+
+.. toctree::
+   :caption: Training Topic Models
+   :maxdepth: 3
+
+   model_training/training
+
+   
+.. toctree::
+   :caption: Model Configuration
+   :maxdepth: 3
+
+   configuration/config_options
+   
+
+.. toctree::
+   :caption: Model Selection
+   :maxdepth: 3
+	      
+   model_selection/model_selection
+
+
+.. toctree::
+   :caption: Options
+
+   options/command_options
+
+
+.. toctree::
+   :caption: Inference and Evaluation
+
+   inference/evaluation.rst
+   inference/inference.rst
+
+.. toctree::
+   :caption: Advanced Use
+   :maxdepth: 3
+	      
    user_guide/modeling_covariates
    user_guide/guided
    user_guide/sequence_vae
