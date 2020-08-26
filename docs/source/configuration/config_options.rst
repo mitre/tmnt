@@ -15,7 +15,10 @@ The following configuration/hyperparameter options are available in TMNT
 ===================  ===========    =================================================================
 Option               Type           Description
 ===================  ===========    =================================================================
+epochs               integer        Number of training epochs (should be fixed to a single value for hyperband)
 lr                   real           Learning rate
+batch_size           integer        Batch size to use during learning
+latent_distribution  subconfig      Subconfigurations with ``dist_type:[vmf|gaussian|logistic_gaussian]`` with ``kappa`` for ``vmf`` and ``alpha`` for ``logistic_gaussian``
 optimizer            categorical    MXNet optimizer (adam, sgd, etc.)
 n_latent             integer        Number of latent topics
 enc_hidden_dim       integer        Number of dimensions for encoding layer
@@ -23,14 +26,21 @@ num_enc_layers       integer        Number of encoder fully connected layers
 enc_dr               real           Dropout used for encoder layers
 coherence_loss_wt    real           Coefficient to weight coherence loss term
 redundancy_loss_wt   real           Coefficient to weight redundancy loss term
-batch_size           integer        Batch size to use during learning
-embedding_size       integer        Number of embedding dimensions if pre-trained embedding not used
-embedding_source     categorical    MXNet pre-trained embedding registered name or file-path
-fixed_embedding      categorical    Either ``True`` or ``False``; fixes weights of embedding layer
-latent_distribution  categorical    Either ``vmf``, ``gaussian`` or ``logistic_gaussian``
-kappa                real           Concentration parameter when using ``vmf`` latent distribution
-alpha                real           Prior variance when using ``logistic_gaussian`` latent distribution
+embedding            subconfig      Subconfigurations with ``source`` categorical and optional ``size`` configuration for ``source: random``
 ===================  ===========    =================================================================
+
+
+The following sub-configurations are used to define sub-spaces for ``latent_distribution`` and ``embedding`` configuration options
+
+
+================  ===================    ==========     =======================================================
+Sub-Option        Parent Option          Type           Description
+================  ===================    ==========     =======================================================
+source            embedding              categorical    Either ``random`` or a GluonNLP pre-trained embeddings
+fixed             embedding              categorical    Either ``True`` or ``False``; fixes weights of embedding layer
+kappa             latent_distribution    real           Concentration parameter when using ``vmf`` latent distribution, ``dist_type: vmf``
+alpha             latent_distributionn   real           Prior variance when using ``logistic_gaussian`` latent distribution, ``dist_type: logistic_gaussian``
+================  ===================    ==========     =======================================================
 
 Some details on these options follows.
 
@@ -65,6 +75,6 @@ TMNT provides three latent distributions, ``gaussian``, ``logisic_gaussian`` and
 After hundreds of experiments across many datasets, we have found that the ``vmf`` distribution generally works
 best. Besides providing generally better coherence and perplexity, the ``vmf`` distribution allows much greater
 flexibility to trade off coherence for perplexity or vice-versa. The ``logisic_gaussian`` distribution, however,
-does tend to work as well or better than ``vmf`` with larger numbers of topics (e.g. over 100). The
-``gaussian`` distribution is not recommended under most circumstances and is left here for comparison,
-as the Gaussian distribution is the most common/natural variational distribution.
+does tend to work as well or better than ``vmf`` with larger numbers of topics (e.g. over 80). The
+``gaussian`` distribution is not recommended under most circumstances and is left here for comparison.
+

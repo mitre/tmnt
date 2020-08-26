@@ -1,6 +1,6 @@
 .. _model-selection-label:
 
-Model Selection using HPBandSter
+Model Selection using AutoGluon
 ================================
 
 .. toctree::

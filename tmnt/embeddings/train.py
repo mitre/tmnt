@@ -203,7 +203,6 @@ def get_k_closest_tokens(vocab, embedding, k, word):
     return result
 
 
-
 def train(args):
     i_dt = datetime.datetime.now()
     exp_folder = '{}/exp_{}_{}_{}_{}_{}_{}'.format(args.logdir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second)
