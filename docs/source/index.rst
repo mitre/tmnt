@@ -19,7 +19,6 @@ Table of Contents
    :maxdepth: 3
 
    about/what_is
-   about/licensing
 
 .. toctree::
    :caption: Getting Started
@@ -75,6 +74,12 @@ Table of Contents
    user_guide/modeling_covariates
    user_guide/guided
    user_guide/sequence_vae
+
+.. toctree::
+   :caption: Training Custom Word Embeddings
+   :maxdepth: 3
+
+   embeddings/embeddings	      
 
 .. toctree::
    :caption: API
