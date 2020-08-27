@@ -45,7 +45,7 @@ following example invocation would prepare the data for the training and test se
 size of 2000.  Note that this script uses the built in pre-processing which tokenizes, downcases and removes common English stopwords.
 An example invocation::
 
-  python bin/prepare_corpus.py --vocab_size 2000 --file_pat *.json --tr_input_dir ./train-json-files/ \
+  python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.json' --tr_input_dir ./train-json-files/ \
   --val_input_dir ./val-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --val_vec_file ./val.2k.vec 
 
 
@@ -53,7 +53,7 @@ The plain text input format assumes directories for training, validation and tes
 invoked by adding the ``--txt_mode`` option::
 
 
-  python bin/prepare_corpus.py --vocab_size 2000 --file_pat *.txt --tr_input_dir ./train-txt-files/ \
+  python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.txt' --tr_input_dir ./train-txt-files/ \
   --val_input_dir ./val-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  \
   --val_vec_file ./val.2k.vec --txt_mode
    
