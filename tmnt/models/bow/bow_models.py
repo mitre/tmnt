@@ -27,8 +27,8 @@ class BowNTM(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
-                 kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None, n_encoding_layers = 1, enc_dr=0.1,
+                 coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
+                 kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers = 1, enc_dr=0.1,
                  wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowNTM, self).__init__()
         self.batch_size = batch_size
@@ -39,17 +39,12 @@ class BowNTM(HybridBlock):
         self.coherence_reg_penalty = coherence_reg_penalty
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.embedding_size = embedding_size
-        self.target_sparsity = target_sparsity
         self.vocabulary = vocabulary
         self.num_enc_layers = n_encoding_layers
         if vocabulary.embedding:
             assert vocabulary.embedding.idx_to_vec[0].size == embedding_size
         self.encoding_dims = [self.embedding_size + n_covars] + [enc_dim for _ in range(n_encoding_layers)]
         with self.name_scope():
-            self.l1_pen_const = self.params.get('l1_pen_const',
-                                      shape=(1,),
-                                      init=mx.init.Constant([init_l1]), 
-                                      differentiable=False)
             ## Add in topic seed constraints
             self.seed_matrix = seed_mat
             ## should be tanh here to avoid losing embedding information
@@ -81,14 +76,17 @@ class BowNTM(HybridBlock):
                 self.embedding.collect_params().setattr('grad_req', 'null')
         ## Initialize and FIX decoder bias terms to corpus frequencies
         if wd_freqs is not None:
-            freq_nd = wd_freqs + 1
-            total = freq_nd.sum()
-            log_freq = freq_nd.log() - freq_nd.sum().log()
-            bias_param = self.decoder.collect_params().get('bias')
-            bias_param.set_data(log_freq)
-            bias_param.grad_req = 'null'
-            self.out_bias = bias_param.data()
+            self.set_biases(wd_freqs)
 
+    def set_biases(self, wd_freqs):
+        freq_nd = wd_freqs + 1
+        total = freq_nd.sum()
+        log_freq = freq_nd.log() - freq_nd.sum().log()
+        bias_param = self.decoder.collect_params().get('bias')
+        bias_param.set_data(log_freq)
+        bias_param.grad_req = 'null'
+        self.out_bias = bias_param.data()
+            
 
     def _get_encoder(self, dims, dr=0.1):
         encoder = gluon.nn.HybridSequential()
@@ -122,13 +120,6 @@ class BowNTM(HybridBlock):
         """
         return self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
     
-    def get_l1_penalty_term(self, F, l1_pen_const, batch_size):
-        if F is mx.ndarray:
-            dec_weights = self.decoder.params.get('weight').data()
-        else:
-            dec_weights = self.decoder.params.get('weight').var()
-        return l1_pen_const * F.sum(F.abs(dec_weights))
-
     def add_coherence_reg_penalty(self, F, cur_loss):
         if self.coherence_reg_penalty > 0.0:
             if F is mx.ndarray:
@@ -174,35 +165,34 @@ class BowNTM(HybridBlock):
         enc_out = self.encoder(in_data)
         return self.latent_dist(enc_out, batch_size)
 
-    def get_loss_terms(self, F, data, y, KL, l1_pen_const, batch_size):
-        l1_pen = self.get_l1_penalty_term(F, l1_pen_const, batch_size)
+    def get_loss_terms(self, F, data, y, KL, batch_size):
         rr = data * F.log(y+1e-12)
         recon_loss = -F.sparse.sum( rr, axis=1 )
-        i_loss = F.broadcast_plus(recon_loss, F.broadcast_plus(l1_pen, KL))
+        i_loss = F.broadcast_plus(recon_loss, KL)
         ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(F, i_loss)
         iii_loss, entropies = self.add_seed_constraint_loss(F, ii_loss)
-        return iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss
+        return iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss
 
-    def hybrid_forward(self, F, data, l1_pen_const=None):
+    def hybrid_forward(self, F, data):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
         z, KL = self.run_encode(F, emb_out, batch_size)
         dec_out = self.decoder(z)
         y = F.softmax(dec_out, axis=1)
-        iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss = \
-            self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
-        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss, y
+        iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
+            self.get_loss_terms(F, data, y, KL, batch_size)
+        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, y
 
 
 class MetaDataBowNTM(BowNTM):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0,
+                 coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0,
                  batch_size=None, n_encoding_layers=1,
                  enc_dr=0.1, wd_freqs=None, seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
         super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
-                                             latent_distrib, init_l1,
+                                             latent_distrib, 
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
                                              wd_freqs, seed_mat, n_covars, ctx)
         self.n_covars = n_covars
@@ -247,7 +237,7 @@ class MetaDataBowNTM(BowNTM):
         return sorted_j
     
 
-    def hybrid_forward(self, F, data, covars, l1_pen_const=None):
+    def hybrid_forward(self, F, data, covars):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
         co_emb = F.concat(emb_out, covars)
@@ -255,9 +245,9 @@ class MetaDataBowNTM(BowNTM):
         dec_out = self.decoder(z)
         cov_dec_out = self.cov_decoder(z, covars)
         y = F.softmax(dec_out + cov_dec_out, axis=1)
-        iii_loss, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss = \
-            self.get_loss_terms(F, data, y, KL, l1_pen_const, batch_size)
-        return iii_loss, KL, recon_loss, l1_pen, entropies, coherence_loss, redundancy_loss, y
+        iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
+            self.get_loss_terms(F, data, y, KL, batch_size)
+        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, y
 
         
 class CovariateModel(HybridBlock):
@@ -366,7 +356,7 @@ class BasicAE(HybridBlock):
     ctx : context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 init_l1=0.0, coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, target_sparsity = 0.0, batch_size=None,
+                 coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None,
                  n_encoding_layers = 1, enc_dr=0.1,
                  wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BasicAE, self).__init__()
@@ -377,7 +367,6 @@ class BasicAE(HybridBlock):
         self.vocab_size = len(vocabulary)
         self.coherence_reg_penalty = coherence_reg_penalty
         self.embedding_size = embedding_size
-        self.target_sparsity = target_sparsity
         self.vocabulary = vocabulary
         self.num_enc_layers = n_encoding_layers
         if vocabulary.embedding:

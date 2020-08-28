@@ -7,9 +7,9 @@ import mxnet as mx
 import numpy as np
 import time
 import logging
-from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
-from tmnt.bow_vae.runtime import BowNTMInference
-from tmnt.bow_vae.bow_doc_loader import DataIterLoader, file_to_sp_vec
+from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
+from tmnt.models.bow.runtime import BowNTMInference
+from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_sp_vec
 
 __all__ = ['get_encoder_jacobians_at_data_file', 'get_jacobians_at_data_file']
 

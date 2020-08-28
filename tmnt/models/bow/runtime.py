@@ -9,8 +9,8 @@ import numpy as np
 import gluonnlp as nlp
 import io
 import os
-from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM
-from tmnt.bow_vae.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
+from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
+from tmnt.models.bow.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
 from tmnt.preprocess.tokenizer import BasicTokenizer
 from multiprocessing import Pool
 

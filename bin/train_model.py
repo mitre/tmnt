@@ -3,7 +3,7 @@
 import os, sys
 import argparse
 
-from tmnt.bow_vae.train import train_bow_vae
+from tmnt.models.bow.train import train_bow_vae
 from tmnt.common_params import get_base_argparser
 
 parser = get_base_argparser()

@@ -24,10 +24,11 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
-from tmnt.bow_vae.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, load_vocab
-from tmnt.bow_vae.bow_models import BowNTM, MetaDataBowNTM, BasicAE
-from tmnt.bow_vae.topic_seeds import get_seed_matrix_from_file
-from tmnt.bow_vae.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
+from tmnt.models.bow.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, load_vocab
+#from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM, BasicAE
+from tmnt.models.bow.bow_vae import BowVAE
+from tmnt.models.bow.topic_seeds import get_seed_matrix_from_file
+from tmnt.models.bow.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
 
 from tmnt.utils.log_utils import logging_config
 from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
@@ -190,24 +191,18 @@ class BowVAETrainer():
         self.vocab_cache = {}
         self.validate_each_epoch = True
         self.seed_matrix = None
+        self.vocab_cache = {}
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
 
-    def set_validate_each_epoch(self, v):
-        self.validate_each_epoch = v
 
-    def set_heldout_data_as_test(self):
-        """Load in the heldout test data for final model evaluation
+    def pre_build_vocab_cache(self, possible_vocabs):
         """
-        tst_mat, total_tst_words, tst_labels = collect_sparse_test(self.c_args.tst_vec_file, self.vocabulary,
-                                                                   scalar_labels=self.c_args.scalar_covars,
-                                                                   encoding=self.c_args.str_encoding)
-        self.data_test_csr = tst_mat
-        self.test_labels   = tst_labels
-        self.total_tst_words = total_tst_words
-        
+        Preload and cache all vocabularies for faster model selection
+        """
+        raise NotImplementedError()
 
-    def _initialize_embedding_layer(self, embedding_config):
+    def _initialize_vocabulary(self, embedding_source):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
         
         Parameters
@@ -223,7 +218,6 @@ class BowVAETrainer():
         emb_size: Size of embedding (based on pre-trained embedding or specified)
         """
         vocab = self.vocabulary
-        embedding_source = embedding_config['source']
         if embedding_source != 'random':
             if self.vocab_cache.get(embedding_source):
                 vocab = copy.deepcopy(self.vocab_cache[embedding_source])
@@ -248,44 +242,24 @@ class BowVAETrainer():
             logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
         else:
             vocab.set_embedding(None) ## unset embedding
-            emb_size = int(embedding_config['size'])
-        return vocab, emb_size
+        return vocab
+    
 
+    def set_validate_each_epoch(self, v):
+        self.validate_each_epoch = v
 
-    def _update_details(self, details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss):
-        """Update loss details during training for logging and analysis
+    def set_heldout_data_as_test(self):
+        """Load in the heldout test data for final model evaluation
         """
-        details['kl_loss']  += kl_loss.sum().asscalar()
-        details['l1_pen']   += l1_pen.sum().asscalar()
-        details['rec_loss'] += rec_loss.sum().asscalar()
-        if coherence_loss is not None:
-            details['coherence_loss'] += coherence_loss.sum().asscalar()
-        if entropies is not None:
-            details['entropies_loss'] += entropies.sum().asscalar()
-        if redundancy_loss is not None:
-            details['redundancy_loss'] += redundancy_loss.sum().asscalar()
-        details['epoch_loss'] += elbo.sum().asscalar()
-
-    def _log_details(self, details, epoch):
-        """Log accumulated details (e.g. loss values) for a given epoch
+        tst_mat, total_tst_words, tst_labels = collect_sparse_test(self.c_args.tst_vec_file, self.vocabulary,
+                                                                   scalar_labels=self.c_args.scalar_covars,
+                                                                   encoding=self.c_args.str_encoding)
+        self.data_test_csr = tst_mat
+        self.test_labels   = tst_labels
+        self.total_tst_words = total_tst_words
         
-        Parameters
-        ----------
-        details: dictionary - with various details (loss values) to keep track of
-        epoch: int - current epoch number
-        """
-        tr_size = details['tr_size']
-        if tr_size > 0:
-            nd = {}
-            for (k,v) in details.items():
-                nd[k] = v / tr_size
-            logging.debug("Epoch {}: Loss = {}".format(epoch, nd['epoch_loss']))
-            logging.debug("[Rec loss = {:8.4f}] [KL loss = {:8.4f}] [Entropy loss = {:8.4f}] [Coh. loss = {:8.4f}] [Red. loss = {:8.4f}]".
-                format(nd['rec_loss'], nd['kl_loss'], nd['entropies_loss'], nd['coherence_loss'], nd['redundancy_loss']))
-        else:
-            logging.warning("WARNING: Training set size = {}".format(tr_size))
 
-    def _get_model(self, config, ctx):
+    def _get_vae_model(self, config, reporter, ctx):
         """Take a model configuration - specified by a config file or as determined by model selection and 
         return a VAE topic model ready for training.
 
@@ -305,12 +279,14 @@ class BowVAETrainer():
         batch_size = int(config.batch_size)
 
         l1_coef = 0.0 ## self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
-            
-        vocab, emb_size = self._initialize_embedding_layer(config.embedding)
-        fixed_embedding = config.embedding.get('fixed') == True
+
+        embedding_source = config.embedding.source
+        emb_size         = config.embedding.size if 'size' in config.embedding else -1
+        fixed_embedding  = config.embedding.get('fixed') == True
         covar_net_layers = config.covar_net_layers
         n_encoding_layers = config.num_enc_layers
         enc_dr = config.enc_dr
+        epochs = int(config.epochs)
 
         ldist_def = config.latent_distribution
         kappa = 0.0
@@ -323,64 +299,19 @@ class BowVAETrainer():
 
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             n_covars = len(self.label_map) if self.label_map else 1
-            model = \
-                MetaDataBowNTM(self.label_map, n_covars, vocab, enc_hidden_dim, n_latent, emb_size,
-                               fixed_embedding=fixed_embedding, latent_distrib=latent_distrib, kappa=kappa, alpha=alpha,
-                               init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, redundancy_reg_penalty=redundancy_reg_penalty,
-                               batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
-                               wd_freqs=self.wd_freqs, covar_net_layers=covar_net_layers,
-                               ctx=ctx)
+            raise Exception('MetaData BOW not implemented yet')
         else:
             model = \
-                BowNTM(vocab, enc_hidden_dim, n_latent, emb_size,
-                       fixed_embedding=fixed_embedding, latent_distrib=latent_distrib,
-                       init_l1=l1_coef, coherence_reg_penalty=coherence_reg_penalty, redundancy_reg_penalty=redundancy_reg_penalty,
-                       target_sparsity=target_sparsity, kappa=kappa, alpha=alpha,
-                       batch_size=batch_size, n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
-                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=ctx)
-        trainer = gluon.Trainer(model.collect_params(), optimizer, {'learning_rate': lr})
-        if self.c_args.hybridize:
-            model.hybridize()
-        return model, trainer
-
+                BowVAE(self.vocabulary, coherence_coefficient=8.0, reporter=reporter, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
+                       n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
+                       coherence_reg_penalty=coherence_reg_penalty,
+                       redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
+                       embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
+                       num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
+                       epochs=epochs)
+            model.validate_each_epoch = self.validate_each_epoch
+        return model
     
-    def _eval_trace(self, model, epoch, test_dataloader, last_batch_size, num_test_batches, ctx):
-        """Evaluate the model against test/validation data and optionally write to a trace file.
-        
-        Parameters
-        ----------
-        model: VAE model
-        epoch: int - the current epoch
-        """
-        if test_dataloader is not None and (epoch + 1) % self.c_args.eval_freq == 0:
-            perplexity = evaluate(model, epoch, test_dataloader, last_batch_size, num_test_batches, self.total_tst_words,
-                                  self.c_args, ctx)
-            tst_ld = test_dataloader if self.c_args.encoder_coherence else None
-            npmi, enc_npmi, redundancy = compute_coherence(model, 10, self.data_test_csr, log_terms=True, test_dataloader=tst_ld, ctx=ctx)
-            if self.c_args.trace_file:
-                otype = 'a+' if epoch >= self.c_args.eval_freq else 'w+'
-                with io.open(self.c_args.trace_file, otype) as fp:
-                    if otype == 'w+':
-                        fp.write("Epoch,PPL,NPMI\n")
-                    fp.write("{:3d},{:10.2f},{:8.4f}\n".format(epoch, perplexity, npmi))
-            return npmi, perplexity, redundancy
-        else:
-            return None, None, None
-
-    def _l1_regularize(self, model, cur_l1_coef):
-        """Apply a regularization term based on magnitudes of the decoder (topic-term) weights.
-        Set the L1 coeffficient based on these magnitudes which will be used to compute L1 loss term
-
-        Parameters
-        ----------
-        model: VAE model
-        """
-        dec_weights = model.decoder.collect_params().get('weight').data().abs()
-        ratio_small_weights = (dec_weights < self.c_args.sparsity_threshold).sum().asscalar() / dec_weights.size
-        l1_coef = cur_l1_coef * math.pow(2.0, model.target_sparsity - ratio_small_weights)
-        logging.debug("Setting L1 coeffficient to {} [sparsity ratio = {}]".format(l1_coef, ratio_small_weights))
-        model.l1_pen_const.set_data(mx.nd.array([l1_coef]))
-        return l1_coef
 
     def train_model(self, config, reporter):
         """Main training function which takes a single model configuration and a budget (i.e. number of epochs) and
@@ -389,91 +320,23 @@ class BowVAETrainer():
         Parameters
         ----------
         config: `Configuration` object within the specified `ConfigSpace`
+        reporter: Reporter callback for model selection
 
         Returns
         -------
         model: VAE model with trained parameters
-        res: Result dictionary with details of training run for use in model selection
+        obj: scaled objective
+        npmi: coherence on validation set
+        perplexity: perplexity score on validation data
+        redundancy: topic model redundancy of top 5 terms for each topic
         """
         logging.debug("Evaluating with Config: {}".format(config))
-        ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
-        ctx = ctx_list[0]
-        model, trainer = self._get_model(config, ctx)
-
-        batch_size = int(config.batch_size)
-        l1_coef = self.c_args.init_sparsity_pen
-        num_test_batches = 0
-
-        train_dataloader = \
-            DataIterLoader(mx.io.NDArrayIter(self.data_train_csr, self.train_labels, batch_size,
-                                             last_batch_handle='discard', shuffle=True))
-        if self.data_test_csr is not None:
-            test_size = self.data_test_csr.shape[0] * self.data_test_csr.shape[1]
-            if test_size < MAX_DESIGN_MATRIX:
-                self.data_test_csr = self.data_test_csr.tostype('default')
-                test_dataloader = \
-                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size,
-                                                     last_batch_handle='pad', shuffle=False))
-            else:
-                logging.warning("Warning: Test dataset is very large." + \
-                             "Using sparse representation which may result in approximation to Perplexity.")
-                test_dataloader = \
-                    DataIterLoader(mx.io.NDArrayIter(self.data_test_csr, self.test_labels, batch_size,
-                                                     last_batch_handle='discard', shuffle=False))
-            last_batch_size = self.data_test_csr.shape[0] % batch_size
-            num_test_batches = self.data_test_csr.shape[0] // batch_size
-            if last_batch_size > 0:
-                num_test_batches += 1
-            logging.debug("Total validation/test instances = {}, batch_size = {}, last_batch = {}, num batches = {}"
-                         .format(self.data_test_csr.shape[0], batch_size, last_batch_size, num_test_batches))
-        else:
-            logging.warning("**** No validation/evaluation available for model validation test csr = {} ******"
-                            .format(self.data_test_csr))
-            last_batch_size = 0
-            num_test_batches = self.data_train_csr.shape[0] // batch_size
-            test_array, test_dataloader = None, None
-
-        training_epochs = config.epochs
-        
-        try:
-            coherence_coefficient = self.c_args.coherence_coefficient
-        except AttributeError:
-            coherence_coefficient = 1.0
-
-        #training_epochs = \
-        #        (min(self.data_train_csr.shape[1] * 100, self.data_train_csr.shape[0]) * float(budget)) / self.data_train_csr.shape[0]
-        for epoch in range(training_epochs):
-            ts_epoch = time.time()
-            details = {'epoch_loss': 0.0, 'rec_loss': 0.0, 'l1_pen': 0.0, 'kl_loss': 0.0,
-                       'entropies_loss': 0.0, 'coherence_loss': 0.0, 'redundancy_loss': 0.0, 'tr_size': 0.0}
-            for i, (data, labels) in enumerate(train_dataloader):
-                details['tr_size'] += data.shape[0]
-                if labels is None or labels.size == 0:
-                    labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                labels = labels.as_in_context(ctx)
-                data = data.as_in_context(ctx)
-                with autograd.record():
-                    elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, _ = \
-                        model(data, labels) if self.c_args.use_labels_as_covars else model(data)
-                    elbo_mean = elbo.mean()
-                elbo_mean.backward()
-                trainer.step(data.shape[0]) 
-                self._update_details(details, elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss)
-            self._log_details(details, epoch)
-            if model.target_sparsity > 0.0:
-                l1_coef = self._l1_regularize(model, l1_coef)
-            if (self.validate_each_epoch or (epoch == (training_epochs-1))):
-                mx.nd.waitall()
-                data_loader = test_dataloader if test_dataloader is not None else train_dataloader
-                npmi, perplexity, redundancy = self._eval_trace(model, epoch, data_loader, last_batch_size, num_test_batches, ctx)
-                if reporter:
-                    ts_now = time.time()
-                    eval_time = ts_now - ts_epoch
-                    obj = (npmi - redundancy) * coherence_coefficient - (perplexity / 1000)
-                    b_obj = max(min(obj, 100.0), -100)
-                    sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
-                    reporter(epoch=epoch+1, objective=sc_obj, time_step=ts_now, coherence=npmi, perplexity=perplexity, redundancy=redundancy)
-        return model, sc_obj, npmi, perplexity, redundancy
+        #ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
+        #ctx = ctx_list[0]
+        ctx = mx.cpu()
+        vae_model = self._get_vae_model(config, reporter, ctx)
+        obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.data_train_csr, self.data_test_csr)
+        return vae_model.model, obj, npmi, perplexity, redundancy
 
 
 
@@ -546,9 +409,9 @@ def get_trainer(c_args):
         else:
             tr_labels = mx.nd.expand_dims(tr_labels, 1)
             tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
-    worker = BowVAETrainer(model_out_dir, c_args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
+    trainer = BowVAETrainer(model_out_dir, c_args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
                            label_map, use_gpu=c_args.use_gpu)
-    return worker, train_out_dir
+    return trainer, train_out_dir
 
 
 def process_training_history(task_dicts, start_timestamp):
