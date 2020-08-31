@@ -21,8 +21,6 @@ def get_base_argparser():
     parser.add_argument('--encoder_coherence', action='store_true', help='Get top K terms for coherence via encoder Jacobian')
     parser.add_argument('--optimize_encoder_coherence', action='store_true', help='Optimize encoder-derived coherence')
     parser.add_argument('--num_final_evals', type=int, help='Number of times to evaluate selected configuration (with random initializations)', default=1)
-    parser.add_argument('--init_sparsity_pen', type=float, default = 0.00001)
-    parser.add_argument('--sparsity_threshold', type=float, default = 0.001)
     parser.add_argument('--str_encoding', type=str, default='utf-8')
     parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
     parser.add_argument('--use_gpu', action='store_true', help='Use GPU for fitting models', default=False)

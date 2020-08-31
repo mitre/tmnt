@@ -77,7 +77,6 @@ class TMNTConfig(object):
         sp_dict['enc_hidden_dim'] = self._get_range_integer('enc_hidden_dim', cd)
         sp_dict['batch_size'] = self._get_range_integer('batch_size', cd)
 
-        sp_dict['target_sparsity'] = self._get_range_uniform('target_sparsity', cd) or 0.0
         sp_dict['coherence_loss_wt'] = self._get_range_uniform('coherence_loss_wt', cd) or 0.0
         sp_dict['redundancy_loss_wt'] = self._get_range_uniform('redundancy_loss_wt', cd) or 0.0
         sp_dict['num_enc_layers'] = self._get_range_integer('num_enc_layers', cd) or 1

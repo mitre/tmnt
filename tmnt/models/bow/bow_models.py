@@ -50,8 +50,6 @@ class BowNTM(HybridBlock):
             ## should be tanh here to avoid losing embedding information
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
             self.encoder = self._get_encoder(self.encoding_dims, dr=enc_dr)
-            #self.encoder = gluon.nn.Dense(in_units=(self.embedding_size + n_covars),
-            #                              units = enc_dim, activation='softrelu') ## just single FC layer 'encoder'
             if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, alpha=alpha)
             elif latent_distrib == 'vmf':
@@ -214,6 +212,7 @@ class MetaDataBowNTM(BowNTM):
         emb_out = self.embedding(data)
         enc_out = self.encoder(mx.nd.concat(emb_out, covars))
         return self.latent_dist.mu_encoder(enc_out)
+
 
 
     def get_top_k_terms_with_covar_at_data(self, data, k, covar):

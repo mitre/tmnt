@@ -25,8 +25,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.models.bow.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, load_vocab
-#from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM, BasicAE
-from tmnt.models.bow.bow_vae import BowVAE
+from tmnt.models.bow.bow_vae import BowVAE, MetaBowVAE
 from tmnt.models.bow.topic_seeds import get_seed_matrix_from_file
 from tmnt.models.bow.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
 
@@ -202,7 +201,7 @@ class BowVAETrainer():
         """
         raise NotImplementedError()
 
-    def _initialize_vocabulary(self, embedding_source):
+    def _initialize_vocabulary(self, embedding_source, set_vocab=True):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
         
         Parameters
@@ -215,12 +214,12 @@ class BowVAETrainer():
         Returns
         -------
         vocab: Resulting GluonNLP vocabulary with initialized embedding
-        emb_size: Size of embedding (based on pre-trained embedding or specified)
+        emb_size: Size of embedding (based on pre-trained embedding, random returns -1 for size to be set later)
         """
         vocab = self.vocabulary
         if embedding_source != 'random':
             if self.vocab_cache.get(embedding_source):
-                vocab = copy.deepcopy(self.vocab_cache[embedding_source])
+                pt_embedding = copy.deepcopy(self.vocab_cache[embedding_source])
             else:
                 e_type, e_name = tuple(embedding_source.split(':'))
                 if e_type == 'file':
@@ -229,21 +228,26 @@ class BowVAETrainer():
                     pt_embedding = nlp.embedding.TokenEmbedding.from_file(e_name)
                 else:
                     pt_embedding = nlp.embedding.create(e_type, source=e_name)
-                vocab = copy.deepcopy(self.vocabulary) ## create a copy of the vocab to attach the vocab to 
+                #vocab = copy.deepcopy(self.vocabulary) ## create a copy of the vocab to attach the vocab to
+                self.vocab_cache[embedding_source] = copy.deepcopy(pt_embedding) ## cache another copy 
+            emb_size = len(pt_embedding.idx_to_vec[0])
+            if set_vocab:
                 vocab.set_embedding(pt_embedding)
-                self.vocab_cache[embedding_source] = copy.deepcopy(vocab) ## cache another copy 
-            emb_size = len(vocab.embedding.idx_to_vec[0])
-            num_oov = 0
-            for word in vocab.embedding._idx_to_token:
-                if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                    logging.debug("Term {} is OOV".format(word))
-                    num_oov += 1
-                    vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
-            logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
+                num_oov = 0
+                for word in vocab.embedding._idx_to_token:
+                    if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                        logging.debug("Term {} is OOV".format(word))
+                        num_oov += 1
+                        vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
+                logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
         else:
             vocab.set_embedding(None) ## unset embedding
-        return vocab
-    
+            emb_size = -1
+        return vocab, emb_size
+
+    def pre_cache_vocabularies(self, sources):
+        for s in sources:
+            self._initialize_vocabulary(s, set_vocab=False)
 
     def set_validate_each_epoch(self, v):
         self.validate_each_epoch = v
@@ -273,15 +277,11 @@ class BowVAETrainer():
         optimizer = config.optimizer
         n_latent = int(config.n_latent)
         enc_hidden_dim = int(config.enc_hidden_dim)
-        target_sparsity = float(config.target_sparsity)
         coherence_reg_penalty = float(config.coherence_loss_wt)
         redundancy_reg_penalty = float(config.redundancy_loss_wt)
         batch_size = int(config.batch_size)
 
-        l1_coef = 0.0 ## self.c_args.init_sparsity_pen if target_sparsity > 0.0 else 0.0
-
         embedding_source = config.embedding.source
-        emb_size         = config.embedding.size if 'size' in config.embedding else -1
         fixed_embedding  = config.embedding.get('fixed') == True
         covar_net_layers = config.covar_net_layers
         n_encoding_layers = config.num_enc_layers
@@ -297,12 +297,24 @@ class BowVAETrainer():
         elif latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
 
+        vocab, emb_size = self._initialize_vocabulary(embedding_source)
+        if emb_size < 0 and 'size' in config.embedding:
+            emb_size = config.embedding.size
+
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             n_covars = len(self.label_map) if self.label_map else 1
-            raise Exception('MetaData BOW not implemented yet')
+            model = \
+                MetaBowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, label_map=self.label_map,
+                           covar_net_layers=1, ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
+                           n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
+                           coherence_reg_penalty=coherence_reg_penalty,
+                           redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
+                           embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
+                           num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
+                           epochs=epochs)
         else:
             model = \
-                BowVAE(self.vocabulary, coherence_coefficient=8.0, reporter=reporter, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
+                BowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                        n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                        coherence_reg_penalty=coherence_reg_penalty,
                        redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
@@ -331,11 +343,10 @@ class BowVAETrainer():
         redundancy: topic model redundancy of top 5 terms for each topic
         """
         logging.debug("Evaluating with Config: {}".format(config))
-        #ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
-        #ctx = ctx_list[0]
-        ctx = mx.cpu()
+        ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
+        ctx = ctx_list[0]
         vae_model = self._get_vae_model(config, reporter, ctx)
-        obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.data_train_csr, self.data_test_csr)
+        obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.data_train_csr, self.train_labels, self.data_test_csr, self.test_labels)
         return vae_model.model, obj, npmi, perplexity, redundancy
 
 
@@ -448,6 +459,11 @@ def select_model(trainer, c_args):
     ##
     if not (c_args.scheduler == 'hyperband'):
         trainer.set_validate_each_epoch(False)
+
+    ## pre-cache vocabularies
+    sources = [ e['source'] for e in tmnt_config.get('embedding').data if e['source'] != 'random' ]
+    logging.info('>> Pre-caching pre-trained embeddings/vocabularies: {}'.format(sources))
+    trainer.pre_cache_vocabularies(sources)
     
     @ag.args(**tmnt_config)
     def exec_train_fn(args, reporter):
