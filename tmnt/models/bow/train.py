@@ -45,9 +45,9 @@ __all__ = ['model_select_bow_vae', 'train_bow_vae']
 MAX_DESIGN_MATRIX = 250000000 
 
 def get_wd_freqs(data_csr, max_sample_size=1000000):
-    sample_size = min(max_sample_size, data_csr.shape[0])
-    data = data_csr[:sample_size] 
-    sums = mx.nd.sum(data, axis=0)
+    print("Type data_csr = {}".format(type(data_csr)))
+    data = data_csr[:max_sample_size] 
+    sums = mx.nd.sparse.sum(data, axis=0)
     return sums
 
 
@@ -304,7 +304,7 @@ class BowVAETrainer():
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             n_covars = len(self.label_map) if self.label_map else 1
             model = \
-                MetaBowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, label_map=self.label_map,
+                MetaBowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, label_map=self.label_map,
                            covar_net_layers=1, ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                            n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                            coherence_reg_penalty=coherence_reg_penalty,
@@ -314,7 +314,8 @@ class BowVAETrainer():
                            epochs=epochs)
         else:
             model = \
-                BowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
+                BowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words,
+                       ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                        n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                        coherence_reg_penalty=coherence_reg_penalty,
                        redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
