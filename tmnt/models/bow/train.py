@@ -186,7 +186,7 @@ class BowVAETrainer():
         self.data_test_csr    = data_test_csr
         self.data_heldout_csr = None
         self.label_map = label_map
-        self.wd_freqs = get_wd_freqs(data_train_csr)
+        self.wd_freqs = get_wd_freqs(data_test_csr if data_test_csr is not None else data_train_csr)
         self.vocab_cache = {}
         self.validate_each_epoch = True
         self.seed_matrix = None
@@ -421,6 +421,11 @@ def get_trainer(c_args):
         else:
             tr_labels = mx.nd.expand_dims(tr_labels, 1)
             tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
+    logging.info("Data loaded .. training matrix shape    = {}".format(tr_csr_mat.shape))
+    logging.info("Data loaded .. validation matrix shape  = {}".format(tst_csr_mat.shape))
+    logging.info("Try to slice first 10 elements from test data ...")
+    top_10 = mx.nd.sparse.slice(tst_csr_mat, begin=(0,None), end=(10,None))
+    logging.info("Test slice shape = {}".format(top_10.shape))
     trainer = BowVAETrainer(model_out_dir, c_args, vocab, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
                            label_map, use_gpu=c_args.use_gpu)
     return trainer, train_out_dir
