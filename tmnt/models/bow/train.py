@@ -421,8 +421,8 @@ def get_trainer(c_args):
         else:
             tr_labels = mx.nd.expand_dims(tr_labels, 1)
             tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
-    logging.info("Data loaded .. training matrix shape    = {}".format(tr_csr_mat.shape))
-    logging.info("Data loaded .. validation matrix shape  = {}".format(tst_csr_mat.shape))
+    #logging.info("Data loaded .. training matrix shape    = {}".format(tr_csr_mat.shape))
+    #logging.info("Data loaded .. validation matrix shape  = {}".format(tst_csr_mat.shape))
     logging.info("Try to slice first 10 elements from test data ...")
     top_10 = mx.nd.sparse.slice(tst_csr_mat, begin=(0,None), end=(10,None))
     logging.info("Test slice shape = {}".format(top_10.shape))
