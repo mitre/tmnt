@@ -354,10 +354,6 @@ class BowVAE(BaseBowVAE):
         return self.model.encode_data(mx_array).asnumpy()
 
 
-    def fit_with_validation(self, X, val_X):
-        return super().fit_with_validation(X, None, val_X, None)
-    
-
     def fit(self, X):
         """
         Fit BowVAE model according to the given training data.
