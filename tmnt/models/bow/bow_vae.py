@@ -91,7 +91,7 @@ class BaseBowVAE(BaseVAE):
     gpu_id: int, optional(default=-1)
         ID of GPU device, GPU training disabled if gpu_id<0.
     """
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
         self.reporter = reporter
         self.coherence_coefficient = coherence_coefficient
         self.lr = lr
@@ -115,6 +115,7 @@ class BaseBowVAE(BaseVAE):
         self.embedding_size = embedding_size
         self.seed_matrix = seed_matrix
         self.validate_each_epoch = True
+        self.wd_freqs = wd_freqs
         self.num_val_words = num_val_words
 
 
@@ -215,7 +216,7 @@ class BaseBowVAE(BaseVAE):
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
-        wd_freqs = self._get_wd_freqs(X)
+        wd_freqs = self.wd_freqs or self._get_wd_freqs(X)
         self.model = self._get_model()
         self.model.set_biases(wd_freqs)  ## initialize bias weights to log frequencies
         
@@ -250,8 +251,8 @@ class BaseBowVAE(BaseVAE):
 
 class BowVAE(BaseBowVAE):
 
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
-        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs)
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
+        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs)
 
 
     def npmi(self, X, k=10):
@@ -314,7 +315,7 @@ class BowVAE(BaseBowVAE):
                        coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                        kappa=self.kappa, alpha=self.alpha,
                        batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
-                       wd_freqs=None, seed_mat=self.seed_matrix, ctx=self.ctx)
+                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         return model
     
 
@@ -368,8 +369,8 @@ class BowVAE(BaseBowVAE):
 
 class MetaBowVAE(BaseBowVAE):
 
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, label_map=None, covar_net_layers=1, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
-        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs)
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, label_map=None, covar_net_layers=1, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
+        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs)
 
         self.covar_net_layers = covar_net_layers
         self.n_covars = len(label_map) if label_map else 1
@@ -399,7 +400,7 @@ class MetaBowVAE(BaseBowVAE):
                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                            kappa=self.kappa, alpha=self.alpha,
                            batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
-                           wd_freqs=None, seed_mat=self.seed_matrix, ctx=self.ctx)
+                           wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         return model
 
     
