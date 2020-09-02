@@ -14,8 +14,8 @@ import logging
 
 import gluonnlp as nlp
 import mxnet as mx
+import numpy as np
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
-
 from tmnt.preprocess.tokenizer import BasicTokenizer
 
 
@@ -160,7 +160,7 @@ def load_vocab(vocab_file, encoding='utf-8'):
 def get_single_vec(els_sp):
     pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp ] )
     inds, vs = zip(*pairs)
-    return len(pairs), inds, vs
+    return pairs, inds, vs
     
 
 def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encoding='utf-8'):
@@ -172,6 +172,7 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encod
     total_num_words = 0
     ndocs = 0
     lm = label_map if label_map and not scalar_labels else {}
+    freqs = np.zeros(voc_size)
     with io.open(sp_file, 'r', encoding=encoding) as fp:
         for line in fp:
             els = line.split(' ')            
@@ -189,8 +190,10 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encod
                         label = -1
             ndocs += 1
             els_sp = list(map(lambda e: e.split(':'), els[1:]))
-            n_pairs, inds, vs = get_single_vec(els_sp)
-            cumulative += n_pairs
+            pairs, inds, vs = get_single_vec(els_sp)
+            for i,v in pairs:
+                freqs[i] += v
+            cumulative += len(pairs)
             total_num_words += sum(vs)
             labels.append(label)
             indptrs.append(cumulative)
@@ -198,7 +201,7 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encod
             indices.extend(inds)
     csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, voc_size))
     lm = None if len(lm) < 1 else lm
-    return csr_mat, total_num_words, labels, lm
+    return csr_mat, total_num_words, labels, lm, mx.nd.array(freqs)
 
 
 def normalize_scalar_values(scalars):
@@ -207,18 +210,18 @@ def normalize_scalar_values(scalars):
 
 def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, scalar_labels=False, encoding='utf-8'):
     vocab = load_vocab(vocab_file, encoding=encoding)
-    tr_mat, total_tr, tr_labels_li, label_map = file_to_sp_vec(sp_vec_file, len(vocab), scalar_labels=scalar_labels, encoding=encoding)
+    tr_mat, total_tr, tr_labels_li, label_map, wd_freqs = file_to_sp_vec(sp_vec_file, len(vocab), scalar_labels=scalar_labels, encoding=encoding)
     dt = 'float32' if scalar_labels else 'int'
     tr_labels = mx.nd.array(tr_labels_li, dtype=dt)
     if scalar_labels:
         tr_labels = normalize_scalar_values(tr_labels)
     #tr_map = tr_mat.tostype('default')
-    return vocab, tr_mat, total_tr, tr_labels, label_map
+    return vocab, tr_mat, total_tr, tr_labels, label_map, wd_freqs
     
 
 def collect_sparse_test(sp_vec_file, vocab, scalar_labels=False, label_map=None, encoding='utf-8'):
     keep_sp_sparse = True
-    tst_mat_sp, total_tst, tst_labels_li, _ = \
+    tst_mat_sp, total_tst, tst_labels_li, _, _ = \
         file_to_sp_vec(sp_vec_file, len(vocab), label_map=label_map, scalar_labels=scalar_labels, encoding=encoding)
     tst_mat = tst_mat_sp if keep_sp_sparse else tst_mat_sp.tostype('default')
     dt = 'float32' if scalar_labels else 'int'    
