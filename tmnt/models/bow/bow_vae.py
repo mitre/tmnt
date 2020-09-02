@@ -216,7 +216,7 @@ class BaseBowVAE(BaseVAE):
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
-        wd_freqs = self.wd_freqs or self._get_wd_freqs(X)
+        wd_freqs = self.wd_freqs if self.wd_freqs is not None else self._get_wd_freqs(X)
         self.model = self._get_model()
         self.model.set_biases(wd_freqs)  ## initialize bias weights to log frequencies
         
