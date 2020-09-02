@@ -298,7 +298,8 @@ class BowVAETrainer():
         if self.c_args.use_labels_as_covars and self.train_labels is not None:
             n_covars = len(self.label_map) if self.label_map else 1
             model = \
-                MetaBowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, label_map=self.label_map,
+                MetaBowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, wd_freqs=self.wd_freqs,
+                           label_map=self.label_map,
                            covar_net_layers=1, ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                            n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                            coherence_reg_penalty=coherence_reg_penalty,
@@ -308,7 +309,7 @@ class BowVAETrainer():
                            epochs=epochs)
         else:
             model = \
-                BowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words,
+                BowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, wd_freqs=self.wd_freqs,
                        ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                        n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                        coherence_reg_penalty=coherence_reg_penalty,
