@@ -52,11 +52,15 @@ class EvaluateNPMI(object):
         return total_npmi / len(self.top_k_words_per_topic)
 
     def evaluate_csr_mat(self, csr_mat):
-        is_sparse = isinstance(csr_mat, mx.nd.sparse.CSRNDArray)
-        if is_sparse:
-            mat = csr_mat.asscipy()
+        if isinstance(csr_mat, scipy.sparse.csr.csr_matrix):
+            is_sparse = True
+            mat = csr_mat
         else:
-            mat = csr_mat.asnumpy()
+            is_sparse = isinstance(csr_mat, mx.nd.sparse.CSRNDArray)
+            if is_sparse:
+                mat = csr_mat.asscipy()
+            else:
+                mat = csr_mat.asnumpy()
         n_docs = mat.shape[0]
         total_npmi = 0
         for i, words_per_topic in enumerate(self.top_k_words_per_topic):

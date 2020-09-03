@@ -146,7 +146,6 @@ class BaseBowVAE(BaseVAE):
         npmi: float
            NPMI score.
         """
-        X = mx.nd.sparse.csr_matrix(X)
         sorted_ids = self.model.get_top_k_terms(k)
         num_topics = min(self.n_latent, sorted_ids.shape[-1])
         top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
@@ -216,16 +215,22 @@ class BaseBowVAE(BaseVAE):
             val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
                                                               last_batch_handle='pad', shuffle=False),
                                             num_batches=num_val_batches, last_batch_size = last_batch_size)
-        else:
+        elif test_size < 1000000000:
             val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
                                                               last_batch_handle='discard', shuffle=False),
-                                            num_batches=num_val_batches, last_batch_size = last_batch_size)
+                                                num_batches=num_val_batches, last_batch_size = last_batch_size)
+        else:
+            val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = self.batch_size,
+                                                                     last_batch_handle='discard', shuffle=False))
         return val_dataloader
 
     def validate(self, val_X, val_y):
         val_dataloader = self._get_val_dataloader(val_X, val_y)
         ppl = self._perplexity(val_dataloader, self.num_val_words)
-        npmi, redundancy = self._npmi(val_X, val_y)
+        if val_X.shape[0] > 50000:
+            t_X = val_X[:50000]
+            t_y = val_y[:50000]
+        npmi, redundancy = self._npmi(t_X, t_y)
         return ppl, npmi, redundancy
 
 

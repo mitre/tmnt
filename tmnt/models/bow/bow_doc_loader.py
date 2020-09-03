@@ -343,8 +343,6 @@ def file_to_data(sp_file, voc_size, batch_size=1000):
     num_batches = data_size // batch_size
     last_batch_size = data_size % batch_size
     print("Number of batches = {}; last batch size = {}".format(num_batches, last_batch_size))
-    #iter = mx.io.LibSVMIter(data_libsvm=sp_file, data_shape=(voc_size), batch_size=batch_size)
-    #return DataIterLoader(data_file=sp_file, col_shape=voc_size, num_batches=num_batches, last_batch_size=last_batch_size)
     X, y = load_svmlight_file(sp_file, n_features=voc_size, dtype='int32')
     wd_freqs = mx.nd.array(np.array(X.sum(axis=0)).squeeze())
     total_words = X.sum()
