@@ -216,6 +216,7 @@ class BaseBowVAE(BaseVAE):
                                                               last_batch_handle='pad', shuffle=False),
                                             num_batches=num_val_batches, last_batch_size = last_batch_size)
         elif test_size < 1000000000:
+            val_X = mx.nd.sparse.csr_matrix(val_X)
             val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
                                                               last_batch_handle='discard', shuffle=False),
                                                 num_batches=num_val_batches, last_batch_size = last_batch_size)
@@ -236,7 +237,6 @@ class BaseBowVAE(BaseVAE):
 
     def fit_with_validation(self, X, y, val_X, val_y):
         wd_freqs = self.wd_freqs if self.wd_freqs is not None else self._get_wd_freqs(X)
-        val_X = mx.nd.sparse.csr_matrix(val_X)
         val_y = mx.nd.array(val_y) if val_y is not None else None
         y = mx.nd.array(y) if y is not None else None
         x_size = X.shape[0] * X.shape[1]
