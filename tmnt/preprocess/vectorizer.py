@@ -51,7 +51,7 @@ class Vectorizer(object):
         sp_vecs = []
         for i in atpbar(range(len(files)), name=name):
             sp_vecs.extend(self.vectorize_fn(files[i]))
-        return sp_vecs
+        return sorted(sp_vecs)
 
     def no_return_task_vec_fn(self, name, files):
         for i in atpbar(range(len(files)), name=name):
@@ -88,7 +88,7 @@ class Vectorizer(object):
         if not self.json_rewrite:
             with io.open(sp_out_file, 'w', encoding=self.encoding) as fp:
                 for (v,l) in sp_vecs:
-                    fp.write(str(l))  
+                    fp.write(str(l))
                     for (i,c) in v:
                         fp.write(' ')
                         fp.write(str(i))
@@ -169,7 +169,7 @@ class JsonVectorizer(Vectorizer):
                         else:
                             label_str = lstr
                     except KeyError:
-                        label_str = "<unk>"
+                        label_str = "0"
                     tok_ids = [vocab[token] for token in toks if token in vocab]
                     if (len(tok_ids) >= self.min_doc_size):
                         cnts_items = nlp.data.count_tokens(tok_ids).items()
@@ -193,12 +193,12 @@ class JsonVectorizer(Vectorizer):
                     else:
                         label_str = lstr
                 except KeyError:
-                    label_str = "<unk>"
+                    label_str = "0"
                 tok_ids = [vocab[token] for token in toks if token in vocab]
                 if (len(tok_ids) >= self.min_doc_size):
                     cnts = nlp.data.count_tokens(tok_ids)
                     sp_vecs.append((sorted(cnts.items()), label_str))
-        return sp_vecs
+        return sorted(sp_vecs)
 
     def vectorize_fn(self, file_and_vocab):
         if self.json_rewrite:

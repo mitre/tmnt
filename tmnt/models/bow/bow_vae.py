@@ -19,7 +19,7 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
-from tmnt.models.bow.bow_doc_loader import DataIterLoader
+from tmnt.models.bow.bow_doc_loader import DataIterLoader, SparseMatrixDataIter
 from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.models.base.base_vae import BaseVAE
 
@@ -160,11 +160,28 @@ class BaseBowVAE(BaseVAE):
                 unique_term_ids.add(topic_ids[j])
         redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
         return npmi, redundancy
+
+    def _npmi_with_dataloader(self, dataloader, k=10):
+        sorted_ids = self.model.get_top_k_terms(k)
+        num_topics = min(self.n_latent, sorted_ids.shape[-1])
+        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
+        npmi_eval = EvaluateNPMI(top_k_words_per_topic)
+        npmi = npmi_eval.evaluate_csr_loader(dataloader)
+        unique_term_ids = set()
+        unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
+        for i in range(num_topics):
+            topic_ids = list(top_k_words_per_topic[i][:unique_limit])
+            for j in range(len(topic_ids)):
+                unique_term_ids.add(topic_ids[j])
+        redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
+        return npmi, redundancy
     
         
-    def _perplexity(self, dataloader, num_batches, last_batch_size, total_words):
+    def _perplexity(self, dataloader, total_words):
         total_rec_loss = 0
         total_kl_loss  = 0
+        last_batch_size = dataloader.last_batch_size
+        num_batches = dataloader.num_batches
         for i, (data,labels) in enumerate(dataloader):
             if labels is None:            
                 labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
@@ -178,50 +195,56 @@ class BaseBowVAE(BaseVAE):
                 total_rec_loss += rec_loss.sum().asscalar()
                 total_kl_loss += kl_loss.sum().asscalar()
         if ((total_rec_loss + total_kl_loss) / total_words) < 709.0:
+            print("total_rec_loss = {}, total_kl_loss = {}, total words = {}".format(total_rec_loss, total_kl_loss, total_words))
             perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
         else:
             perplexity = 1e300
         return perplexity
 
     def perplexity(self, X, y):
-        total_words = X.sum().asscalar()
-        dataloader, num_batches, last_batch_size = self._get_val_dataloader(X, y)
-        return self._perplexity(dataloader, num_batches, last_batch_size, total_words)
+        dataloader = self._get_val_dataloader(X, y)
+        return self._perplexity(dataloader, self.num_val_words)
 
     def _get_val_dataloader(self, val_X, val_y):
         test_size = val_X.shape[0] * val_X.shape[1]
-        if test_size < MAX_DESIGN_MATRIX:
-            val_X = val_X.tostype('default')
-            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
-                                                              last_batch_handle='pad', shuffle=False))
-        else:
-            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
-                                                              last_batch_handle='discard', shuffle=False))
         last_batch_size = val_X.shape[0] % self.batch_size
         num_val_batches = val_X.shape[0] // self.batch_size
         if last_batch_size > 0:
             num_val_batches += 1
-        return val_dataloader, num_val_batches, last_batch_size
+        if test_size < MAX_DESIGN_MATRIX:
+            val_X = val_X.tostype('default')
+            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
+                                                              last_batch_handle='pad', shuffle=False),
+                                            num_batches=num_val_batches, last_batch_size = last_batch_size)
+        else:
+            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
+                                                              last_batch_handle='discard', shuffle=False),
+                                            num_batches=num_val_batches, last_batch_size = last_batch_size)
+        return val_dataloader
 
     def validate(self, val_X, val_y):
-        process = psutil.Process(os.getpid())
-        if self.num_val_words < 0:
-            row_cnts = val_X.sum(axis=1)
-            sums = row_cnts.sum(axis=0)
-            self.num_val_words = sums.asscalar()
-        val_dataloader, num_val_batches, last_batch_size = self._get_val_dataloader(val_X, val_y)
-        ppl = self._perplexity(val_dataloader, num_val_batches, last_batch_size, self.num_val_words)
+        val_dataloader = self._get_val_dataloader(val_X, val_y)
+        ppl = self._perplexity(val_dataloader, self.num_val_words)
         npmi, redundancy = self._npmi(val_X, val_y)
         return ppl, npmi, redundancy
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
         wd_freqs = self.wd_freqs if self.wd_freqs is not None else self._get_wd_freqs(X)
+        val_X = mx.nd.sparse.csr_matrix(val_X)
+        val_y = mx.nd.array(val_y) if val_y is not None else None
+        y = mx.nd.array(y) if y is not None else None
+        x_size = X.shape[0] * X.shape[1]
+        if x_size > MAX_DESIGN_MATRIX:
+            logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
+            train_dataloader = DataIterLoader(SparseMatrixDataIter(X, y, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
+        else:
+            X = mx.nd.sparse.csr_matrix(X)
+            train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
         self.model = self._get_model()
         self.model.set_biases(wd_freqs)  ## initialize bias weights to log frequencies
         
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
-        train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         for epoch in range(self.epochs):
             ts_epoch = time.time()
@@ -235,7 +258,7 @@ class BaseBowVAE(BaseVAE):
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
                 trainer.step(data.shape[0])
-            if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
+            if val_X is not None: # and (self.validate_each_epoch or epoch == self.epochs-1):
                 ppl, npmi, redundancy = self.validate(val_X, val_y)
                 if self.reporter:
                     obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
@@ -244,8 +267,11 @@ class BaseBowVAE(BaseVAE):
                     print("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}.".format(epoch, sc_obj, ppl, npmi, redundancy))
                     self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(), coherence=npmi, perplexity=ppl, redundancy=redundancy)
         return sc_obj, npmi, ppl, redundancy
+
                     
     def fit(self, X, y):
+        X = mx.nd.sparse.csr_matrix(X)
+        y = mx.nd.array(y)
         return self.fit_with_validation(X, y, None, None)
 
 

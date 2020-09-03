@@ -81,5 +81,42 @@ class EvaluateNPMI(object):
             total_topic_npmi *= (2 / (n_topics * (n_topics-1)))
             total_npmi += total_topic_npmi
         return total_npmi / len(self.top_k_words_per_topic)
+
+    def evaluate_csr_loader(self, dataloader):
+        ndocs = 0
+        total_npmi = 0
+        for i, words_per_topic in enumerate(self.top_k_words_per_topic):
+            n_topics = len(words_per_topic)
+            total_topic_npmi = 0
+            for (w1, w2) in combinations(sorted(words_per_topic), 2):
+                npmi = 0.0
+                unigram1 = 0.0
+                unigram2 = 0.0
+                bigram_cnt = 0.0
+                n_docs = 0
+                for _, (csr,_) in enumerate(dataloader):
+                    is_sparse = isinstance(csr, mx.nd.sparse.CSRNDArray)
+                    if is_sparse:
+                        mat = csr.asscipy()
+                    else:
+                        mat = csr.asnumpy()
+                    n_docs += mat.shape[0]
+                    o1 = mat[:, w1] > 0
+                    o2 = mat[:, w2] > 0
+                    if is_sparse:
+                        o1 = o1.toarray().squeeze()
+                        o2 = o2.toarray().squeeze()
+                    occur1 = np.array(o1, dtype='int')
+                    occur2 = np.array(o2, dtype='int')
+                    unigram1 += occur1.sum()
+                    unigram2 += occur2.sum()
+                    bigram_cnt += np.sum(occur1 * occur2)
+                if bigram_cnt >= 1:
+                    npmi += (log10(n_docs) + log10(bigram_cnt) - log10(unigram1) - log10(unigram2)) / (log10(n_docs) - log10(bigram_cnt) + 1e-4)
+                total_topic_npmi += npmi
+            total_topic_npmi *= (2 / (n_topics * (n_topics-1)))
+            total_npmi += total_topic_npmi
+        return total_npmi / len(self.top_k_words_per_topic)
+                        
         
 

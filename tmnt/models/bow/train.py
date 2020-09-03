@@ -24,7 +24,7 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
-from tmnt.models.bow.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, load_vocab
+from tmnt.models.bow.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, load_vocab, file_to_data
 from tmnt.models.bow.bow_vae import BowVAE, MetaBowVAE
 from tmnt.models.bow.topic_seeds import get_seed_matrix_from_file
 from tmnt.models.bow.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
@@ -166,19 +166,17 @@ def get_mxnet_visible_gpus():
         
 
 class BowVAETrainer():
-    def __init__(self, model_out_dir, c_args, vocabulary, wd_freqs, data_train_csr, total_tr_words,
-                 data_test_csr, total_tst_words, train_labels=None, test_labels=None, label_map=None, use_gpu=False):
+    def __init__(self, model_out_dir, c_args, vocabulary, wd_freqs, train_data, 
+                 test_data, total_tst_words, train_labels=None, test_labels=None, label_map=None, use_gpu=False):
         self.model_out_dir = model_out_dir
         self.c_args = c_args
         self.use_gpu = use_gpu
-        self.total_tr_words = total_tr_words
         self.total_tst_words = total_tst_words
         self.vocabulary = vocabulary
+        self.train_data   = train_data
+        self.test_data    = test_data
         self.train_labels = train_labels
-        self.test_labels = test_labels
-        self.data_train_csr   = data_train_csr
-        self.data_test_csr    = data_test_csr
-        self.data_heldout_csr = None
+        self.test_labels  = test_labels
         self.label_map = label_map
         self.wd_freqs = wd_freqs
         self.vocab_cache = {}
@@ -222,7 +220,6 @@ class BowVAETrainer():
                     pt_embedding = nlp.embedding.TokenEmbedding.from_file(e_name)
                 else:
                     pt_embedding = nlp.embedding.create(e_type, source=e_name)
-                #vocab = copy.deepcopy(self.vocabulary) ## create a copy of the vocab to attach the vocab to
                 self.vocab_cache[embedding_source] = copy.deepcopy(pt_embedding) ## cache another copy 
             emb_size = len(pt_embedding.idx_to_vec[0])
             if set_vocab:
@@ -295,8 +292,9 @@ class BowVAETrainer():
         if emb_size < 0 and 'size' in config.embedding:
             emb_size = config.embedding.size
 
-        if self.c_args.use_labels_as_covars and self.train_labels is not None:
-            n_covars = len(self.label_map) if self.label_map else 1
+        if self.c_args.use_labels_as_covars:
+            #n_covars = len(self.label_map) if self.label_map else 1
+            n_covars = -1
             model = \
                 MetaBowVAE(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, wd_freqs=self.wd_freqs,
                            label_map=self.label_map,
@@ -342,10 +340,8 @@ class BowVAETrainer():
         ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         vae_model = self._get_vae_model(config, reporter, ctx)
-        obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.data_train_csr, self.train_labels, self.data_test_csr, self.test_labels)
+        obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
         return vae_model.model, obj, npmi, perplexity, redundancy
-
-
 
 def write_model(m, model_dir, config):
     if model_dir:
@@ -397,27 +393,21 @@ def get_trainer(c_args):
         if not (vpath.is_file() and tpath.is_file()):
             raise Exception("Vocab file {} and/or training vector file {} do not exist".format(c_args.vocab_file, c_args.tr_vec_file))
     logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
-    vocab, tr_csr_mat, total_tr_words, tr_labels, label_map, wd_freqs = \
-        collect_sparse_data(c_args.tr_vec_file, c_args.vocab_file, scalar_labels=c_args.scalar_covars, encoding=c_args.str_encoding)
+    vocab = load_vocab(c_args.vocab_file, encoding=c_args.str_encoding)
+    voc_size = len(vocab)
+    X, y, wd_freqs, _ = file_to_data(c_args.tr_vec_file, voc_size)
+    #X, y, wd_freqs, _, _ = collect_sparse_data(c_args.tr_vec_file, voc_size)
+    total_test_wds = 0    
     if c_args.val_vec_file:
-        tst_csr_mat, total_tst_words, tst_labels = \
-            collect_sparse_test(c_args.val_vec_file, vocab, scalar_labels=c_args.scalar_covars, encoding=c_args.str_encoding)
-    else:
-        tst_csr_mat, total_tst_words, tst_labels = None, None, None
+        #val_X, val_y, _, total_test_wds, _ = collect_sparse_test(c_args.val_vec_file, voc_size)
+        val_X, val_y, _, total_test_wds = file_to_data(c_args.val_vec_file, voc_size)
     ctx = mx.cpu() if not c_args.use_gpu else mx.gpu(0)
     model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):
         os.mkdir(model_out_dir)
-    if c_args.use_labels_as_covars and tr_labels is not None:
-        if label_map is not None:
-            n_covars = len(label_map)
-            tr_labels = mx.nd.one_hot(tr_labels, n_covars)
-            tst_labels = mx.nd.one_hot(tst_labels, n_covars) if tst_labels is not None else None
-        else:
-            tr_labels = mx.nd.expand_dims(tr_labels, 1)
-            tst_labels = mx.nd.expand_dims(tst_labels, 1) if tst_labels is not None else None
-    trainer = BowVAETrainer(model_out_dir, c_args, vocab, wd_freqs, tr_csr_mat, total_tr_words, tst_csr_mat, total_tst_words, tr_labels, tst_labels,
-                           label_map, use_gpu=c_args.use_gpu)
+    trainer = BowVAETrainer(model_out_dir, c_args, vocab, wd_freqs, X, val_X, total_test_wds,
+                            train_labels = y, test_labels = val_y,
+                            label_map=None, use_gpu=c_args.use_gpu)
     return trainer, train_out_dir
 
 
@@ -452,7 +442,7 @@ def select_model(trainer, c_args):
     searcher = c_args.searcher
     brackets = c_args.brackets
     tmnt_config = TMNTConfig(tmnt_config_space).get_configspace()
-    ##
+
     if not (c_args.scheduler == 'hyperband'):
         trainer.set_validate_each_epoch(False)
 
@@ -503,8 +493,8 @@ def train_with_single_config(c_args, trainer, best_config):
     best_model = None
     if c_args.val_vec_file:
         trainer.set_validate_each_epoch(False)
-        if c_args.tst_vec_file:
-            trainer.set_heldout_data_as_test()        
+        #if c_args.tst_vec_file:
+        #    trainer.set_heldout_data_as_test()        
         logging.info("Training with config: {}".format(best_config))
         npmis, perplexities, redundancies, objectives = [],[],[],[]
         ntimes = int(c_args.num_final_evals)

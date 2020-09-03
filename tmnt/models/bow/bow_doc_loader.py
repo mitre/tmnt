@@ -15,12 +15,115 @@ import logging
 import gluonnlp as nlp
 import mxnet as mx
 import numpy as np
+from collections import OrderedDict
 from gluonnlp.data import SimpleDatasetStream, CorpusDataset
 from tmnt.preprocess.tokenizer import BasicTokenizer
+from mxnet.io import DataDesc, DataIter, DataBatch
+import scipy
+from sklearn.datasets import load_svmlight_file
+from sklearn.utils import shuffle as sk_shuffle
+
+__all__ = ['DataIterLoader', 'file_to_data', 'collect_sparse_test', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix',
+           'get_single_vec', 'load_vocab', 'SparseMatrixDataIter']
+
+class SparseMatrixDataIter(DataIter):
+    def __init__(self, data, label=None, batch_size=1, shuffle=False,
+                 last_batch_handle='pad', data_name='data',
+                 label_name='softmax_label'):
+        super(SparseMatrixDataIter, self).__init__(batch_size)
+
+        assert(isinstance(data, scipy.sparse.csr.csr_matrix))
+        
+        self.data = _init_data(data, allow_empty=False, default_name=data_name)
+        self.label = _init_data(label, allow_empty=True, default_name=label_name)
+        self.num_data = self.data[0][1].shape[0]
+
+        # shuffle data
+        if shuffle:
+            sh_data = []
+            d = self.data[0][1]
+            if len(self.label[0][1]) > 0:
+                l = self.label[0][1]
+                ds, dl = sk_shuffle(d, l)
+                self.data = _init_data(ds, allow_empty=False, default_name=data_name)
+                self.label = _init_data(dl, allow_empty=True, default_name=label_name)
+            else:
+                ds = sk_shuffle(d)
+                self.data = _init_data(ds, allow_empty=False, default_name=data_name)
+
+        # batching
+        if last_batch_handle == 'discard':
+            new_n = self.data[0][1].shape[0] - self.data[0][1].shape[0] % batch_size
+            self.num_data = new_n
+
+        self.data_list = [x[1] for x in self.data] + [x[1] for x in self.label]
+        assert self.num_data >= batch_size, "batch_size needs to be smaller than data size."
+        self.cursor = -batch_size
+        self.batch_size = batch_size
+        self.last_batch_handle = last_batch_handle
 
 
-__all__ = ['DataIterLoader', 'collect_sparse_test', 'collect_sparse_data', 'BowDataSet', 'collect_stream_as_sparse_matrix',
-           'get_single_vec', 'load_vocab']
+    @property
+    def provide_data(self):
+        """The name and shape of data provided by this iterator."""
+        return [
+            DataDesc(k, tuple([self.batch_size] + list(v.shape[1:])), v.dtype)
+            for k, v in self.data
+        ]
+
+    @property
+    def provide_label(self):
+        """The name and shape of label provided by this iterator."""
+        return [
+            DataDesc(k, tuple([self.batch_size] + list(v.shape[1:])), v.dtype)
+            for k, v in self.label
+        ]
+
+    def hard_reset(self):
+        """Ignore roll over data and set to start."""
+        self.cursor = -self.batch_size
+
+
+    def reset(self):
+        if self.last_batch_handle == 'roll_over' and self.cursor > self.num_data:
+            self.cursor = -self.batch_size + (self.cursor%self.num_data)%self.batch_size
+        else:
+            self.cursor = -self.batch_size
+
+    def iter_next(self):
+        self.cursor += self.batch_size
+        return self.cursor < self.num_data
+
+    def next(self):
+        if self.iter_next():
+            return DataBatch(data=self.getdata(), label=self.getlabel(), \
+                    pad=self.getpad(), index=None)
+        else:
+            raise StopIteration
+
+    def getdata(self):
+        assert(self.cursor < self.num_data), "DataIter needs reset."
+        if self.cursor + self.batch_size <= self.num_data:
+            return [ x[1][self.cursor:self.cursor + self.batch_size] for x in self.data ]
+        else:
+            pad = self.batch_size - self.num_data + self.cursor
+            return [ scipy.sparse.vstack([x[1][self.cursor:], x[1][:pad]]) for x in self.data ]
+
+    def getlabel(self):
+        assert(self.cursor < self.num_data), "DataIter needs reset."
+        if self.cursor + self.batch_size <= self.num_data:
+            return [ x[1][self.cursor:self.cursor + self.batch_size] for x in self.label ]
+        else:
+            pad = self.batch_size - self.num_data + self.cursor
+            return [ np.concatenate([x[1][self.cursor:], x[1][:pad]]) for x in self.label ]
+
+
+    def getpad(self):
+        if self.last_batch_handle == 'pad' and self.cursor + self.batch_size > self.num_data:
+            return self.cursor + self.batch_size - self.num_data
+        else:
+            return 0
+
 
 def preprocess_dataset_stream(stream, pre_vocab = None, min_freq=3, max_vocab_size=None):
     if pre_vocab:
@@ -92,31 +195,60 @@ def collect_stream_as_sparse_matrix(stream, pre_vocab=None, min_freq=3, max_voca
     csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape = (ndocs, len(vocab)))
     return csr_mat, vocab, total_num_words
 
+
 class DataIterLoader():
     """
     This is a simple wrapper around a `DataIter` geared for unsupervised learning datasets
     where the label is `None`. Not totally necessary but means means client code (e.g. in the `train_model`
     method can follow the standard API for `DataLoader` objects.
     """
-    def __init__(self, data_iter):
+    def __init__(self, data_iter=None, data_file=None, col_shape=-1,
+                 num_batches=-1, last_batch_size=-1, handle_last_batch='discard'):
+        self.using_file = data_iter is None
+        self.data_file = data_file
+        self.col_shape = col_shape
         self.data_iter = data_iter
+        self.num_batches = num_batches
+        self.last_batch_size = last_batch_size
+        self.handle_last_batch = handle_last_batch
+        self.batch_index = 0
+        self.batch_size = 1000
 
     def __iter__(self):
-        self.data_iter.reset()
+        if not self.using_file:
+            self.data_iter.reset()
+        else:
+            self.data_iter = mx.io.LibSVMIter(data_libsvm=self.data_file, data_shape=(self.col_shape,),
+                                              batch_size=self.batch_size)
+        self.batch_index = 0
         return self
 
     def __next__(self):
         batch = self.data_iter.__next__()
-        data = batch.data[0]
-        if len(batch.data) == len(batch.label):            
-            label = batch.label[0]
+        data = mx.nd.sparse.csr_matrix(batch.data[0], dtype='float32')
+        if batch.data[0].shape[0] == batch.label[0].shape[0]:            
+            label = mx.nd.array(batch.label[0], dtype='float32')
         else:
             label = None
+        self.batch_index += 1
         return data, label
+
+    def get_data(self):
+        return self.data_iter.data
 
     def next(self):
         return self.__next__()
+
+
+def _init_data(data, allow_empty, default_name):
+    """Convert data into canonical form."""
+    assert (data is not None) or allow_empty
+    if data is None:
+        data = []
+    data = OrderedDict([(default_name, data)]) # pylint: disable=redefined-variable-type
+    return list(data.items())
     
+
 
 class BowDataSet(SimpleDatasetStream):
     def __init__(self, root, pattern, sampler='random'):
@@ -155,7 +287,6 @@ def load_vocab(vocab_file, encoding='utf-8'):
         w_dict[words[i]] = ln_wds - i
     counter = nlp.data.Counter(w_dict)
     return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
-
 
 def get_single_vec(els_sp):
     pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp ] )
@@ -204,28 +335,43 @@ def file_to_sp_vec(sp_file, voc_size, label_map=None, scalar_labels=False, encod
     return csr_mat, total_num_words, labels, lm, mx.nd.array(freqs)
 
 
+def file_to_data(sp_file, voc_size, batch_size=1000):
+    with open(sp_file) as f:
+        for i, l in enumerate(f):
+            pass
+    data_size = i+1
+    num_batches = data_size // batch_size
+    last_batch_size = data_size % batch_size
+    print("Number of batches = {}; last batch size = {}".format(num_batches, last_batch_size))
+    #iter = mx.io.LibSVMIter(data_libsvm=sp_file, data_shape=(voc_size), batch_size=batch_size)
+    #return DataIterLoader(data_file=sp_file, col_shape=voc_size, num_batches=num_batches, last_batch_size=last_batch_size)
+    X, y = load_svmlight_file(sp_file, n_features=voc_size, dtype='int32')
+    wd_freqs = mx.nd.array(np.array(X.sum(axis=0)).squeeze())
+    total_words = X.sum()
+    return X, y, wd_freqs, total_words
+
+
 def normalize_scalar_values(scalars):
     return (scalars - scalars.min()) / (scalars.max() - scalars.min())
 
 
-def collect_sparse_data(sp_vec_file, vocab_file, sp_vec_test_file=None, scalar_labels=False, encoding='utf-8'):
-    vocab = load_vocab(vocab_file, encoding=encoding)
-    tr_mat, total_tr, tr_labels_li, label_map, wd_freqs = file_to_sp_vec(sp_vec_file, len(vocab), scalar_labels=scalar_labels, encoding=encoding)
+def collect_sparse_data(sp_file, voc_size, scalar_labels=False, encoding='utf-8'):
+    #vocab = load_vocab(vocab_file, encoding=encoding)
+    X, total_words, tr_labels_li, label_map, wd_freqs = file_to_sp_vec(sp_file, voc_size, scalar_labels=scalar_labels, encoding=encoding)
     dt = 'float32' if scalar_labels else 'int'
     tr_labels = mx.nd.array(tr_labels_li, dtype=dt)
     if scalar_labels:
         tr_labels = normalize_scalar_values(tr_labels)
-    #tr_map = tr_mat.tostype('default')
-    return vocab, tr_mat, total_tr, tr_labels, label_map, wd_freqs
+    return X, tr_labels, wd_freqs, total_words, label_map
     
 
-def collect_sparse_test(sp_vec_file, vocab, scalar_labels=False, label_map=None, encoding='utf-8'):
+def collect_sparse_test(sp_file, voc_size, scalar_labels=False, label_map=None, encoding='utf-8'):
     keep_sp_sparse = True
-    tst_mat_sp, total_tst, tst_labels_li, _, _ = \
-        file_to_sp_vec(sp_vec_file, len(vocab), label_map=label_map, scalar_labels=scalar_labels, encoding=encoding)
-    tst_mat = tst_mat_sp if keep_sp_sparse else tst_mat_sp.tostype('default')
+    tst_mat_sp, total_tst, tst_labels_li, _, wd_freqs = \
+        file_to_sp_vec(sp_file, voc_size, label_map=label_map, scalar_labels=scalar_labels, encoding=encoding)
+    X = tst_mat_sp if keep_sp_sparse else tst_mat_sp.tostype('default')
     dt = 'float32' if scalar_labels else 'int'    
     tst_labels = mx.nd.array(tst_labels_li, dtype=dt)
     if scalar_labels:
         tst_labels = normalize_scalar_values(tst_labels)
-    return tst_mat, total_tst, tst_labels
+    return X, tst_labels, wd_freqs, total_tst, _
