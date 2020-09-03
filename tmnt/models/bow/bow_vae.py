@@ -211,7 +211,7 @@ class BaseBowVAE(BaseVAE):
         if last_batch_size > 0:
             num_val_batches += 1
         if test_size < MAX_DESIGN_MATRIX:
-            val_X = val_X.tostype('default')
+            val_X = mx.nd.sparse.csr_matrix(val_X).tostype('default')
             val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
                                                               last_batch_handle='pad', shuffle=False),
                                             num_batches=num_val_batches, last_batch_size = last_batch_size)
@@ -229,9 +229,9 @@ class BaseBowVAE(BaseVAE):
         val_dataloader = self._get_val_dataloader(val_X, val_y)
         ppl = self._perplexity(val_dataloader, self.num_val_words)
         if val_X.shape[0] > 50000:
-            t_X = val_X[:50000]
-            t_y = val_y[:50000]
-        npmi, redundancy = self._npmi(t_X, t_y)
+            val_X = val_X[:50000]
+            val_y = val_y[:50000]
+        npmi, redundancy = self._npmi(val_X, val_y)
         return ppl, npmi, redundancy
 
 

@@ -8,6 +8,8 @@ from collections import Counter
 
 import numpy as np
 import mxnet as mx
+import scipy
+import scipy.sparse
 
 from tmnt.utils.ngram_helpers import BigramReader
 from itertools import combinations
