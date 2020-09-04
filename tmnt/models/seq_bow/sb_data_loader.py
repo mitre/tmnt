@@ -17,9 +17,7 @@ import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet import autograd as ag
-from tmnt.bow_vae.bow_doc_loader import get_single_vec
 from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform, BasicTokenizer
-
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 
 __all__ = ['load_dataset_bert', 'load_dataset_basic', 'load_dataset_basic_seq_bow']
@@ -29,6 +27,11 @@ trans_table = str.maketrans(dict.fromkeys(string.punctuation))
 def remove_punct_and_urls(txt):
     string = re.sub(r'https?:\/\/\S+\b|www\.(\w+\.)+\S*', '', txt) ## wipe out URLs
     return string.translate(trans_table)
+
+def get_single_vec(els_sp):
+    pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp ] )
+    inds, vs = zip(*pairs)
+    return pairs, inds, vs
 
 
 def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp_vec", max_len=64, ctx=mx.cpu()):

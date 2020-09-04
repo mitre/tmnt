@@ -10,37 +10,39 @@ import gluonnlp as nlp
 import io
 import os
 from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
-from tmnt.models.bow.bow_doc_loader import collect_stream_as_sparse_matrix, DataIterLoader, BowDataSet, file_to_sp_vec
+from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
+from tmnt.preprocess.vectorizer import TextVectorizer
 from multiprocessing import Pool
 
 
 class BowNTMInference(object):
 
-    def __init__(self, param_file=None, specs_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
+    def __init__(self, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
         self.max_batch_size = 2
+
         if model_dir is not None:
             param_file = os.path.join(model_dir,'model.params')
             vocab_file = os.path.join(model_dir,'vocab.json')
-            specs_file = os.path.join(model_dir,'model.config')
-        with open(specs_file) as f:
-            specs = json.loads(f.read())
+            config_file = os.path.join(model_dir,'model.config')
+        with open(config_file) as f:
+            config = json.loads(f.read())
         with open(vocab_file) as f:
             voc_js = f.read()
         self.vocab = nlp.Vocab.from_json(voc_js)
+        self.vectorizer = TextVectorizer(min_doc_size=1)
         self.ctx = ctx
-        self.n_latent = specs['n_latent']
-        enc_dim = specs['enc_hidden_dim']
-        lat_distrib = specs['latent_distribution']['dist_type']
-        n_encoding_layers = specs.get('num_enc_layers', 0)
-        enc_dr= float(specs.get('enc_dr', 0.0))
-        emb_size = specs['derived_info']['embedding_size']
-        if 'n_covars' in specs:
+        self.n_latent = config['n_latent']
+        enc_dim = config['enc_hidden_dim']
+        lat_distrib = config['latent_distribution']['dist_type']
+        n_encoding_layers = config.get('num_enc_layers', 0)
+        enc_dr= float(config.get('enc_dr', 0.0))
+        emb_size = config['derived_info']['embedding_size']
+        if 'n_covars' in config:
             self.covar_model = True
-            self.n_covars = specs['n_covars']
-            self.label_map = specs['l_map']
-            self.covar_net_layers = specs.get('covar_net_layers')
-
+            self.n_covars = config['n_covars']
+            self.label_map = config['l_map']
+            self.covar_net_layers = config.get('covar_net_layers')
             self.model = MetaDataBowNTM(self.label_map, self.n_covars,
                                         self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
                                         n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
@@ -54,7 +56,7 @@ class BowNTMInference(object):
 
 
     def get_model_details(self, sp_vec_file):
-        data_csr, _, labels, _ = file_to_sp_vec(sp_vec_file, len(self.vocab))        
+        data_csr, labels, _, _ = file_to_data(sp_vec_file, len(self.vocab))        
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
         w_pr = mx.nd.softmax(w, axis=1)
@@ -95,19 +97,20 @@ class BowNTMInference(object):
         return self.encode_text_stream(strm)
 
     def encode_vec_file(self, sp_vec_file):
-        data_csr, _, labels, _ = file_to_sp_vec(sp_vec_file, len(self.vocab))
-        return self.encode_csr(data_csr, labels), labels
+        data_mat, labels, _, _ = file_to_data(sp_vec_file, len(self.vocab))
+        return self.encode_data(data_mat, labels), labels
 
     def encode_text_stream(self, strm):
-        csr, _, _ = collect_stream_as_sparse_matrix(strm, pre_vocab=self.vocab)
-        return self.encode_csr(csr,None)
+        vecs = [ self.vectorizer.vectorize_string(s, self.vocab) for s in strm ]
+        data = mx.nd.array(vecs)
+        return self.encode_data(data, None)
 
-    def encode_csr(self, csr, labels, use_probs=False):
-        batch_size = min(csr.shape[0], self.max_batch_size)
-        last_batch_size = csr.shape[0] % batch_size
+    def encode_data(self, data_mat, labels, use_probs=False):
+        batch_size = min(data_mat.shape[0], self.max_batch_size)
+        last_batch_size = data_mat.shape[0] % batch_size
         covars = mx.nd.one_hot(mx.nd.array(labels, dtype='int'), self.n_covars) \
             if self.covar_model and labels[:-last_batch_size] is not None else None
-        infer_iter = DataIterLoader(mx.io.NDArrayIter(csr[:-last_batch_size], covars,
+        infer_iter = DataIterLoader(mx.io.NDArrayIter(data_mat[:-last_batch_size], covars,
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):
@@ -123,7 +126,7 @@ class BowNTMInference(object):
             encodings.extend(encs)
         ## handle the last batch explicitly as NDArrayIter doesn't do that for us
         if last_batch_size > 0:
-            data = csr[-last_batch_size:].as_in_context(self.ctx)
+            data = data_mat[-last_batch_size:].as_in_context(self.ctx)
             if self.covar_model and labels is not None:
                 labels = mx.nd.one_hot(mx.nd.array(labels[-last_batch_size:], dtype='int'), self.n_covars).as_in_context(self.ctx)
                 encs = self.model.encode_data_with_covariates(data, labels)
@@ -172,15 +175,6 @@ class BowNTMInference(object):
             topic_terms.append(cv_i_terms)
         return topic_terms
 
-
-    def _test_inference_on_directory(self, directory, file_pattern=None):
-        """
-        Temporary test method to demonstrate use of inference on a set of files in a directory
-        """
-        pat = '*.txt' if file_pattern is None else file_pattern
-        dataset_strm = BowDataSet(directory, pat, sampler='sequential') # preserve file ordering
-        return self.encode_text_stream(dataset_strm)
-        
 
 class TextEncoder(object):
 

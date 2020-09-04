@@ -24,7 +24,7 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
-from tmnt.models.bow.bow_doc_loader import DataIterLoader, collect_sparse_test, collect_sparse_data, load_vocab, file_to_data
+from tmnt.models.bow.bow_doc_loader import DataIterLoader, load_vocab, file_to_data
 from tmnt.models.bow.bow_vae import BowVAE, MetaBowVAE
 from tmnt.models.bow.topic_seeds import get_seed_matrix_from_file
 from tmnt.models.bow.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
@@ -44,101 +44,6 @@ __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
 MAX_DESIGN_MATRIX = 250000000 
 
-
-def evaluate(model, epoch, data_loader, last_batch_size, num_test_batches, total_words, args, ctx=mx.cpu()):
-    total_rec_loss = 0
-    total_kl_loss  = 0
-    batch_size = 0
-    for i, (data,labels) in enumerate(data_loader):
-        if labels is None:            
-            labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-        data = data.as_in_context(ctx)
-        labels = labels.as_in_context(ctx)
-        _, kl_loss, rec_loss, _, _, _, _, log_out = model(data, labels) if args.use_labels_as_covars else model(data)
-        ## We explicitly keep track of the last batch size        
-        ## The following lets us use a "rollover" for handling the last batch,
-        ## enabling the symbolic computation graph (via hybridize)
-        if i == num_test_batches - 1:
-            total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
-            total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
-        else:
-            total_rec_loss += rec_loss.sum().asscalar()
-            total_kl_loss += kl_loss.sum().asscalar()
-    if ((total_rec_loss + total_kl_loss) / total_words) < 709.0:
-        perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
-    else:
-        perplexity = 1e300
-    logging.info("TEST/VALIDATION (Epoch {}) Perplexity = {} [ Rec Loss = {} + KL loss = {} / Total test words = {}]".
-                 format(epoch, perplexity, total_rec_loss, total_kl_loss, total_words))
-    return perplexity
-
-
-
-def compute_coherence(model, k, test_data, log_terms=False, covariate_interactions=False,
-                      test_dataloader=None, ctx=mx.cpu()):
-    if covariate_interactions:
-        logging.debug("Rendering interactions not supported yet")
-    num_topics = model.n_latent
-
-    if test_dataloader is not None:
-        ## in this case compute coherence using encoder Jacobian
-        js = get_encoder_jacobians_at_data_nocovar(model, test_dataloader, int(1000 / num_topics), 100000, ctx)
-        sorted_j = (-js).argsort(axis=1)
-        sorted_topk = sorted_j[:, :k]
-        enc_top_k_words_per_topic = [ [int(i) for i in list(sorted_topk[t, :]) ] for t in range(num_topics)]
-        enc_npmi_eval = EvaluateNPMI(enc_top_k_words_per_topic)
-        enc_npmi = enc_npmi_eval.evaluate_csr_mat(test_data)
-    else:
-        enc_npmi = None
-        
-    sorted_ids = model.get_top_k_terms(k)
-    num_topics = min(num_topics, sorted_ids.shape[-1])
-    top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
-    npmi_eval = EvaluateNPMI(top_k_words_per_topic)
-    npmi = npmi_eval.evaluate_csr_mat(test_data)
-    
-    unique_term_ids = set()
-    unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
-    for i in range(num_topics):
-        topic_ids = list(top_k_words_per_topic[i][:unique_limit])
-        for j in range(len(topic_ids)):
-            unique_term_ids.add(topic_ids[j])
-    redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
-    logging.info("Test Coherence: {}".format(npmi))
-    logging.info("Test Redundancy at 5: {}".format(redundancy))    
-    if log_terms:
-        top_k_tokens = [list(map(lambda x: model.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
-        for i in range(num_topics):
-            logging.debug("Topic {}: {}".format(i, top_k_tokens[i]))
-    return npmi, enc_npmi, redundancy
-
-
-def analyze_seed_matrix(model, seed_matrix):
-    w = model.decoder.collect_params().get('weight').data()
-    ts = mx.nd.take(w, seed_matrix)   ## should have shape (T', S', T)
-    ts_sums = mx.nd.sum(ts, axis=1)
-    ts_probs = mx.nd.softmax(ts_sums)
-    print("ts_prob = {}".format(ts_probs))
-    entropies = -mx.nd.sum(ts_probs * mx.nd.log(ts_probs), axis=1)
-    print("entropies = {}".format(entropies))
-    seed_means = mx.nd.mean(ts, axis=1)  # (G,K)
-    seed_pr = mx.nd.softmax(seed_means)
-    per_topic_entropy_1 = -mx.nd.sum(seed_pr * mx.nd.log(seed_pr), axis=0)
-    print("per_topic_entropy = {}".format(per_topic_entropy_1))
-    total_topic_sum_means = mx.nd.sum(seed_means, axis=0)
-    print("sum means = {}".format(total_topic_sum_means))    
-    per_topic_entropy = mx.nd.sum(per_topic_entropy_1 * total_topic_sum_means)
-    
-
-def log_top_k_words_per_topic(model, vocab, num_topics, k):
-    w = model.decoder.collect_params().get('weight').data()
-    sorted_ids = w.argsort(axis=0, is_ascend=False)
-    for t in range(num_topics):
-        top_k = [ vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]
-        term_str = ' '.join(top_k)
-        logging.debug("Topic {}: {}".format(str(t), term_str))
-
-
 def x_get_mxnet_visible_gpus():
     import mxnet as mx
     gpu_count = 0
@@ -150,7 +55,6 @@ def x_get_mxnet_visible_gpus():
         except Exception:
             break
     return [mx.gpu(i) for i in range(gpu_count)]
-
 
 def get_mxnet_visible_gpus():
     ln = 0
@@ -185,13 +89,6 @@ class BowVAETrainer():
         self.vocab_cache = {}
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
-
-
-    def pre_build_vocab_cache(self, possible_vocabs):
-        """
-        Preload and cache all vocabularies for faster model selection
-        """
-        raise NotImplementedError()
 
     def _initialize_vocabulary(self, embedding_source, set_vocab=True):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
@@ -246,13 +143,10 @@ class BowVAETrainer():
     def set_heldout_data_as_test(self):
         """Load in the heldout test data for final model evaluation
         """
-        tst_mat, total_tst_words, tst_labels = collect_sparse_test(self.c_args.tst_vec_file, self.vocabulary,
-                                                                   scalar_labels=self.c_args.scalar_covars,
-                                                                   encoding=self.c_args.str_encoding)
+        tst_mat, tst_labels, _, total_tst_words  = file_to_data(self.c_args.tst_vec_file, self.vocabulary)
         self.data_test_csr = tst_mat
         self.test_labels   = tst_labels
         self.total_tst_words = total_tst_words
-        
 
     def _get_vae_model(self, config, reporter, ctx):
         """Take a model configuration - specified by a config file or as determined by model selection and 
@@ -278,7 +172,6 @@ class BowVAETrainer():
         n_encoding_layers = config.num_enc_layers
         enc_dr = config.enc_dr
         epochs = int(config.epochs)
-
         ldist_def = config.latent_distribution
         kappa = 0.0
         alpha = 1.0
@@ -287,7 +180,6 @@ class BowVAETrainer():
             kappa = ldist_def.kappa
         elif latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
-
         vocab, emb_size = self._initialize_vocabulary(embedding_source)
         if emb_size < 0 and 'size' in config.embedding:
             emb_size = config.embedding.size
@@ -343,28 +235,31 @@ class BowVAETrainer():
         obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
         return vae_model.model, obj, npmi, perplexity, redundancy
 
-def write_model(m, model_dir, config):
-    if model_dir:
-        pfile = os.path.join(model_dir, 'model.params')
-        sp_file = os.path.join(model_dir, 'model.config')
-        vocab_file = os.path.join(model_dir, 'vocab.json')
-        logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
-        m.save_parameters(pfile)
-        ## additional derived information from auto-searched configuration
-        ## helpful to have for runtime use of model (e.g. embedding size)
-        derived_info = {}
-        derived_info['embedding_size'] = m.embedding_size
-        config['derived_info'] = derived_info
-        if 'num_enc_layers' not in config.keys():
-            config['num_enc_layers'] = m.num_enc_layers
-            config['n_covars'] = int(m.n_covars)
-            config['l_map'] = m.label_map
-            config['covar_net_layers'] = m.covar_net_layers
-        specs = json.dumps(config, sort_keys=True, indent=4)
-        with open(sp_file, 'w') as f:
-            f.write(specs)
-        with open(vocab_file, 'w') as f:
-            f.write(m.vocabulary.to_json())
+    def write_model(self, m, config):
+        model_dir = self.model_out_dir
+        if model_dir:
+            pfile = os.path.join(model_dir, 'model.params')
+            sp_file = os.path.join(model_dir, 'model.config')
+            vocab_file = os.path.join(model_dir, 'vocab.json')
+            logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
+            m.save_parameters(pfile)
+            ## additional derived information from auto-searched configuration
+            ## helpful to have for runtime use of model (e.g. embedding size)
+            derived_info = {}
+            derived_info['embedding_size'] = m.embedding_size
+            config['derived_info'] = derived_info
+            if 'num_enc_layers' not in config.keys():
+                config['num_enc_layers'] = m.num_enc_layers
+                config['n_covars'] = int(m.n_covars)
+                config['l_map'] = m.label_map
+                config['covar_net_layers'] = m.covar_net_layers
+            specs = json.dumps(config, sort_keys=True, indent=4)
+            with open(sp_file, 'w') as f:
+                f.write(specs)
+            with open(vocab_file, 'w') as f:
+                f.write(m.vocabulary.to_json())
+        else:
+            raise Exception("Model write failed, output directory not provided")
 
 
 def get_trainer(c_args):
@@ -396,10 +291,8 @@ def get_trainer(c_args):
     vocab = load_vocab(c_args.vocab_file, encoding=c_args.str_encoding)
     voc_size = len(vocab)
     X, y, wd_freqs, _ = file_to_data(c_args.tr_vec_file, voc_size)
-    #X, y, wd_freqs, _, _ = collect_sparse_data(c_args.tr_vec_file, voc_size)
     total_test_wds = 0    
     if c_args.val_vec_file:
-        #val_X, val_y, _, total_test_wds, _ = collect_sparse_test(c_args.val_vec_file, voc_size)
         val_X, val_y, _, total_test_wds = file_to_data(c_args.val_vec_file, voc_size)
     ctx = mx.cpu() if not c_args.use_gpu else mx.gpu(0)
     model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(train_out_dir, 'MODEL')
@@ -446,7 +339,7 @@ def select_model(trainer, c_args):
     if not (c_args.scheduler == 'hyperband'):
         trainer.set_validate_each_epoch(False)
 
-    ## pre-cache vocabularies
+    ## pre-cache vocabularies before model selection (to avoid reloading for each model fit)
     sources = [ e['source'] for e in tmnt_config.get('embedding').data if e['source'] != 'random' ]
     logging.info('>> Pre-caching pre-trained embeddings/vocabularies: {}'.format(sources))
     trainer.pre_cache_vocabularies(sources)
@@ -542,7 +435,7 @@ def model_select_bow_vae(c_args):
     logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
     model, obj = train_with_single_config(c_args, trainer, best_config_dict)
     logging.info("Objective with final retrained model: {}".format(obj))
-    write_model(model, trainer.model_out_dir, best_config)
+    trainer.write_model(model, best_config)
     with open(os.path.join(log_dir, 'best.model.config'), 'w') as fp:
         specs = json.dumps(best_config)
         fp.write(specs)
@@ -572,7 +465,7 @@ def train_bow_vae(args):
     trainer, log_dir = get_trainer(args)
     config = ag.space.Dict(**config_dict)
     model, obj = train_with_single_config(args, trainer, config)
-    write_model(model, trainer.model_out_dir, config_dict)
+    trainer.write_model(model, config_dict)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
 

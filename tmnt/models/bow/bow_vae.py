@@ -118,13 +118,11 @@ class BaseBowVAE(BaseVAE):
         self.wd_freqs = wd_freqs
         self.num_val_words = num_val_words
 
-
     def _get_wd_freqs(self, X, max_sample_size=1000000):
         sample_size = min(max_sample_size, X.shape[0])
         data = X[:sample_size] 
-        sums = mx.nd.sum(data, axis=0)
+        sums = data.sum(axis=0)
         return sums
-
 
     def _get_model(self):
         raise NotImplementedError()
@@ -194,7 +192,6 @@ class BaseBowVAE(BaseVAE):
                 total_rec_loss += rec_loss.sum().asscalar()
                 total_kl_loss += kl_loss.sum().asscalar()
         if ((total_rec_loss + total_kl_loss) / total_words) < 709.0:
-            print("total_rec_loss = {}, total_kl_loss = {}, total words = {}".format(total_rec_loss, total_kl_loss, total_words))
             perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
         else:
             perplexity = 1e300
@@ -247,7 +244,7 @@ class BaseBowVAE(BaseVAE):
             X = mx.nd.sparse.csr_matrix(X)
             train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
         self.model = self._get_model()
-        self.model.set_biases(wd_freqs)  ## initialize bias weights to log frequencies
+        self.model.set_biases(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
         
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
@@ -275,9 +272,8 @@ class BaseBowVAE(BaseVAE):
 
                     
     def fit(self, X, y):
-        X = mx.nd.sparse.csr_matrix(X)
-        y = mx.nd.array(y)
-        return self.fit_with_validation(X, y, None, None)
+        self.fit_with_validation(X, y, None, None)
+        return self
 
 
 class BowVAE(BaseBowVAE):
@@ -377,9 +373,19 @@ class BowVAE(BaseBowVAE):
             Document topic distribution for X
         """
 
-        mx_array = mx.nd.array(X)
+        mx_array = mx.nd.array(X,dtype='float32')
         return self.model.encode_data(mx_array).asnumpy()
 
+
+    ### Example using fit API:
+    ### from tmnt.models.bow.bow_doc_loader import load_vocab
+    ### from tmnt.models.bow.bow_vae import BowVAE
+    ### from sklearn.datasets import load_svmlight_file
+    ### vocab = load_vocab('/Users/wellner/Devel/tmnt-data/20news/raw/20news.vocab')
+    ### X,y = load_svmlight_file('/Users/wellner/Devel/tmnt-data/20news/raw/train.vec', n_features=len(vocab))
+    ### vae = BowVAE(vocab)
+    ### estimator = vae.fit(X)
+    ### encodings = estimator.transform(X)
 
     def fit(self, X):
         """

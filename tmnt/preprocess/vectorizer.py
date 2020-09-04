@@ -30,6 +30,21 @@ class Vectorizer(object):
                                         encoding=encoding)
         self.json_rewrite = False
 
+    def _tokenize_string(self, string, vocab):
+        if string:
+            toks = self.tokenizer.tokenize(string)
+            tok_ids = [ vocab[token] for token in toks if token in vocab ]
+        else:
+            tok_ids = []
+        return tok_ids
+
+    def vectorize_string(self, string, vocab):
+        tok_ids = self._tokenize_string(string, vocab)
+        cnts = nlp.data.count_tokens(tok_ids).items()
+        vec = np.zeros(len(vocab))
+        for k,v in cnts:
+            vec[k] = v
+        return vec
 
     def get_counter_dir_parallel(self, data_dir, pat):
         raise NotImplementedError('Vectorizer must be instantiated as TextVectorizer or JsonVectorizer')
@@ -161,7 +176,7 @@ class JsonVectorizer(Vectorizer):
                 for l in fp:
                     js = json.loads(l)
                     txt = js.get(self.text_key)
-                    toks = self.tokenizer.tokenize(txt) if txt else []
+                    tok_ids = self._tokenize_string(txt, vocab)
                     try:
                         lstr = js[self.label_key]
                         if self.label_prefix > 0:
@@ -170,7 +185,6 @@ class JsonVectorizer(Vectorizer):
                             label_str = lstr
                     except KeyError:
                         label_str = "0"
-                    tok_ids = [vocab[token] for token in toks if token in vocab]
                     if (len(tok_ids) >= self.min_doc_size):
                         cnts_items = nlp.data.count_tokens(tok_ids).items()
                         js['sp_vec'] = [[k,v] for k,v in cnts_items]
@@ -185,7 +199,7 @@ class JsonVectorizer(Vectorizer):
             for l in fp:
                 js = json.loads(l)
                 txt = js.get(self.text_key)
-                toks = self.tokenizer.tokenize(txt) if txt else []
+                tok_ids = self._tokenize_string(txt, vocab)
                 try:
                     lstr = js[self.label_key]
                     if self.label_prefix > 0:
@@ -194,7 +208,6 @@ class JsonVectorizer(Vectorizer):
                         label_str = lstr
                 except KeyError:
                     label_str = "0"
-                tok_ids = [vocab[token] for token in toks if token in vocab]
                 if (len(tok_ids) >= self.min_doc_size):
                     cnts = nlp.data.count_tokens(tok_ids)
                     sp_vecs.append((sorted(cnts.items()), label_str))
@@ -252,12 +265,11 @@ class TextVectorizer(Vectorizer):
         with io.open(txt_file, 'r', encoding=self.encoding) as fp:
             doc_tok_ids = []
             for txt in fp:
-                toks = self.tokenizer.tokenize(txt)
-                tok_ids = [vocab[token] for token in toks if token in vocab]
+                tok_ids = self._tokenize_string(txt, vocab)
                 doc_tok_ids.extend(tok_ids)
             if (len(doc_tok_ids) >= self.min_doc_size):
                 cnts = nlp.data.count_tokens(doc_tok_ids)
-                sp_vecs.append((sorted(cnts.items()), "<unk>"))
+                sp_vecs.append((sorted(cnts.items()), "0"))
         return sp_vecs
 
     
