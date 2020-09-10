@@ -211,7 +211,7 @@ class JsonVectorizer(Vectorizer):
                 if (len(tok_ids) >= self.min_doc_size):
                     cnts = nlp.data.count_tokens(tok_ids)
                     sp_vecs.append((sorted(cnts.items()), label_str))
-        return sorted(sp_vecs)
+        return sp_vecs
 
     def vectorize_fn(self, file_and_vocab):
         if self.json_rewrite:

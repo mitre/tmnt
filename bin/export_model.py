@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import warnings
 
-from tmnt.bow_vae.runtime import BowNTMInference
+from tmnt.models.bow.runtime import BowNTMInference
 
 parser = argparse.ArgumentParser()
 

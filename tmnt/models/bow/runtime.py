@@ -9,6 +9,7 @@ import numpy as np
 import gluonnlp as nlp
 import io
 import os
+import scipy
 from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
 from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
@@ -56,18 +57,19 @@ class BowNTMInference(object):
 
 
     def get_model_details(self, sp_vec_file):
-        data_csr, labels, _, _ = file_to_data(sp_vec_file, len(self.vocab))        
+        data_csr, labels, _, _ = file_to_data(sp_vec_file, len(self.vocab))
+        data_csr = mx.nd.sparse.csr_matrix(data_csr, dtype='float32')
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
         w_pr = mx.nd.softmax(w, axis=1)
         ## 2) D x K matrix over the test data of topic probabilities
         covars = labels if self.covar_model else None
-        dt_matrix = self.encode_csr(data_csr, covars, use_probs=True)
+        dt_matrix = self.encode_data(data_csr, covars, use_probs=True)
         ## 3) D-length vector of document sizes
-        doc_lengths = mx.nd.sum(data_csr, axis=1)
+        doc_lengths = data_csr.sum(axis=1)
         ## 4) vocab (in same order as W columns)
         ## 5) frequency of each word w_i \in W over the test corpus
-        term_cnts = mx.nd.sum(data_csr, axis=0)
+        term_cnts = data_csr.sum(axis=0)
         return w_pr, dt_matrix, doc_lengths, term_cnts
 
 
@@ -106,6 +108,8 @@ class BowNTMInference(object):
         return self.encode_data(data, None)
 
     def encode_data(self, data_mat, labels, use_probs=False):
+        if isinstance(data_mat, scipy.sparse.csr.csr_matrix):
+            data_mat = mx.nd.sparse.csr_matrix(data_mat, dtype='float32')
         batch_size = min(data_mat.shape[0], self.max_batch_size)
         last_batch_size = data_mat.shape[0] % batch_size
         covars = mx.nd.one_hot(mx.nd.array(labels, dtype='int'), self.n_covars) \
