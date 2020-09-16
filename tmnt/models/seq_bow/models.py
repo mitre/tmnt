@@ -60,6 +60,7 @@ class TransformerBowVED(Block):
                                               batch_size = batch_size, ctx = ctx)
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.bow_vocab_size, activation=None)
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        self.latent_dist.post_init(self.model_ctx)
         if self.vocabulary.embedding is not None:
             emb = vocabulary.embedding.idx_to_vec
             emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=1) + 1e-10

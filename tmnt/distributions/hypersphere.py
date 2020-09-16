@@ -37,13 +37,17 @@ class HyperSphericalLatentDistribution(LatentDistribution):
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
+        self.been_initialized = False
         #self.vmf_samples.initialize(ctx=self.ctx, force_reinit=True)
         #self.vmf_samples.set_data(self.w_samples)
 
     def post_init(self, ctx):
         self.vmf_samples.set_data(self.w_samples.as_in_context(ctx))
+        self.been_initialized = True
 
     def hybrid_forward(self, F, data, batch_size, kld_const, vmf_samples):
+        if not self.been_initialized:
+            raise Exception("Hyperspherical distribution needs to be initialized after other layers by calling the 'post_init' method")
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
         kld = F.broadcast_to(kld_const, shape=(batch_size,))
