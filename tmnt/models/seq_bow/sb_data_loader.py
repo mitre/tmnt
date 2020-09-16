@@ -124,8 +124,8 @@ def load_dataset_basic_seq_bow(json_file, voc_size, vocab=None, json_text_key="t
                 ## Now, get the sparse vector
                 ndocs += 1
                 sp_vec_els = js[json_sp_key]
-                n_pairs, inds, vs = get_single_vec(sp_vec_els)
-                cumulative += n_pairs
+                pairs, inds, vs = get_single_vec(sp_vec_els)
+                cumulative += len(n_pairs)
                 total_num_words += sum(vs)
                 indptrs.append(cumulative)
                 values.extend(vs)
