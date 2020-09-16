@@ -65,8 +65,8 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
             ## Now, get the sparse vector
             ndocs += 1
             sp_vec_els = js[json_sp_key]
-            n_pairs, inds, vs = get_single_vec(sp_vec_els)
-            cumulative += n_pairs
+            pairs, inds, vs = get_single_vec(sp_vec_els)
+            cumulative += len(n_pairs)
             total_num_words += sum(vs)
             indptrs.append(cumulative)
             values.extend(vs)
