@@ -66,7 +66,7 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
             ndocs += 1
             sp_vec_els = js[json_sp_key]
             pairs, inds, vs = get_single_vec(sp_vec_els)
-            cumulative += len(n_pairs)
+            cumulative += len(pairs)
             total_num_words += sum(vs)
             indptrs.append(cumulative)
             values.extend(vs)
