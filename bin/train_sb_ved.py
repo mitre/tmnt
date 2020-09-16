@@ -3,7 +3,7 @@
 import os, sys
 import argparse
 
-from tmnt.seq_bow_ved.train import train_main
+from tmnt.models.seq_bow.train import train_main
 
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational Encoder-Decoder on Context-aware Encodings with BOW decoding')
 

@@ -17,7 +17,7 @@ from mxnet.gluon.block import HybridBlock, Block
 
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution
 from tmnt.distributions import GaussianUnitVarLatentDistribution, HyperSphericalLatentDistribution
-from tmnt.seq_vae.trans_seq_models import TransformerEncoder
+from tmnt.models.seq_seq.trans_seq_models import TransformerEncoder
 
 class TransformerBowVED(Block):
 

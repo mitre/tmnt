@@ -294,6 +294,8 @@ def get_trainer(c_args):
     total_test_wds = 0    
     if c_args.val_vec_file:
         val_X, val_y, _, total_test_wds = file_to_data(c_args.val_vec_file, voc_size)
+    else:
+        val_X, val_y, total_test_wds = None, None, 0
     ctx = mx.cpu() if not c_args.use_gpu else mx.gpu(0)
     model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(train_out_dir, 'MODEL')
     if not os.path.exists(model_out_dir):

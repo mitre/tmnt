@@ -17,11 +17,11 @@ import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet.gluon.block import HybridBlock, Block
-from tmnt.seq_vae.seq_data_loader import load_dataset_bert, load_dataset_basic
+from tmnt.models.seq_seq.seq_data_loader import load_dataset_bert, load_dataset_basic
 from gluonnlp.model import TransformerEncoderCell
 from tmnt.utils.log_utils import logging_config
 from tmnt.distributions import LogisticGaussianLatentDistribution, GaussianLatentDistribution, HyperSphericalLatentDistribution
-from tmnt.seq_vae.trans_seq_models import TransformerEncoder, InverseEmbed
+from tmnt.models.seq_seq.trans_seq_models import TransformerEncoder, InverseEmbed
 from gluonnlp.model.transformer import TransformerDecoder
 
 

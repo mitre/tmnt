@@ -7,8 +7,8 @@ import json
 import mxnet as mx
 import gluonnlp as nlp
 import io
-from tmnt.seq_vae.tokenization import BasicTokenizer
-from tmnt.seq_vae.trans_seq_models import PureTransformerVAE
+from tmnt.models.seq_seq.tokenization import BasicTokenizer
+from tmnt.models.seq_seq.trans_seq_models import PureTransformerVAE
 
 __all__ = ['SeqVAEInference']
 

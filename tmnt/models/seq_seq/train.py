@@ -20,9 +20,9 @@ import mxnet.ndarray as F
 from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet import autograd as ag
-from tmnt.seq_vae.trans_seq_models import BertTransVAE, PureTransformerVAE
+from tmnt.models.seq_seq.trans_seq_models import BertTransVAE, PureTransformerVAE
 from tmnt.utils.log_utils import logging_config
-from tmnt.seq_vae.seq_data_loader import load_dataset_bert, load_dataset_basic
+from tmnt.models.seq_seq.seq_data_loader import load_dataset_bert, load_dataset_basic
 
 __all__ = []
 

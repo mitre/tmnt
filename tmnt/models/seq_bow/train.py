@@ -19,10 +19,12 @@ from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet import autograd as ag
 from tmnt.coherence.npmi import EvaluateNPMI
-from tmnt.bow_vae.bow_doc_loader import load_vocab
-from tmnt.seq_bow_ved.models import TransformerBowVED, TransformerBowVEDTest, BertBowVED
+from tmnt.models.bow.bow_doc_loader import load_vocab
+from tmnt.models.seq_bow.models import TransformerBowVED, TransformerBowVEDTest, BertBowVED
 from tmnt.utils.log_utils import logging_config
-from tmnt.seq_bow_ved.sb_data_loader import load_dataset_basic_seq_bow, load_dataset_bert
+from tmnt.models.seq_bow.sb_data_loader import load_dataset_basic_seq_bow, load_dataset_bert
+
+__all__ = ['train_main']
 
 def get_wd_freqs(data_csr, max_sample_size=1000000):
     sample_size = min(max_sample_size, data_csr.shape[0])

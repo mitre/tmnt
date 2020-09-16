@@ -17,10 +17,10 @@ import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import nn
 from mxnet import autograd as ag
-from tmnt.seq_vae.tokenization import FullTokenizer, EncoderTransform, BasicTokenizer
+from tmnt.models.seq_seq.tokenization import FullTokenizer, EncoderTransform, BasicTokenizer
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 
-__all__ = ['load_dataset_bert', 'load_dataset_basic', 'load_dataset_basic_seq_bow']
+__all__ = ['load_dataset_bert', 'load_dataset_basic_seq_bow']
 
 trans_table = str.maketrans(dict.fromkeys(string.punctuation))
 
