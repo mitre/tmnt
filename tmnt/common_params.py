@@ -17,14 +17,13 @@ def get_base_argparser():
     parser.add_argument('--use_labels_as_covars', action='store_true', help='If labels/meta-data are provided, use as covariates in model', default=False)
     parser.add_argument('--scalar_covars', action='store_true', help='If labels/meta-data are provided, treat value as scalar rather than categorical', default=False)
     parser.add_argument('--topic_seed_file', type=str, default=None, help='Seed topic terms')
-    parser.add_argument('--eval_freq', type=int, help='Frequency of evaluation against validation data during training', default=1)
+    parser.add_argument('--eval_each_epoch', action='store_true', help='Evaluation against validation data during training', default=False)
     parser.add_argument('--encoder_coherence', action='store_true', help='Get top K terms for coherence via encoder Jacobian')
     parser.add_argument('--optimize_encoder_coherence', action='store_true', help='Optimize encoder-derived coherence')
     parser.add_argument('--num_final_evals', type=int, help='Number of times to evaluate selected configuration (with random initializations)', default=1)
     parser.add_argument('--str_encoding', type=str, default='utf-8')
     parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
     parser.add_argument('--use_gpu', action='store_true', help='Use GPU for fitting models', default=False)
-    parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch, perplexity, NPMI) on validation data into a separate file')
-    parser.add_argument('--scheduler', type=str, default='hyperband', help='Scheduler: (hyperband or fifo)')
+    parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch, perplexity, NPMI) on validation data into a separate file')    
     return parser
 

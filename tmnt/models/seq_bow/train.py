@@ -70,104 +70,80 @@ def compute_coherence(model, bow_vocab, k, test_data, log_terms=False, ctx=mx.cp
     return npmi
 
 
-def train_bow_seq_ved(args, model, bow_vocab, data_train, train_csr, data_test=None, ctx=mx.cpu(), use_bert=False):
-    
-    dataloader = mx.gluon.data.DataLoader(data_train, batch_size=args.batch_size,
-                                           shuffle=True, last_batch='rollover')
-    if data_test:
-        dataloader_test = mx.gluon.data.DataLoader(data_test, batch_size=args.batch_size,
-                                               shuffle=False) if data_test else None
+class SeqBowVEDTrainer(BaseTrainer):
+    def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, train_data, 
+                 test_data, train_labels=None, test_labels=None, use_gpu=False, val_each_epoch=True, rng_seed=1234):
+        super().__init__(train_data, test_data, train_labels, test_labels, rng_seed)
+        self.model_out_dir = model_out_dir
+        self.use_gpu = use_gpu
+        self.vocabulary = vocabulary
+        self.wd_freqs = wd_freqs
+        self.vocab_cache = {}
+        self.validate_each_epoch = val_each_epoch
+        self.seed_matrix = None
+        self.sent_size = sent_size
+        self.kld_wt = 1.0
 
-    num_train_examples = len(data_train)
-    num_train_steps = int(num_train_examples / args.batch_size * args.epochs)
-    warmup_ratio = args.warmup_ratio
-    num_warmup_steps = int(num_train_steps * warmup_ratio)
-    step_num = 0
-    differentiable_params = []
-    
-    lr = args.gen_lr
+    def _get_ved_model(self, config, reporter, ctx):
+        gen_lr = config.gen_lr
+        dec_lr = config.dec_lr
+        latent_distrib = config.latent_distribution
+        optimizer = config.optimizer
+        n_latent = int(config.n_latent)
+        batch_size = int(config.batch_size)
+        epochs = int(config.epochs)
+        ldist_def = config.latent_distribution
+        kappa = 0.0
+        alpha = 1.0
+        latent_distrib = ldist_def.dist_type
+        if latent_distrib == 'vmf':
+            kappa = ldist_def.kappa
+        elif latent_distrib == 'logistic_gaussian':
+            alpha = ldist_def.alpha
+        model = SeqBowVED(self.bert_base, len(self.vocabulary), latent_distrib, 
+                          n_latent=n_latent, max_sent_len=self.sent_size,
+                          kappa = kappa, 
+                          batch_size=batch_size,
+                          kld=self.kld_wt, wd_freqs=self.wd_freqs,
+                          warmup_ratio=self.warmup_ratio,
+                          optimizer = optimizer,
+                          epochs = epochs,
+                          gen_lr = gen_lr,
+                          dec_lr = dec_lr,
+                          ctx=ctx)
+        return model
 
-    gen_trainer = gluon.Trainer(model.encoder.collect_params(), args.optimizer,
-                            {'learning_rate': args.gen_lr, 'epsilon': 1e-6, 'wd':args.weight_decay})
-    lat_trainer = gluon.Trainer(model.latent_dist.collect_params(), 'adam', {'learning_rate': args.dec_lr, 'epsilon': 1e-6})
-    dec_trainer = gluon.Trainer(model.decoder.collect_params(), 'adam', {'learning_rate': args.dec_lr, 'epsilon': 1e-6})    
-
-    # Do not apply weight decay on LayerNorm and bias terms
-    for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
-        v.wd_mult = 0.0
-
-    for p in model.encoder.collect_params().values():
-        if p.grad_req != 'null':
-            differentiable_params.append(p)
-    
-    for epoch_id in range(args.epochs):
-        step_loss = 0
-        step_recon_ls = 0
-        step_kl_ls = 0
-        for batch_id, seqs in enumerate(dataloader):
-            step_num += 1
-            if step_num < num_warmup_steps:
-                new_lr = lr * step_num / num_warmup_steps
-            else:
-                offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * args.offset_factor)
-                new_lr = max(lr - offset, args.min_lr)
-            gen_trainer.set_learning_rate(new_lr)
-            with mx.autograd.record():
-                if use_bert:
-                    input_ids, valid_length, type_ids, output_vocab = seqs
-                    ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
-                                                             valid_length.astype('float32').as_in_context(ctx),
-                                                             output_vocab.as_in_context(ctx))
-                else:
-                    input_ids, output_vocab = seqs
-                    ls, recon_ls, kl_ls, predictions = model(input_ids.as_in_context(ctx), output_vocab.as_in_context(ctx))
-                ls = ls.mean()
-            ls.backward()
-            grads = [p.grad(ctx) for p in differentiable_params]
-            gluon.utils.clip_global_norm(grads, 1)
-            lat_trainer.step(1)
-            dec_trainer.step(1) # update decoder trainer associated weights
-            gen_trainer.step(1) # step of 1 since we averaged loss over batch
-            step_loss += ls.asscalar()
-            step_recon_ls += recon_ls.mean().asscalar()
-            step_kl_ls += kl_ls.mean().asscalar()
-            if (batch_id + 1) % (args.log_interval) == 0:
-                logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, gen_lr={:.7f}'
-                             .format(epoch_id, args.epochs, batch_id + 1, len(dataloader),
-                                     step_loss / args.log_interval, step_recon_ls / args.log_interval,
-                                     step_kl_ls / args.log_interval,
-                                     gen_trainer.learning_rate))
-                step_loss = 0
-                step_recon_ls = 0
-                step_kl_ls = 0
-                _ = compute_coherence(model, bow_vocab, 10, train_csr, log_terms=True)
-        if (epoch_id + 1) % args.save_interval == 0:
-            write_model(model, args, epoch_id)
-    write_model(model, args)
+    def train_model(self, config, reporter):
+        ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
+        ctx = ctx_list[0]
+        seq_ved_model = self._get_ved_model(config, reporter, ctx)
+        obj, npmi, perplexity, redundancy = seq_ved_model.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
+        return seq_ved_model.model, obj, npmi, perplexity, redundancy
 
 
-def write_model(m, args, epoch_id=0):
-    if args.model_dir:
-        suf = '_'+ str(epoch_id) if epoch_id > 0 else ''
-        pfile = os.path.join(args.model_dir, ('model.params' + suf))
-        conf_file = os.path.join(args.model_dir, ('model.config' + suf))
-        vocab_file = os.path.join(args.model_dir, ('vocab.json' + suf))
-        m.save_parameters(pfile)
-        dd = {}
-        dd['latent_dist'] = m.latent_distrib
-        dd['num_units'] = m.num_units
-        dd['num_heads'] = m.num_heads        
-        dd['hidden_size'] = m.hidden_size
-        dd['n_latent'] = m.n_latent
-        dd['transformer_layers'] = m.transformer_layers
-        dd['kappa'] = m.kappa
-        dd['sent_size'] = m.max_sent_len
-        dd['embedding_size'] = m.wd_embed_dim
-        specs = json.dumps(dd)
-        with open(conf_file, 'w') as f:
-            f.write(specs)
-        with open(vocab_file, 'w') as f:
-            f.write(m.vocabulary.to_json())
+    def write_model(m, args, epoch_id=0):
+        model_dir = self.model_out_dir
+        if model_dir:
+            suf = '_'+ str(epoch_id) if epoch_id > 0 else ''
+            pfile = os.path.join(model_dir, ('model.params' + suf))
+            conf_file = os.path.join(model_dir, ('model.config' + suf))
+            vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
+            m.save_parameters(pfile)
+            dd = {}
+            dd['latent_dist'] = m.latent_distrib
+            dd['num_units'] = m.num_units
+            dd['num_heads'] = m.num_heads        
+            dd['hidden_size'] = m.hidden_size
+            dd['n_latent'] = m.n_latent
+            dd['transformer_layers'] = m.transformer_layers
+            dd['kappa'] = m.kappa
+            dd['sent_size'] = m.max_sent_len
+            dd['embedding_size'] = m.wd_embed_dim
+            specs = json.dumps(dd)
+            with open(conf_file, 'w') as f:
+                f.write(specs)
+            with open(vocab_file, 'w') as f:
+                f.write(m.vocabulary.to_json())
 
 
 def train_main(args):
@@ -179,40 +155,29 @@ def train_main(args):
     logging.info(args)
     context = mx.cpu() if args.gpus is None or args.gpus == '' else mx.gpu(int(args.gpus))
     bow_vocab = load_vocab(args.bow_vocab_file)
+    data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab),
+                                                               max_len=args.sent_size, ctx=context)
+    wd_freqs = get_wd_freqs(data_csr)
+    model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context)
+    pad_id = vocab[vocab.padding_token]
+    trainer = SeqBowVEDTrainer(
+        train_out_dir,
+        args.sent_size,
+        vocab,
+        wd_freqs,
+        data_train,
+        data_train
+        )
+    try:
+        with open(args.config, 'r') as f:
+            config_dict = json.load(f)
+    except:
+        logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(args.config))
+        raise Exception("Invalid JSON configuration file")
+    config = ag.space.Dict(**config_dict)
+    model, obj = trainer.train_with_single_config(config, 1)
+    trainer.write_model(model, config_dict)
     
-    if args.use_bert:
-        data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab),
-                                                                   max_len=args.sent_size, ctx=context)
-        wd_freqs = get_wd_freqs(data_csr)
-        model = get_bert_model(args, bert_base, len(bow_vocab), wd_freqs, context)
-        pad_id = vocab[vocab.padding_token]
-        train_bow_seq_ved(args, model, bow_vocab, data_train, data_csr, data_test=None, ctx=context, use_bert=True)
-    else:
-        data_train, vocab, data_csr, _ = load_dataset_basic_seq_bow(args.input_file, len(bow_vocab),
-                                                       vocab=None, json_text_key=args.json_text_key, max_len=args.sent_size,
-                                                                    max_vocab_size=args.max_vocab_size, ctx=context)
-        emb = None
-        if args.embedding_source:
-            emb = nlp.embedding.create('glove', source = args.embedding_source)
-        if emb:
-            vocab.set_embedding(emb)
-            _, emb_size = vocab.embedding.idx_to_vec.shape
-            oov_items = 0
-            for word in vocab.embedding._idx_to_token:
-                if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                    oov_items += 1
-                    vocab.embedding[word] = mx.nd.random.normal(0.0, 0.1, emb_size)
-            logging.info("** There are {} out of vocab items **".format(oov_items))
-        else:
-            logging.info("** No pre-trained embedding provided, learning embedding weights from scratch **")
-        wd_freqs = get_wd_freqs(data_csr)
-        if vocab.embedding is not None:
-            emb_dim = len(vocab.embedding.idx_to_vec[0])
-        else:
-            emb_dim = args.wd_embed_dim
-
-        model = get_basic_model(args, len(bow_vocab), vocab, emb_dim, wd_freqs, context)
-        pad_id = vocab[vocab.padding_token]
-        train_bow_seq_ved(args, model, bow_vocab, data_train, data_csr, data_test=None, ctx=context, use_bert=False)
+    
             
 

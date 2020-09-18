@@ -3,7 +3,19 @@
 Copyright (c) 2020 The MITRE Corporation.
 """
 
+import logging
+
 class BaseVAE(object):
+
+    def __init__(self, log_method='log'):
+        self.log_method = log_method
+
+
+    def _output_status(self, status_string):
+        if self.log_method == 'print':
+            print(status_string)
+        elif self.log_method == 'log':
+            logging.info(status_string)
 
     def get_topic_vectors(self):
         raise NotImplementedError()
@@ -29,8 +41,8 @@ class BaseVAE(object):
 
         y: tensor representing covariate/labels associated with data elements
         """
-
         raise NotImplementedError()
+    
 
     def fit_with_validation(self, X, y, val_X, val_Y):
         """

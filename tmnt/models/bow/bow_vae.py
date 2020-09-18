@@ -91,7 +91,10 @@ class BaseBowVAE(BaseVAE):
     gpu_id: int, optional(default=-1)
         ID of GPU device, GPU training disabled if gpu_id<0.
     """
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print'):
+        
+        super().__init__(log_method=log_method)
+        
         self.reporter = reporter
         self.coherence_coefficient = coherence_coefficient
         self.lr = lr
@@ -173,7 +176,6 @@ class BaseBowVAE(BaseVAE):
         redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
         return npmi, redundancy
     
-        
     def _perplexity(self, dataloader, total_words):
         total_rec_loss = 0
         total_kl_loss  = 0
@@ -203,22 +205,23 @@ class BaseBowVAE(BaseVAE):
 
     def _get_val_dataloader(self, val_X, val_y):
         test_size = val_X.shape[0] * val_X.shape[1]
-        last_batch_size = val_X.shape[0] % self.batch_size
-        num_val_batches = val_X.shape[0] // self.batch_size
-        if last_batch_size > 0:
+        test_batch_size = min(val_X.shape[0], self.batch_size)
+        last_batch_size = val_X.shape[0] % test_batch_size if test_batch_size < val_X.shape[0] else test_batch_size
+        num_val_batches = val_X.shape[0] // test_batch_size
+        if last_batch_size > 0 and last_batch_size < test_batch_size:
             num_val_batches += 1
         if test_size < MAX_DESIGN_MATRIX:
             val_X = mx.nd.sparse.csr_matrix(val_X).tostype('default')
-            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
+            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, test_batch_size,
                                                               last_batch_handle='pad', shuffle=False),
                                             num_batches=num_val_batches, last_batch_size = last_batch_size)
         elif test_size < 1000000000:
             val_X = mx.nd.sparse.csr_matrix(val_X)
-            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, self.batch_size,
+            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, test_batch_size,
                                                               last_batch_handle='discard', shuffle=False),
                                                 num_batches=num_val_batches, last_batch_size = last_batch_size)
         else:
-            val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = self.batch_size,
+            val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = test_batch_size,
                                                                      last_batch_handle='discard', shuffle=False))
         return val_dataloader
 
@@ -260,13 +263,13 @@ class BaseBowVAE(BaseVAE):
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
                 trainer.step(data.shape[0])
-            if val_X is not None: # and (self.validate_each_epoch or epoch == self.epochs-1):
+            if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 ppl, npmi, redundancy = self.validate(val_X, val_y)
                 if self.reporter:
                     obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
                     b_obj = max(min(obj, 100.0), -100.0)
                     sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
-                    print("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}.".format(epoch, sc_obj, ppl, npmi, redundancy))
+                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}.".format(epoch, sc_obj, ppl, npmi, redundancy))
                     self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(), coherence=npmi, perplexity=ppl, redundancy=redundancy)
         return sc_obj, npmi, ppl, redundancy
 
@@ -278,8 +281,9 @@ class BaseBowVAE(BaseVAE):
 
 class BowVAE(BaseBowVAE):
 
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
-        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs)
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print'):
+        
+        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method)
 
 
     def npmi(self, X, k=10):
@@ -406,8 +410,9 @@ class BowVAE(BaseBowVAE):
 
 class MetaBowVAE(BaseBowVAE):
 
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, label_map=None, covar_net_layers=1, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40):
-        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs)
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, label_map=None, covar_net_layers=1, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print'):
+        
+        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method)
 
         self.covar_net_layers = covar_net_layers
         self.n_covars = len(label_map) if label_map else 1
