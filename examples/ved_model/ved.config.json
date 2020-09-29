@@ -1,0 +1,11 @@
+{
+    "latent_distribution": {"dist_type": "vmf", "kappa": 32.0},
+    "gen_lr": 0.00001,
+    "min_lr": 0.0000001,    
+    "dec_lr": 0.01,
+    "n_latent": 20,
+    "optimizer": "adam",
+    "epochs": 24,
+    "batch_size": 16,
+    "warmup_ratio": 0.1
+}
