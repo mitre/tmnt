@@ -91,9 +91,9 @@ class BaseBowVAE(BaseVAE):
     gpu_id: int, optional(default=-1)
         ID of GPU device, GPU training disabled if gpu_id<0.
     """
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print'):
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False):
         
-        super().__init__(log_method=log_method)
+        super().__init__(log_method=log_method, quiet=quiet)
         
         self.reporter = reporter
         self.coherence_coefficient = coherence_coefficient
@@ -263,6 +263,8 @@ class BaseBowVAE(BaseVAE):
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
                 trainer.step(data.shape[0])
+            if not quiet and not self.validate_each_epoch:
+                self._output_status("Epoch [{}] finished in {} seconds. ".format((time.time()-ts_epoch)))
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 ppl, npmi, redundancy = self.validate(val_X, val_y)
                 if self.reporter:
@@ -464,7 +466,6 @@ class MetaBowVAE(BaseBowVAE):
         -------
         Tuple of elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
         """
-
         return model(data, labels)
 
 

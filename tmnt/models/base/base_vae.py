@@ -7,8 +7,9 @@ import logging
 
 class BaseVAE(object):
 
-    def __init__(self, log_method='log'):
+    def __init__(self, log_method='log', quiet=False):
         self.log_method = log_method
+        self.quiet = quiet
 
 
     def _output_status(self, status_string):
