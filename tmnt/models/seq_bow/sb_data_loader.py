@@ -57,11 +57,10 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
             if json_text_key:
                 js = json.loads(line)
                 line = js[json_text_key]
-            if len(line.split(' ')) > 4:
-                ids, lens, segs = transform((line,)) # create BERT-ready inputs
-                x_ids.append(ids)
-                x_val_lens.append(lens)
-                x_segs.append(segs)
+            ids, lens, segs = transform((line,)) # create BERT-ready inputs
+            x_ids.append(ids)
+            x_val_lens.append(lens)
+            x_segs.append(segs)
             ## Now, get the sparse vector
             ndocs += 1
             sp_vec_els = js[json_sp_key]

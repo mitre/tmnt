@@ -22,7 +22,6 @@ class BaseTrainer(object):
 
 
     def x_get_mxnet_visible_gpus(self):
-
         gpu_count = 0
         while True:
             try:

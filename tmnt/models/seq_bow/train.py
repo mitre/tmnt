@@ -37,11 +37,10 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
 
 
 class SeqBowVEDTrainer(BaseTrainer):
-    def __init__(self, bert_base, model_out_dir, sent_size, vocabulary, wd_freqs, warmup_ratio, train_data, 
+    def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, warmup_ratio, train_data, 
                  test_data, train_labels=None, test_labels=None, use_gpu=False, val_each_epoch=True, rng_seed=1234):
         super().__init__(train_data, test_data, train_labels, test_labels, rng_seed)
         self.model_out_dir = model_out_dir
-        self.bert_base = bert_base
         self.use_gpu = use_gpu
         self.vocabulary = vocabulary
         self.wd_freqs = wd_freqs
@@ -68,7 +67,11 @@ class SeqBowVEDTrainer(BaseTrainer):
             kappa = ldist_def.kappa
         elif latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
-        model = SeqBowVED(self.bert_base, self.vocabulary, latent_distrib, 
+        bert_base, _ = nlp.model.get_model('bert_12_768_12',  
+                                             dataset_name='book_corpus_wiki_en_uncased',
+                                             pretrained=True, ctx=ctx, use_pooler=True,
+                                             use_decoder=False, use_classifier=False)
+        model = SeqBowVED(bert_base, self.vocabulary, latent_distrib, 
                           n_latent=n_latent, max_sent_len=self.sent_size,
                           kappa = kappa, 
                           batch_size=batch_size,
@@ -122,10 +125,9 @@ def train_main(args):
     print("Set logging config to {}".format(train_out_dir))
     logging_config(folder=train_out_dir, name='train_trans_vae', level=logging.INFO, no_console=False)
     logging.info(args)
-    context = mx.cpu()
     bow_vocab = load_vocab(args.bow_vocab_file)
     data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab),
-                                                               max_len=args.sent_size, ctx=context)
+                                                               max_len=args.sent_size, ctx=mx.cpu())
     wd_freqs = get_wd_freqs(data_csr)
     try:
         with open(args.config, 'r') as f:
@@ -135,9 +137,7 @@ def train_main(args):
         raise Exception("Invalid JSON configuration file")
     
     config = ag.space.Dict(**config_dict)    
-    #pad_id = vocab[vocab.padding_token]
     trainer = SeqBowVEDTrainer(
-        bert_base,
         train_out_dir,
         args.sent_size,
         bow_vocab,
