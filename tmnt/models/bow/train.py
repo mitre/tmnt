@@ -45,29 +45,6 @@ __all__ = ['model_select_bow_vae', 'train_bow_vae']
 
 MAX_DESIGN_MATRIX = 250000000 
 
-def x_get_mxnet_visible_gpus():
-    import mxnet as mx
-    gpu_count = 0
-    while True:
-        try:
-            arr = mx.np.array(1.0, ctx=mx.gpu(gpu_count))
-            arr.asnumpy()
-            gpu_count += 1
-        except Exception:
-            break
-    return [mx.gpu(i) for i in range(gpu_count)]
-
-def get_mxnet_visible_gpus():
-    ln = 0
-    t = datetime.datetime.now()
-    while ln < 1 and ((datetime.datetime.now() - t).seconds < 30):
-        time.sleep(1)
-        gpus = x_get_mxnet_visible_gpus()
-        ln = len(gpus)
-    if ln > 0:
-        return gpus
-    else:
-        raise Exception("Unable to get a gpu after 30 tries")
         
 
 class BowVAETrainer(BaseTrainer):
@@ -223,7 +200,7 @@ class BowVAETrainer(BaseTrainer):
         redundancy: topic model redundancy of top 5 terms for each topic
         """
         logging.debug("Evaluating with Config: {}".format(config))
-        ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
+        ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         vae_model = self._get_vae_model(config, reporter, ctx)
         obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)

@@ -83,7 +83,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         return model
 
     def train_model(self, config, reporter):
-        ctx_list = get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
+        ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         seq_ved_model = self._get_ved_model(config, reporter, ctx)
         obj, npmi, perplexity, redundancy = seq_ved_model.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
@@ -144,7 +144,8 @@ def train_main(args):
         wd_freqs,
         config.warmup_ratio,
         (data_train, data_csr),
-        (data_train, data_csr)        
+        (data_train, data_csr),
+        use_gpu = args.use_gpu
         )
 
     model, obj = trainer.train_with_single_config(config, 1)

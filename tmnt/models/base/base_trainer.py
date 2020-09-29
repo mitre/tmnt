@@ -4,6 +4,9 @@ Copyright (c) 2020 The MITRE Corporation.
 """
 
 import logging
+import mxnet as mx
+import datetime
+import time
 from tmnt.utils.random import seed_rng
 from autogluon.scheduler.reporter import FakeReporter
 
@@ -17,6 +20,31 @@ class BaseTrainer(object):
         self.test_labels  = test_labels
         self.rng_seed     = rng_seed
 
+
+    def x_get_mxnet_visible_gpus(self):
+
+        gpu_count = 0
+        while True:
+            try:
+                arr = mx.np.array(1.0, ctx=mx.gpu(gpu_count))
+                arr.asnumpy()
+                gpu_count += 1
+            except Exception:
+                break
+        return [mx.gpu(i) for i in range(gpu_count)]
+
+    def _get_mxnet_visible_gpus(self):
+        ln = 0
+        t = datetime.datetime.now()
+        while ln < 1 and ((datetime.datetime.now() - t).seconds < 30):
+            time.sleep(1)
+            gpus = self.x_get_mxnet_visible_gpus()
+            ln = len(gpus)
+        if ln > 0:
+            return gpus
+        else:
+            raise Exception("Unable to get a gpu after 30 tries")
+        
 
     def train_with_single_config(self, best_config, num_evals):
         rng_seed = self.rng_seed

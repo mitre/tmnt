@@ -8,7 +8,7 @@ from tmnt.models.seq_bow.train import train_main
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational Encoder-Decoder on Context-aware Encodings with BOW decoding')
 
 parser.add_argument('--input_file', type=str, help='Directory containing a JSON list file representing the input data')
-parser.add_argument('--use_gpu',type=str, help='Use GPU(s) if available', default='')
+parser.add_argument('--use_gpu',action='store_true', help='Use GPU(s) if available', default=False)
 parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='seqvae_exp_logs')
 parser.add_argument('--wd_embed_dim',type=int, help='Word embedding dimension (for output)', default=256)
 parser.add_argument('--kld_wt',type=float, help='Weight of the KL divergence term in variational loss', default=1.0)
