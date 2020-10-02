@@ -22,7 +22,7 @@ To use a trained model in this fashion within a larger application, or perhaps a
 the ``tmnt.bow_vae.runtime`` module provides a simple API to encode documents::
 
   python 
-  >>> from tmnt.bow_vae.runtime import BowNTMInference, TextEncoder
+  >>> from tmnt.models.bow.runtime import BowNTMInference, TextEncoder
   >>> infer = BowNTMInference('_model_dir/model.params','_model_dir/model.config', '_model_dir/vocab.json')
   >>> text_encoder = TextEncoder(infer)
   >>> encodings = text_encoder.encode_batch(['Greater Armenia would stretch from Karabakh, to the
