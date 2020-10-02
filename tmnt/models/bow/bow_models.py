@@ -12,7 +12,7 @@ from tmnt.distributions import HyperSphericalLatentDistribution
 from tmnt.distributions import GaussianUnitVarLatentDistribution
 import logging
 
-__all__ = ['BowNTM', 'MetaDataBowNTM']
+__all__ = ['BowNTM', 'MetaDataBowNTM', 'CoherenceRegularizer']
 
 
 class BowNTM(HybridBlock):

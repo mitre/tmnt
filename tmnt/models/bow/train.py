@@ -50,62 +50,18 @@ MAX_DESIGN_MATRIX = 250000000
 class BowVAETrainer(BaseTrainer):
     def __init__(self, model_out_dir, c_args, vocabulary, wd_freqs, train_data, 
                  test_data, total_tst_words, train_labels=None, test_labels=None, label_map=None, use_gpu=False, val_each_epoch=True, rng_seed=1234):
-        super().__init__(train_data, test_data, train_labels, test_labels, rng_seed)
+        super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
         self.model_out_dir = model_out_dir
         self.c_args = c_args
         self.use_gpu = use_gpu
         self.total_tst_words = total_tst_words
-        self.vocabulary = vocabulary
         self.label_map = label_map
         self.wd_freqs = wd_freqs
-        self.vocab_cache = {}
         self.validate_each_epoch = val_each_epoch
         self.seed_matrix = None
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
 
-    def _initialize_vocabulary(self, embedding_source, set_vocab=True):
-        """Initialize the embedding layer randomly or using pre-trained embeddings provided
-        
-        Parameters
-        ----------
-        embedding_source: string denoting a Gluon-NLP embedding source with the format <type>:<name> where <type>
-        is 'glove', 'fasttext' or 'word2vec' and <name> denotes the embedding name (e.g. 'glove.6B.300d').
-        See `gluonnlp.embedding.list_sources()` for a full list
-        config: `Configuration` for this model evaluation run
-
-        Returns
-        -------
-        vocab: Resulting GluonNLP vocabulary with initialized embedding
-        emb_size: Size of embedding (based on pre-trained embedding, random returns -1 for size to be set later)
-        """
-        vocab = self.vocabulary
-        if embedding_source != 'random':
-            if self.vocab_cache.get(embedding_source):
-                pt_embedding = copy.deepcopy(self.vocab_cache[embedding_source])
-            else:
-                e_type, e_name = tuple(embedding_source.split(':'))
-                if e_type == 'file':
-                    if not os.path.exists(e_name):
-                        raise Exception("Embedding file not found: {}".format(e_name))
-                    pt_embedding = nlp.embedding.TokenEmbedding.from_file(e_name)
-                else:
-                    pt_embedding = nlp.embedding.create(e_type, source=e_name)
-                self.vocab_cache[embedding_source] = copy.deepcopy(pt_embedding) ## cache another copy 
-            emb_size = len(pt_embedding.idx_to_vec[0])
-            if set_vocab:
-                vocab.set_embedding(pt_embedding)
-                num_oov = 0
-                for word in vocab.embedding._idx_to_token:
-                    if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                        logging.debug("Term {} is OOV".format(word))
-                        num_oov += 1
-                        vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
-                logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
-        else:
-            vocab.set_embedding(None) ## unset embedding
-            emb_size = -1
-        return vocab, emb_size
 
     def pre_cache_vocabularies(self, sources):
         for s in sources:

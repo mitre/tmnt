@@ -7,19 +7,67 @@ import logging
 import mxnet as mx
 import datetime
 import time
+import copy
 from tmnt.utils.random import seed_rng
 from autogluon.scheduler.reporter import FakeReporter
+import gluonnlp as nlp
 
 class BaseTrainer(object):
 
 
-    def __init__(self, train_data, test_data, train_labels, test_labels, rng_seed):
+    def __init__(self, vocabulary, train_data, test_data, train_labels, test_labels, rng_seed):
         self.train_data   = train_data
         self.test_data    = test_data
         self.train_labels = train_labels
         self.test_labels  = test_labels
         self.rng_seed     = rng_seed
+        self.vocabulary   = vocabulary
+        self.vocab_cache  = {}
 
+
+    def _initialize_vocabulary(self, embedding_source, set_vocab=True):
+        """Initialize the embedding layer randomly or using pre-trained embeddings provided
+        
+        Parameters
+        ----------
+        embedding_source: string denoting a Gluon-NLP embedding source with the format <type>:<name> where <type>
+        is 'glove', 'fasttext' or 'word2vec' and <name> denotes the embedding name (e.g. 'glove.6B.300d').
+        See `gluonnlp.embedding.list_sources()` for a full list
+        set_vocab: actually instantiate vocabulary (as opposed to just caching, when set_vocab=False)
+
+        Returns
+        -------
+        vocab: Resulting GluonNLP vocabulary with initialized embedding
+        emb_size: Size of embedding (based on pre-trained embedding, random returns -1 for size to be set later)
+        """
+        vocab = self.vocabulary
+        if embedding_source != 'random':
+            if self.vocab_cache.get(embedding_source):
+                pt_embedding = copy.deepcopy(self.vocab_cache[embedding_source])
+            else:
+                e_type, e_name = tuple(embedding_source.split(':'))
+                if e_type == 'file':
+                    if not os.path.exists(e_name):
+                        raise Exception("Embedding file not found: {}".format(e_name))
+                    pt_embedding = nlp.embedding.TokenEmbedding.from_file(e_name)
+                else:
+                    pt_embedding = nlp.embedding.create(e_type, source=e_name)
+                self.vocab_cache[embedding_source] = copy.deepcopy(pt_embedding) ## cache another copy 
+            emb_size = len(pt_embedding.idx_to_vec[0])
+            if set_vocab:
+                vocab.set_embedding(pt_embedding)
+                num_oov = 0
+                for word in vocab.embedding._idx_to_token:
+                    if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                        logging.debug("Term {} is OOV".format(word))
+                        num_oov += 1
+                        vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
+                logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
+        else:
+            vocab.set_embedding(None) ## unset embedding
+            emb_size = -1
+        return vocab, emb_size
+        
 
     def x_get_mxnet_visible_gpus(self):
         gpu_count = 0

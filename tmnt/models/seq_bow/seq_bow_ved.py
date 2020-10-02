@@ -21,13 +21,13 @@ from tmnt.coherence.npmi import EvaluateNPMI
 
 class SeqBowVED(BaseVAE):
 
-    def __init__(self, bert_base, vocab, latent_distribution, n_latent, max_sent_len, kappa, batch_size, kld, wd_freqs, warmup_ratio, optimizer, epochs, gen_lr, dec_lr, min_lr, ctx, log_method='log'):
+    def __init__(self, bert_base, vocab, latent_distribution, n_latent, redundancy_reg_penalty, max_sent_len, kappa, batch_size, kld, wd_freqs, warmup_ratio, optimizer, epochs, gen_lr, dec_lr, min_lr, ctx, log_method='log'):
         super().__init__(log_method=log_method)
         self.bert_base = bert_base
-        self.vocab_len = len(vocab)
         self.vocabulary = vocab
         self.latent_distribution = latent_distribution
         self.log_interval = 1
+        self.redundancy_reg_penalty = redundancy_reg_penalty
         self.n_latent = n_latent
         self.max_sent_len = max_sent_len
         self.kappa = kappa
@@ -45,11 +45,13 @@ class SeqBowVED(BaseVAE):
         self.ctx = ctx
 
     def _get_model(self):
-        model = BertBowVED(self.bert_base, self.vocab_len, self.latent_distribution, 
-                              n_latent=self.n_latent, max_sent_len=self.max_sent_len,
-                              kappa = self.kappa, 
-                              batch_size = self.batch_size,
-                              kld=1.0, wd_freqs=self.wd_freqs, ctx=self.ctx)
+        model = BertBowVED(self.bert_base, self.vocabulary, self.latent_distribution, 
+                           n_latent=self.n_latent, max_sent_len=self.max_sent_len,
+                           kappa = self.kappa, 
+                           batch_size = self.batch_size,
+                           kld=1.0, wd_freqs=self.wd_freqs,
+                           redundancy_reg_penalty=self.redundancy_reg_penalty,
+                           ctx=self.ctx)
         return model
 
     def fit(self, X, y):
