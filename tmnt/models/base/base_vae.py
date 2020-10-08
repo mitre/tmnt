@@ -10,7 +10,7 @@ class BaseVAE(object):
     def __init__(self, log_method='log', quiet=False):
         self.log_method = log_method
         self.quiet = quiet
-
+        self.model = None
 
     def _output_status(self, status_string):
         if self.log_method == 'print':

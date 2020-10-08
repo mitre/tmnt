@@ -217,11 +217,10 @@ class BertBowVED(Block):
         if (self.coherence_reg_penalty > 0.0  or self.redundancy_reg_penalty > 0) and self.embedding is not None:
             w = self.decoder.params.get('weight').data()
             emb = self.embedding.params.get('weight').data()
-            c, d = self.coherence_regularization(w, emb)
-            print("c = {}, d = {}".format(c, d))
-            return cur_loss + c + d
+            _, redundancy_loss = self.coherence_regularization(w, emb)
+            return cur_loss, redundancy_loss
         else:
-            return cur_loss
+            return cur_loss, mx.nd.zeros_like(cur_loss)
     
 
     def forward(self, toks, tok_types, valid_length, bow):
@@ -233,6 +232,6 @@ class BertBowVED(Block):
         recon_loss = -mx.nd.sparse.sum( rr, axis=1 )
         KL_loss = ( KL * self.kld_wt )
         loss = recon_loss + KL_loss
-        ii_loss = self.add_coherence_reg_penalty(loss)
-        return ii_loss, recon_loss, KL_loss, y
+        ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
+        return ii_loss, recon_loss, KL_loss, redundancy_loss, y
     

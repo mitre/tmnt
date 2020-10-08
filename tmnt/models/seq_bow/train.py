@@ -36,7 +36,7 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
 
 
 class SeqBowVEDTrainer(BaseTrainer):
-    def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, warmup_ratio, train_data, 
+    def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, num_val_words, warmup_ratio, train_data, 
                  test_data, train_labels=None, test_labels=None, use_gpu=False, val_each_epoch=True, rng_seed=1234):
         super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
         self.model_out_dir = model_out_dir
@@ -47,6 +47,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         self.sent_size = sent_size
         self.kld_wt = 1.0
         self.warmup_ratio = warmup_ratio
+        self.num_val_words = num_val_words
 
     def _get_ved_model(self, config, reporter, ctx):
         gen_lr = config.gen_lr
@@ -73,13 +74,16 @@ class SeqBowVEDTrainer(BaseTrainer):
                                              dataset_name='book_corpus_wiki_en_uncased',
                                              pretrained=True, ctx=ctx, use_pooler=True,
                                              use_decoder=False, use_classifier=False)
-        model = SeqBowVED(bert_base, vocab, latent_distrib, 
+        model = SeqBowVED(bert_base, vocab,
+                          coherence_coefficient=8.0,
+                          reporter=None,
+                          latent_distribution=latent_distrib,
                           n_latent=n_latent,
                           redundancy_reg_penalty=redundancy_reg_penalty,
                           max_sent_len=self.sent_size,
                           kappa = kappa, 
                           batch_size=batch_size,
-                          kld=self.kld_wt, wd_freqs=self.wd_freqs,
+                          kld=self.kld_wt, wd_freqs=self.wd_freqs, num_val_words = self.num_val_words,
                           warmup_ratio=self.warmup_ratio,
                           optimizer = optimizer,
                           epochs = epochs,
@@ -98,7 +102,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         return seq_ved_model.model, obj, npmi, perplexity, redundancy
 
 
-    def write_model(m, args, epoch_id=0):
+    def write_model(self, m, config, epoch_id=0):
         model_dir = self.model_out_dir
         if model_dir:
             suf = '_'+ str(epoch_id) if epoch_id > 0 else ''
@@ -107,16 +111,7 @@ class SeqBowVEDTrainer(BaseTrainer):
             vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
             m.save_parameters(pfile)
             dd = {}
-            dd['latent_dist'] = m.latent_distrib
-            dd['num_units'] = m.num_units
-            dd['num_heads'] = m.num_heads        
-            dd['hidden_size'] = m.hidden_size
-            dd['n_latent'] = m.n_latent
-            dd['transformer_layers'] = m.transformer_layers
-            dd['kappa'] = m.kappa
-            dd['sent_size'] = m.max_sent_len
-            dd['embedding_size'] = m.wd_embed_dim
-            specs = json.dumps(dd)
+            specs = json.dumps(config, sort_keys=True, indent=4)
             with open(conf_file, 'w') as f:
                 f.write(specs)
             with open(vocab_file, 'w') as f:
@@ -131,8 +126,13 @@ def train_main(args):
     logging_config(folder=train_out_dir, name='train_trans_vae', level=logging.INFO, no_console=False)
     logging.info(args)
     bow_vocab = load_vocab(args.bow_vocab_file)
-    data_train, bert_base, vocab, data_csr = load_dataset_bert(args.input_file, len(bow_vocab),
+    data_train, bert_base, vocab, data_csr = load_dataset_bert(args.tr_file, len(bow_vocab),
                                                                max_len=args.sent_size, ctx=mx.cpu())
+    if args.val_file:
+        data_val, _, _, val_csr = load_dataset_bert(args.val_file, len(bow_vocab), max_len=args.sent_size, ctx=mx.cpu())
+        val_wds = val_csr.sum().asscalar()
+    else:
+        data_val, val_csr, val_wds = None, None, None
     wd_freqs = get_wd_freqs(data_csr)
     try:
         with open(args.config, 'r') as f:
@@ -147,9 +147,10 @@ def train_main(args):
         args.sent_size,
         bow_vocab,
         wd_freqs,
+        val_wds, 
         config.warmup_ratio,
         (data_train, data_csr),
-        (data_train, data_csr),
+        (data_val, val_csr),
         use_gpu = args.use_gpu
         )
 
