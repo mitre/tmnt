@@ -37,17 +37,17 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
 
 class SeqBowVEDTrainer(BaseTrainer):
     def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, num_val_words, warmup_ratio, train_data, 
-                 test_data, train_labels=None, test_labels=None, use_gpu=False, val_each_epoch=True, rng_seed=1234):
+                 test_data, train_labels=None, test_labels=None, use_gpu=False, log_interval=10, rng_seed=1234):
         super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
         self.wd_freqs = wd_freqs
-        self.validate_each_epoch = val_each_epoch
         self.seed_matrix = None
         self.sent_size = sent_size
         self.kld_wt = 1.0
         self.warmup_ratio = warmup_ratio
         self.num_val_words = num_val_words
+        self.log_interval = log_interval
 
     def _get_ved_model(self, config, reporter, ctx):
         gen_lr = config.gen_lr
@@ -90,7 +90,8 @@ class SeqBowVEDTrainer(BaseTrainer):
                           gen_lr = gen_lr,
                           dec_lr = dec_lr,
                           min_lr = min_lr,
-                          ctx=ctx)
+                          ctx=ctx,
+                          log_interval=self.log_interval)
         return model
 
     def train_model(self, config, reporter):
@@ -151,7 +152,8 @@ def train_main(args):
         config.warmup_ratio,
         (data_train, data_csr),
         (data_val, val_csr),
-        use_gpu = args.use_gpu
+        use_gpu = args.use_gpu,
+        log_interval = args.log_interval
         )
 
     model, obj = trainer.train_with_single_config(config, 1)
