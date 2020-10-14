@@ -17,7 +17,8 @@ __all__ = ['BaseSelector']
 
 class BaseSelector(object):
 
-    def __init__(self, tmnt_config_space, iterations, searcher, scheduler, brackets, cpus_per_task, use_gpu, num_final_evals, rng_seed, log_dir):
+    def __init__(self, tmnt_config_space, iterations, searcher, scheduler, brackets, cpus_per_task, use_gpu,
+                 num_final_evals, rng_seed, log_dir):
         self.log_dir = log_dir
         self.tmnt_config_space = tmnt_config_space
         self.iterations = iterations

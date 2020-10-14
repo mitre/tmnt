@@ -14,8 +14,6 @@ Once the prepared files are in place, training a model invovles invoking the ``t
 found in the ``bin/`` directory.  Using the example data provided (20 news corpus), 
 a model is built on the data as follows::
 
-  mkdir _experiments
-
   python bin/train_model.py --tr_vec_file ./data/train.vec \
   --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
   --config ./examples/train_model/model.config \

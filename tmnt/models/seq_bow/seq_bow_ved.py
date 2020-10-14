@@ -154,6 +154,7 @@ class SeqBowVED(BaseVAE):
             step_loss = 0
             step_recon_ls = 0
             step_kl_ls = 0
+            step_red_ls = 0
             for batch_id, seqs in enumerate(dataloader):
                 step_num += 1
                 if step_num < num_warmup_steps:
@@ -177,11 +178,12 @@ class SeqBowVED(BaseVAE):
                 step_loss += ls.asscalar()
                 step_recon_ls += recon_ls.mean().asscalar()
                 step_kl_ls += kl_ls.mean().asscalar()
+                step_red_ls += redundancy_ls.mean().asscalar()
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, gen_lr={:.7f}'
+                    logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, red_loss={:.4f}, gen_lr={:.7f}'
                                  .format(epoch_id, self.epochs, batch_id + 1, len(dataloader),
                                          step_loss / self.log_interval, step_recon_ls / self.log_interval,
-                                         step_kl_ls / self.log_interval,
+                                         step_kl_ls / self.log_interval, step_red_ls / self.log_interval,
                                          gen_trainer.learning_rate))
                     step_loss = 0
                     step_recon_ls = 0

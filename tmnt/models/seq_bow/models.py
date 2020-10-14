@@ -218,7 +218,7 @@ class BertBowVED(Block):
             w = self.decoder.params.get('weight').data()
             emb = self.embedding.params.get('weight').data()
             _, redundancy_loss = self.coherence_regularization(w, emb)
-            return cur_loss, redundancy_loss
+            return (cur_loss + redundancy_loss), redundancy_loss
         else:
             return cur_loss, mx.nd.zeros_like(cur_loss)
     

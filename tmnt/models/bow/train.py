@@ -193,7 +193,8 @@ def get_trainer(c_args, val_each_epoch=True):
     i_dt = datetime.datetime.now()
     train_out_dir = \
         os.path.join(c_args.save_dir,
-                     "train_{}_{}_{}_{}_{}_{}_{}".format(i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond))
+                     "train_{}_{}_{}_{}_{}_{}_{}"
+                     .format(i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond))
     ll = c_args.log_level
     log_level = logging.INFO
     if ll.lower() == 'info':
@@ -213,7 +214,8 @@ def get_trainer(c_args, val_each_epoch=True):
         vpath = Path(c_args.vocab_file)
         tpath = Path(c_args.tr_vec_file)
         if not (vpath.is_file() and tpath.is_file()):
-            raise Exception("Vocab file {} and/or training vector file {} do not exist".format(c_args.vocab_file, c_args.tr_vec_file))
+            raise Exception("Vocab file {} and/or training vector file {} do not exist"
+                            .format(c_args.vocab_file, c_args.tr_vec_file))
     logging.info("Loading data via pre-computed vocabulary and sparse vector format document representation")
     vocab = load_vocab(c_args.vocab_file, encoding=c_args.str_encoding)
     voc_size = len(vocab)
@@ -299,6 +301,9 @@ def model_select_bow_vae(c_args):
                             c_args.num_final_evals,
                             c_args.seed,
                             log_dir)
+    sources = [ e['source'] for e in tmnt_config.get('embedding').data if e['source'] != 'random' ]
+    logging.info('>> Pre-caching pre-trained embeddings/vocabularies: {}'.format(sources))
+    trainer.pre_cache_vocabularies(sources)
     selector.select_model(trainer)
     
 
