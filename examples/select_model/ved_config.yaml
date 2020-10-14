@@ -1,0 +1,12 @@
+## Learnable hyper-parameters 
+---
+  epochs: 3
+  gen_lr: {range: [1e-5, 1e-4]}
+  min_lr: {range: [1e-8, 1e-6]}
+  dec_lr: {range: [1e-3, 5e-2]}
+  n_latent: {i_range: [20]}
+  redundancy_loss_wt: {range: [0.0, 0.05]}
+  optimizer: [adam]
+  warmup_ratio: {range: [0.05, 0.2]}
+  embedding_source: ["glove:glove.6B.200d"]
+  redundancy_reg_penalty: {range: [0.01, 0.1]}

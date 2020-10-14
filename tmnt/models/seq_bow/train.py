@@ -25,6 +25,7 @@ from tmnt.models.seq_bow.seq_bow_ved import SeqBowVED
 from tmnt.models.seq_bow.models import TransformerBowVED
 from tmnt.utils.log_utils import logging_config
 from tmnt.models.seq_bow.sb_data_loader import load_dataset_basic_seq_bow, load_dataset_bert
+from tmnt.modsel.configuration import TMNTConfig
 
 __all__ = ['train_main']
 
@@ -118,8 +119,7 @@ class SeqBowVEDTrainer(BaseTrainer):
             with open(vocab_file, 'w') as f:
                 f.write(m.vocabulary.to_json())
 
-
-def train_main(args):
+def get_trainer(args):
     i_dt = datetime.datetime.now()
     train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,
                                                         i_dt.minute,i_dt.second)
@@ -135,14 +135,6 @@ def train_main(args):
     else:
         data_val, val_csr, val_wds = None, None, None
     wd_freqs = get_wd_freqs(data_csr)
-    try:
-        with open(args.config, 'r') as f:
-            config_dict = json.load(f)
-    except:
-        logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(args.config))
-        raise Exception("Invalid JSON configuration file")
-    
-    config = ag.space.Dict(**config_dict)    
     trainer = SeqBowVEDTrainer(
         train_out_dir,
         args.sent_size,
@@ -155,7 +147,34 @@ def train_main(args):
         use_gpu = args.use_gpu,
         log_interval = args.log_interval
         )
+    return trainer, train_out_dir
 
+
+def model_select_main(c_args):
+    tmnt_config = TMNTConfig(c_args.config_space).get_configspace()
+    trainer, log_dir = get_trainer(c_args)
+    selector = BaseSelector(tmnt_config,
+                            c_args.iterations,
+                            c_args.searcher,
+                            c_args.scheduler,
+                            c_args.brackets,
+                            c_args.cpus_per_task,
+                            c_args.use_gpu,
+                            c_args.num_final_evals,
+                            c_args.seed,
+                            log_dir)
+    selector.select_model(trainer)
+    
+
+def train_main(c_args):
+    try:
+        with open(c_args.config, 'r') as f:
+            config_dict = json.load(f)
+    except:
+        logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(c_args.config))
+        raise Exception("Invalid JSON configuration file")
+    config = ag.space.Dict(**config_dict)    
+    trainer, _ = get_trainer(c_args)
     model, obj = trainer.train_with_single_config(config, 1)
     trainer.write_model(model, config_dict)
     

@@ -7,9 +7,9 @@ import yaml
 import io
 import autogluon as ag
 
-__all__ = ['TMNTConfig']
+__all__ = ['TMNTConfigBOW','TMNTConfigSeqBOW']
 
-class TMNTConfig(object):
+class TMNTConfigBase(object):
 
     def __init__(self, c_file):
         self.config_file = c_file
@@ -66,6 +66,12 @@ class TMNTConfig(object):
             return ag.space.Categorical(*categories)
         else:
             return None
+        
+
+class TMNTConfigBOW(TMNTConfigBase):
+
+    def __init__(self, c_file):
+        super().__init__(c_file)
 
     def get_configspace(self):
         cd = self.cd
@@ -107,5 +113,26 @@ class TMNTConfig(object):
             else:
                 latent_space.append(ag.space.Dict(**{'dist_type': 'gaussian'}))
         sp_dict['latent_distribution'] = ag.space.Categorical(*latent_space)
-
         return sp_dict
+
+
+class TMNTConfigSeqBOW(TMNTConfigBase):
+
+    def __init__(self, c_file):
+        super().__init__(c_file)
+
+    def get_configspace(self):
+        cd = self.cd
+        sp_dict = {}
+        sp_dict['epochs'] = int(cd['epochs'])
+        sp_dict['gen_lr'] = self._get_range_uniform('gen_lr', cd)
+        sp_dict['min_lr'] = self._get_range_uniform('min_lr', cd)
+        sp_dict['dec_lr'] = self._get_range_uniform('dec_lr', cd)
+        sp_dict['n_latent'] = self._get_range_integer('n_latent', cd)
+        sp_dict['batch_size'] = self._get_range_integer('batch_size', cd)
+        sp_dict['optimizer'] = self._get_categorical('optimizer', cd)
+        sp_dict['warmup_ratio'] = self._get_range_uniform('warmup_ratio', cd)
+        sp_dict['embedding_source'] = ag.space.Categorical(*cd['embedding_source'])
+        sp_dict['redundancy_reg_penalty'] = self._get_range_uniform('redundancy_reg_penalty', cd)
+        return sp_dict
+    

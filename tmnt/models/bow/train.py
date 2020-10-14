@@ -235,61 +235,8 @@ def get_trainer(c_args, val_each_epoch=True):
     return trainer, train_out_dir
 
 
-def select_model(trainer, c_args):
-    """
-    Top level call to model selection. 
-    """
-    tmnt_config_space = c_args.config_space
-    total_iterations = c_args.iterations
-    cpus_per_task = c_args.cpus_per_task
-    searcher = c_args.searcher
-    brackets = c_args.brackets
-    tmnt_config = TMNTConfig(tmnt_config_space).get_configspace()
-
-    ## pre-cache vocabularies before model selection (to avoid reloading for each model fit)
-    sources = [ e['source'] for e in tmnt_config.get('embedding').data if e['source'] != 'random' ]
-    logging.info('>> Pre-caching pre-trained embeddings/vocabularies: {}'.format(sources))
-    trainer.pre_cache_vocabularies(sources)
-    
-    @ag.args(**tmnt_config)
-    def exec_train_fn(args, reporter):
-        return trainer.train_model(args, reporter)
-
-    search_options = {
-        'num_init_random': 2,
-        'debug_log': True}
-
-    num_gpus = 1 if c_args.use_gpu else 0
-    if c_args.scheduler == 'hyperband':
-        hpb_scheduler = ag.scheduler.HyperbandScheduler(
-            exec_train_fn,
-            resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
-            searcher=searcher,
-            search_options=search_options,
-            num_trials=total_iterations,             #time_out=120,
-            time_attr='epoch',
-            reward_attr='objective',
-            type='stopping',
-            grace_period=1,
-            reduction_factor=3,
-            brackets=brackets)
-    else:
-        hpb_scheduler = ag.scheduler.FIFOScheduler(
-            exec_train_fn,
-            resource={'num_cpus': cpus_per_task, 'num_gpus': num_gpus},
-            searcher=searcher,
-            search_options=search_options,
-            num_trials=total_iterations,             #time_out=120
-            time_attr='epoch',
-            reward_attr='objective',
-            )
-    hpb_scheduler.run()
-    hpb_scheduler.join_jobs()
-    return hpb_scheduler
-
-
 def model_select_bow_vae(c_args):
-    tmnt_config = TMNTConfig(c_args.config_space).get_configspace()
+    tmnt_config = TMNTConfigBOW(c_args.config_space).get_configspace()
     trainer, log_dir = get_trainer(c_args, val_each_epoch = (not (c_args.searcher == 'random')))
     selector = BaseSelector(tmnt_config,
                             c_args.iterations,
@@ -315,7 +262,7 @@ def train_bow_vae(args):
         logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(args.config))
         raise Exception("Invalid Json Configuration File")
     dd = datetime.datetime.now()
-    trainer, log_dir = get_trainer(args, val_each_epoch=args.eval_each_epoch)
+    trainer, _ = get_trainer(args, val_each_epoch=args.eval_each_epoch)
     config = ag.space.Dict(**config_dict)
     model, obj = trainer.train_with_single_config(config, args.num_final_evals)
     trainer.write_model(model, config_dict)
