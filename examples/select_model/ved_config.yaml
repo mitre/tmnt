@@ -1,6 +1,7 @@
 ## Learnable hyper-parameters 
 ---
   epochs: 3
+  latent_distribution: [{dist_type: vmf, kappa: {range: [20.0, 80.0]}}]
   gen_lr: {range: [1e-5, 1e-4]}
   min_lr: {range: [1e-8, 1e-6]}
   dec_lr: {range: [1e-3, 5e-2]}
@@ -10,3 +11,4 @@
   warmup_ratio: {range: [0.05, 0.2]}
   embedding_source: ["glove:glove.6B.200d"]
   redundancy_reg_penalty: {range: [0.01, 0.1]}
+  batch_size: {i_range: [16]}

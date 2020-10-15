@@ -26,6 +26,7 @@ from tmnt.models.seq_bow.models import TransformerBowVED
 from tmnt.utils.log_utils import logging_config
 from tmnt.models.seq_bow.sb_data_loader import load_dataset_basic_seq_bow, load_dataset_bert
 from tmnt.modsel.configuration import TMNTConfigSeqBOW
+from tmnt.models.base.base_selector import BaseSelector
 
 __all__ = ['train_main']
 
@@ -37,7 +38,7 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
 
 
 class SeqBowVEDTrainer(BaseTrainer):
-    def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, num_val_words, warmup_ratio, train_data, 
+    def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, num_val_words, train_data, 
                  test_data, train_labels=None, test_labels=None, use_gpu=False, log_interval=10, rng_seed=1234):
         super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
         self.model_out_dir = model_out_dir
@@ -46,7 +47,6 @@ class SeqBowVEDTrainer(BaseTrainer):
         self.seed_matrix = None
         self.sent_size = sent_size
         self.kld_wt = 1.0
-        self.warmup_ratio = warmup_ratio
         self.num_val_words = num_val_words
         self.log_interval = log_interval
 
@@ -65,6 +65,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         embedding_source = config.embedding_source
         redundancy_reg_penalty = config.redundancy_reg_penalty
         vocab = self.vocabulary
+        warmup_ratio = config.warmup_ratio
         if embedding_source.find(':'):
             vocab, _ = self._initialize_vocabulary(embedding_source)
         if latent_distrib == 'vmf':
@@ -85,7 +86,7 @@ class SeqBowVEDTrainer(BaseTrainer):
                           kappa = kappa, 
                           batch_size=batch_size,
                           kld=self.kld_wt, wd_freqs=self.wd_freqs, num_val_words = self.num_val_words,
-                          warmup_ratio=self.warmup_ratio,
+                          warmup_ratio = warmup_ratio,
                           optimizer = optimizer,
                           epochs = epochs,
                           gen_lr = gen_lr,
@@ -141,7 +142,6 @@ def get_trainer(args):
         bow_vocab,
         wd_freqs,
         val_wds, 
-        config.warmup_ratio,
         (data_train, data_csr),
         (data_val, val_csr),
         use_gpu = args.use_gpu,
@@ -151,7 +151,7 @@ def get_trainer(args):
 
 
 def model_select_main(c_args):
-    tmnt_config = TMNTConfig(c_args.config_space).get_configspace()
+    tmnt_config = TMNTConfigSeqBOW(c_args.config_space).get_configspace()
     trainer, log_dir = get_trainer(c_args)
     selector = BaseSelector(tmnt_config,
                             c_args.iterations,

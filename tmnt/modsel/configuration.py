@@ -134,5 +134,17 @@ class TMNTConfigSeqBOW(TMNTConfigBase):
         sp_dict['warmup_ratio'] = self._get_range_uniform('warmup_ratio', cd)
         sp_dict['embedding_source'] = self._get_categorical('embedding_source', cd)
         sp_dict['redundancy_reg_penalty'] = self._get_range_uniform('redundancy_reg_penalty', cd)
+        latent_types = cd['latent_distribution']
+        latent_space = []
+        for lt in latent_types:
+            dist_type = lt['dist_type']
+            if dist_type == 'vmf':
+                latent_space.append(ag.space.Dict(**{'dist_type': 'vmf', 'kappa': self._get_range_uniform('kappa', lt)}))
+            elif dist_type == 'logistic_gaussian':
+                latent_space.append(ag.space.Dict(**{'dist_type': 'logistic_gaussian', 'alpha': self._get_range_uniform('alpha', lt)}))
+            else:
+                latent_space.append(ag.space.Dict(**{'dist_type': 'gaussian'}))
+        sp_dict['latent_distribution'] = ag.space.Categorical(*latent_space)
+
         return sp_dict
     
