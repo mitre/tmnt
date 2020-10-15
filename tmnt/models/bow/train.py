@@ -35,7 +35,7 @@ from tmnt.utils.log_utils import logging_config
 from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
 from tmnt.utils.random import seed_rng
 from tmnt.coherence.npmi import EvaluateNPMI
-from tmnt.modsel.configuration import TMNTConfig
+from tmnt.modsel.configuration import TMNTConfigBOW
 
 
 import autogluon as ag

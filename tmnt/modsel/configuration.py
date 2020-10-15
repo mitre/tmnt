@@ -132,7 +132,7 @@ class TMNTConfigSeqBOW(TMNTConfigBase):
         sp_dict['batch_size'] = self._get_range_integer('batch_size', cd)
         sp_dict['optimizer'] = self._get_categorical('optimizer', cd)
         sp_dict['warmup_ratio'] = self._get_range_uniform('warmup_ratio', cd)
-        sp_dict['embedding_source'] = ag.space.Categorical(*cd['embedding_source'])
+        sp_dict['embedding_source'] = self._get_categorical('embedding_source', cd)
         sp_dict['redundancy_reg_penalty'] = self._get_range_uniform('redundancy_reg_penalty', cd)
         return sp_dict
     
