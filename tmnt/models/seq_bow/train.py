@@ -78,7 +78,7 @@ class SeqBowVEDTrainer(BaseTrainer):
                                              use_decoder=False, use_classifier=False)
         model = SeqBowVED(bert_base, vocab,
                           coherence_coefficient=8.0,
-                          reporter=None,
+                          reporter=reporter,
                           latent_distribution=latent_distrib,
                           n_latent=n_latent,
                           redundancy_reg_penalty=redundancy_reg_penalty,
