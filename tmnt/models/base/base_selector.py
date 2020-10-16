@@ -16,6 +16,21 @@ from tabulate import tabulate
 __all__ = ['BaseSelector']
 
 class BaseSelector(object):
+    """
+    Perform model selection using AutoGluon with any type of topic model.
+
+    :param tmnt_config_space: Object defining the search space for a TMNT topic model
+    :type tmnt_config_space: :class:`tmnt.models.base.base_config.TMNTConfigBase`
+    :param int iterations: Number of total model evaluations
+    :param str searcher: Search algortihm used (random, bayesopt, skopt)
+    :param str scheduler: Scheduler for search (fifo, hyperband)
+    :param int brackets: Number of brackets (if using hyperband)
+    :param int cpus_per_task: Number of cpus to evaluate each model (increase to limit concurrency)
+    :param bool use_gpu: Whether to use GPUs when training each model
+    :param int num_final_evals: Number of model refits and evaluations (with different random seeds) using the best found configuration
+    :param int rng_seed: Random seed used for model selection evaluations
+    :param str log_dir: Directory for output of model selection info
+    """
 
     def __init__(self, tmnt_config_space, iterations, searcher, scheduler, brackets, cpus_per_task, use_gpu,
                  num_final_evals, rng_seed, log_dir):

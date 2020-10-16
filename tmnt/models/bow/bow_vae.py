@@ -276,7 +276,7 @@ class BaseBowVAE(BaseVAE):
                     b_obj = max(min(obj, 100.0), -100.0)
                     sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
                     self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                        .format(epoch, sc_obj, ppl, npmi, redundancy))
+                                        .format(epoch+1, sc_obj, ppl, npmi, redundancy))
                     self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(), coherence=npmi, perplexity=ppl, redundancy=redundancy)
         return sc_obj, npmi, ppl, redundancy
 

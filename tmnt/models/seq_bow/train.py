@@ -25,7 +25,7 @@ from tmnt.models.seq_bow.seq_bow_ved import SeqBowVED
 from tmnt.models.seq_bow.models import TransformerBowVED
 from tmnt.utils.log_utils import logging_config
 from tmnt.models.seq_bow.sb_data_loader import load_dataset_basic_seq_bow, load_dataset_bert
-from tmnt.modsel.configuration import TMNTConfigSeqBOW
+from tmnt.models.seq_bow.seq_bow_config import TMNTConfigSeqBOW
 from tmnt.models.base.base_selector import BaseSelector
 
 __all__ = ['train_main']

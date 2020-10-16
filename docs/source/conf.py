@@ -28,7 +28,7 @@ author = 'Ben Wellner'
 # The short X.Y version
 version = ''
 # The full version, including alpha/beta/rc tags
-release = '0.1'
+release = '0.5.rc'
 
 
 # -- General configuration ---------------------------------------------------
@@ -58,14 +58,14 @@ from sphinx_gallery.sorting import ExampleTitleSortKey
 # for Sphinx-Gallery. The examples directory ../examples is declared
 # with a relative path from the conf.py file location:
 sphinx_gallery_conf = {
-                        # path to your examples scripts
-                        'examples_dirs': '../../tmnt/examples',
-                        # path where to save gallery generated examples
-                        'gallery_dirs': 'auto_examples',
-                        # ignore files with this pattern.
-                        'ignore_pattern': '__init__\.py|.*\.sh',
-                        'within_subsection_order': ExampleTitleSortKey,
-                      }
+    # path to your examples scripts
+    'examples_dirs': '../../../tmnt/examples',
+    # path where to save gallery generated examples
+    'gallery_dirs': 'auto_examples',
+    # ignore files with this pattern.
+    'ignore_pattern': '__init__\.py|.*\.sh',
+    'within_subsection_order': ExampleTitleSortKey,
+}
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:

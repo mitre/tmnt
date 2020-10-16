@@ -30,12 +30,12 @@ from tmnt.models.bow.bow_doc_loader import DataIterLoader, load_vocab, file_to_d
 from tmnt.models.bow.bow_vae import BowVAE, MetaBowVAE
 from tmnt.models.bow.topic_seeds import get_seed_matrix_from_file
 from tmnt.models.bow.sensitivity_analysis import get_encoder_jacobians_at_data_nocovar
-
+from tmnt.models.bow.bow_config import TMNTConfigBOW
 from tmnt.utils.log_utils import logging_config
 from tmnt.utils.mat_utils import export_sparse_matrix, export_vocab
 from tmnt.utils.random import seed_rng
 from tmnt.coherence.npmi import EvaluateNPMI
-from tmnt.modsel.configuration import TMNTConfigBOW
+
 
 
 import autogluon as ag
