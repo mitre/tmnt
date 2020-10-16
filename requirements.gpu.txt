@@ -1,4 +1,4 @@
-mxnet-cu101==1.6.0
+mxnet-cu101==1.7.0
 gluonnlp==0.9.1
 autogluon==0.0.12
 mantichora==0.9.5
