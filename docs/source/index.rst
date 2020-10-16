@@ -15,57 +15,23 @@ Table of Contents
 =================
 
 .. toctree::
-   :caption: About
+   :caption: Guide
    :maxdepth: 3
 
    about/what_is
-
-.. toctree::
-   :caption: Getting Started
-   :maxdepth: 3
-
    getting_started/quickstart
-
-
-.. toctree::
-   :caption: Installation
-   :maxdepth: 3
-
    installing/installation
-
-
-.. toctree::
-   :caption: Training Topic Models
-   :maxdepth: 3
-
-   model_training/training
-
-   
-.. toctree::
-   :caption: Model Configuration
-   :maxdepth: 3
-
+   model_training/training   
    configuration/config_options
-   
-
-.. toctree::
-   :caption: Model Selection
-   :maxdepth: 3
-	      
    model_selection/model_selection
-
-
-.. toctree::
-   :caption: Options
-
    options/command_options
-
-
-.. toctree::
-   :caption: Inference and Evaluation
-
    inference/evaluation.rst
    inference/inference.rst
+   
+.. toctree::
+   :caption: Tutorials
+   :maxdepth: 3
+
 
 .. toctree::
    :caption: Advanced Use

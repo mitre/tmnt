@@ -120,6 +120,7 @@ class BaseBowVAE(BaseVAE):
         self.validate_each_epoch = True
         self.wd_freqs = wd_freqs
         self.num_val_words = num_val_words
+        self.model = None
 
     def _get_wd_freqs(self, X, max_sample_size=1000000):
         sample_size = min(max_sample_size, X.shape[0])
@@ -147,7 +148,7 @@ class BaseBowVAE(BaseVAE):
         npmi: float
            NPMI score.
         """
-        sorted_ids = self.model.get_top_k_terms(k)
+        sorted_ids = self.model.get_ordered_terms()
         num_topics = min(self.n_latent, sorted_ids.shape[-1])
         top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic)
@@ -162,7 +163,7 @@ class BaseBowVAE(BaseVAE):
         return npmi, redundancy
 
     def _npmi_with_dataloader(self, dataloader, k=10):
-        sorted_ids = self.model.get_top_k_terms(k)
+        sorted_ids = self.model.get_ordered_terms()
         num_topics = min(self.n_latent, sorted_ids.shape[-1])
         top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic)
@@ -500,7 +501,7 @@ class MetaBowVAE(BaseBowVAE):
         for covar in covars:
             mask = (y_train == covar).all(axis=1)
             X_covar, y_covar = mx.nd.array(X_train[mask], dtype=np.float32), mx.nd.array(y_train[mask], dtype=np.float32)
-            sorted_ids = self.model.get_top_k_terms(X_covar, y_covar)
+            sorted_ids = self.model.get_ordered_terms(X_covar, y_covar)
             top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
             npmi_eval = EvaluateNPMI(top_k_words_per_topic)
             npmi = npmi_eval.evaluate_csr_mat(X_covar)

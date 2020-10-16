@@ -94,7 +94,7 @@ class BowNTM(HybridBlock):
                 encoder.add(gluon.nn.Dropout(dr))
         return encoder
 
-    def get_top_k_terms(self, k):
+    def get_ordered_terms(self):
         """
         Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
         probability increases the most for a unit increase in a given topic score/probability
@@ -215,7 +215,7 @@ class MetaDataBowNTM(BowNTM):
 
 
 
-    def get_top_k_terms_with_covar_at_data(self, data, k, covar):
+    def get_ordered_terms_with_covar_at_data(self, data, k, covar):
         """
         Uses test/training data-point as the input points around which term sensitivity is computed
         """
@@ -340,80 +340,4 @@ class CoherenceRegularizer(HybridBlock):
         D1 = F.linalg.gemm2(F.transpose(T_norm), T_norm)
         D = F.sum(D1)
         return C * self.coherence_pen , D * self.redundancy_pen
-
-
-
-class BasicAE(HybridBlock):
-    """
-    Parameters
-    ----------
-    vocabulary : int size of the vocabulary
-    enc_dim : int number of dimension of input encoder (first FC layer)
-    n_latent : int number of dimensions of the latent dimension (i.e. number of topics)
-    gen_layers : int (default = 3) number of generator layers (after sample); size is the same as n_latent
-    batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
-    ctx : context device (default is mx.cpu())
-    """
-    def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-                 coherence_reg_penalty=0.0, kappa=100.0, alpha=1.0, batch_size=None,
-                 n_encoding_layers = 1, enc_dr=0.1,
-                 wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
-        super(BasicAE, self).__init__()
-        self.batch_size = batch_size
-        self._orig_batch_size = batch_size
-        self.n_latent = n_latent
-        self.model_ctx = ctx
-        self.vocab_size = len(vocabulary)
-        self.coherence_reg_penalty = coherence_reg_penalty
-        self.embedding_size = embedding_size
-        self.vocabulary = vocabulary
-        self.num_enc_layers = n_encoding_layers
-        if vocabulary.embedding:
-            assert vocabulary.embedding.idx_to_vec[0].size == embedding_size
-        with self.name_scope():
-            ## Add in topic seed constraints
-            self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
-            self.encoder = gluon.nn.Dense(in_units=self.embedding_size, units=enc_dim, activation='softrelu')
-            self.latent = gluon.nn.Dense(in_units=enc_dim, units=n_latent)
-            self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
-        self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-        if vocabulary.embedding:            
-            emb = vocabulary.embedding.idx_to_vec.transpose()
-            emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
-            emb_norm = emb / emb_norm_val
-            self.embedding.weight.set_data(emb_norm)
-            if fixed_embedding:
-                self.embedding.collect_params().setattr('grad_req', 'null')
-        ## Initialize and FIX decoder bias terms to corpus frequencies
-        if wd_freqs is not None:
-            freq_nd = wd_freqs + 1
-            total = freq_nd.sum()
-            log_freq = freq_nd.log() - freq_nd.sum().log()
-            bias_param = self.decoder.collect_params().get('bias')
-            bias_param.set_data(log_freq)
-            bias_param.grad_req = 'null'
-            self.out_bias = bias_param.data()
-
-
-    def hybrid_forward(self, F, data):
-        batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
-        emb_out = self.embedding(data)
-        enc_out = self.encoder(emb_out)
-        lat     = self.latent(enc_out)
-        dec_out = self.decoder(lat)
-        y = F.log_softmax(dec_out, axis=1)
-        loss = data * y
-        return loss
-
-
-#
-#                if not visualized_first_batch:
-#                    visualized_first_batch = True
-#                    dd = mx.sym.var('data')
-#                    r = model(dd)
-#                    logging.info("Type res = {}".format(r))
-#                    sh = {'data': data.shape}
-#                    #logging.info("Model specification: {}".format())
-#                    digraph = mx.visualization.plot_network(r[0], shape=sh, node_attrs={"fixedsize":"false"})
-#                    digraph.view()
 
