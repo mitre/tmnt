@@ -201,6 +201,8 @@ class BaseBowVAE(BaseVAE):
 
     def perplexity(self, X, y):
         dataloader = self._get_val_dataloader(X, y)
+        if self.num_val_words < 0:
+            self.num_val_words = X.sum()
         return self._perplexity(dataloader, self.num_val_words)
 
     def _get_val_dataloader(self, val_X, val_y):
@@ -291,7 +293,7 @@ class BowVAE(BaseBowVAE):
 
 
     def npmi(self, X, k=10):
-        self._npmi(X, None, k=k)
+        return self._npmi(X, None, k=k)
 
     def perplexity(self, X):
         """
