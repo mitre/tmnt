@@ -1,4 +1,4 @@
-mxnet==1.7.0
+mxnet==1.7.0.post1
 gluonnlp==0.9.1
 autogluon==0.0.12
 mantichora==0.9.5
