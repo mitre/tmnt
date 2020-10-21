@@ -15,12 +15,22 @@ Table of Contents
 =================
 
 .. toctree::
-   :caption: Guide
+   :caption: Intro
    :maxdepth: 3
 
    about/what_is
-   getting_started/quickstart
+
+.. toctree::
+   :caption: Installation
+   :maxdepth: 3
+	      
    installing/installation
+
+.. toctree::
+   :caption: Guide
+   :maxdepth: 3
+	      
+   getting_started/quickstart	     
    model_training/training   
    configuration/config_options
    model_selection/model_selection
@@ -40,18 +50,14 @@ Table of Contents
    user_guide/modeling_covariates
    user_guide/guided
    user_guide/sequence_vae
-
-.. toctree::
-   :caption: Training Custom Word Embeddings
-   :maxdepth: 3
-
-   embeddings/embeddings	      
+   embeddings/embeddings	         
 
 .. toctree::
    :caption: API
-   :maxdepth: 3
-	      
-   autoapi/index
+   :maxdepth: 1
+
+   api.rst
+   .. autoapi/index
 
 
 Indices and tables

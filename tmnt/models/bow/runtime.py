@@ -10,7 +10,7 @@ import gluonnlp as nlp
 import io
 import os
 import scipy
-from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
+from tmnt.models.bow.bow_models import BowVAEModel, MetaDataBowVAEModel
 from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
 from tmnt.preprocess.vectorizer import TextVectorizer
@@ -44,13 +44,13 @@ class BowNTMInference(object):
             self.n_covars = config['n_covars']
             self.label_map = config['l_map']
             self.covar_net_layers = config.get('covar_net_layers')
-            self.model = MetaDataBowNTM(self.label_map, self.n_covars,
+            self.model = MetaDataBowVAEModel(self.label_map, self.n_covars,
                                         self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
                                         n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
                                         covar_net_layers = self.covar_net_layers, ctx=ctx)
         else:
             self.covar_model = False
-            self.model = BowNTM(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
+            self.model = BowVAEModel(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
                                 n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
                                 ctx=ctx)
         self.model.load_parameters(str(param_file), allow_missing=False)

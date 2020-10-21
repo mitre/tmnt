@@ -13,7 +13,16 @@ from autogluon.scheduler.reporter import FakeReporter
 import gluonnlp as nlp
 
 class BaseTrainer(object):
+    """Abstract base class for topic model trainers. 
 
+    Objects of this class provide all functionality for training a topic model, including 
+    handle data prep/loading, model definition, and training parameters.
+
+    Args:
+        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
+        train_data (array-like or sparse matrix): Training input data tensor
+        test_data (array-like or sparse matrix): Testing/validation input data tensor
+    """
 
     def __init__(self, vocabulary, train_data, test_data, train_labels, test_labels, rng_seed):
         self.train_data   = train_data
@@ -28,17 +37,16 @@ class BaseTrainer(object):
     def _initialize_vocabulary(self, embedding_source, set_vocab=True):
         """Initialize the embedding layer randomly or using pre-trained embeddings provided
         
-        Parameters
-        ----------
-        embedding_source: string denoting a Gluon-NLP embedding source with the format <type>:<name> where <type>
-        is 'glove', 'fasttext' or 'word2vec' and <name> denotes the embedding name (e.g. 'glove.6B.300d').
-        See `gluonnlp.embedding.list_sources()` for a full list
-        set_vocab: actually instantiate vocabulary (as opposed to just caching, when set_vocab=False)
+        Args:
+            embedding_source (str): denoting a Gluon-NLP embedding source with the format <type>:<name> where <type>
+                is 'glove', 'fasttext' or 'word2vec' and <name> denotes the embedding name (e.g. 'glove.6B.300d').
+                See `gluonnlp.embedding.list_sources()` for a full list
+            set_vocab (bool): actually instantiate vocabulary (as opposed to just caching, when set_vocab=False)
 
-        Returns
-        -------
-        vocab: Resulting GluonNLP vocabulary with initialized embedding
-        emb_size: Size of embedding (based on pre-trained embedding, random returns -1 for size to be set later)
+        Returns:
+            (tuple): tuple containing:
+                vocab (`gluonnlp.Vocab`): Resulting GluonNLP vocabulary with initialized embedding
+                emb_size (int): Size of embedding (based on pre-trained embedding, random returns -1 for size to be set later)
         """
         vocab = self.vocabulary
         if embedding_source != 'random':
@@ -70,6 +78,11 @@ class BaseTrainer(object):
         
 
     def x_get_mxnet_visible_gpus(self):
+        """Gets visible gpus from MXNet.
+        
+        Returns:
+            `mxnet.context.Context` representing the GPU context
+        """
         gpu_count = 0
         while True:
             try:
@@ -93,20 +106,35 @@ class BaseTrainer(object):
             raise Exception("Unable to get a gpu after 30 tries")
         
 
-    def train_with_single_config(self, best_config, num_evals):
+    def train_with_single_config(self, config, num_evals):
+        """Fit models with a single configuration and report the value of the objective function.
+
+        This method trains a model defined by the configuration `num_evals` times. Each time
+        the model weights are randomly initialized with a different RNG seed. The results
+        of each run are captured and mean and std reported.
+        
+        Args:
+            config (dict): Configuration instance with hyperparameter values for model definition.
+            num_evals (int): Number of model fits and evaluations to perform (with random initialization)
+
+        Returns:
+            (tuple): Tuple containing:
+                model (:class:`tmnt.models.base.base_vae.BaseVAE`): VAE Model instance with trained/fit parameters.
+                objective (float): Value of the objective function with the best model.
+        """
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
         best_model = None
         if self.test_data is not None:
             #if c_args.tst_vec_file:
             #    trainer.set_heldout_data_as_test()        
-            logging.info("Training with config: {}".format(best_config))
+            logging.info("Training with config: {}".format(config))
             npmis, perplexities, redundancies, objectives = [],[],[],[]
             ntimes = int(num_evals)
             for i in range(ntimes):
                 seed_rng(rng_seed) # update RNG
                 rng_seed += 1
-                model, obj, npmi, perplexity, redundancy = self.train_model(best_config, FakeReporter())
+                model, obj, npmi, perplexity, redundancy = self.train_model(config, FakeReporter())
                 npmis.append(npmi)
                 perplexities.append(perplexity)
                 redundancies.append(redundancy)
@@ -132,7 +160,7 @@ class BaseTrainer(object):
                 logging.info("Final {} Objective    ==> {}".format(test_type, objectives[0]))            
             return best_model, best_obj
         else:
-            model, obj, _, _, _ = self.train_model(best_config, FakeReporter())
+            model, obj, _, _, _ = self.train_model(config, FakeReporter())
             return model, obj
 
         

@@ -13,7 +13,6 @@ from tmnt.distributions.latent_distrib import LatentDistribution
 __all__ = ['HyperSphericalLatentDistribution']
 
 
-
 class HyperSphericalLatentDistribution(LatentDistribution):
 
     def __init__(self, n_latent, kappa=100.0, dr=0.2, ctx=mx.cpu()):

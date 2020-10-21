@@ -13,25 +13,25 @@ import io
 from autogluon.scheduler.reporter import FakeReporter
 from tabulate import tabulate
 
-__all__ = ['BaseSelector']
 
 class BaseSelector(object):
-    """
+    """Base model selector.
+
     Perform model selection using AutoGluon with any type of topic model.
 
-    :param tmnt_config_space: Object defining the search space for a TMNT topic model
-    :type tmnt_config_space: :class:`tmnt.models.base.base_config.TMNTConfigBase`
-    :param int iterations: Number of total model evaluations
-    :param str searcher: Search algortihm used (random, bayesopt, skopt)
-    :param str scheduler: Scheduler for search (fifo, hyperband)
-    :param int brackets: Number of brackets (if using hyperband)
-    :param int cpus_per_task: Number of cpus to evaluate each model (increase to limit concurrency)
-    :param bool use_gpu: Whether to use GPUs when training each model
-    :param int num_final_evals: Number of model refits and evaluations (with different random seeds) using the best found configuration
-    :param int rng_seed: Random seed used for model selection evaluations
-    :param str log_dir: Directory for output of model selection info
+    Args:
+        tmnt_config_space(`tmnt.models.base.base_config.TMNTConfigBase`): Object defining the search space for a TMNT topic model
+        iterations (int): Number of total model evaluations
+        searcher (str): Search algortihm used (random, bayesopt, skopt)
+        scheduler (str): Scheduler for search (fifo, hyperband)
+        brackets (int): Number of brackets (if using hyperband)
+        cpus_per_task (int): Number of cpus to evaluate each model (increase to limit concurrency)
+        use_gpu (bool): Whether to use GPUs when training each model
+        num_final_evals (int): Number of model refits and evaluations (with different random seeds) using the best found configuration
+        rng_seed (int): Random seed used for model selection evaluations
+        log_dir (str): Directory for output of model selection info
     """
-
+    
     def __init__(self, tmnt_config_space, iterations, searcher, scheduler, brackets, cpus_per_task, use_gpu,
                  num_final_evals, rng_seed, log_dir):
         self.log_dir = log_dir
@@ -64,9 +64,7 @@ class BaseSelector(object):
         return result
     
 
-
     def _select(self, trainer):
-        
         @ag.args(**self.tmnt_config_space)
         def exec_train_fn(args, reporter):
             return trainer.train_model(args, reporter)
@@ -105,6 +103,14 @@ class BaseSelector(object):
 
 
     def select_model(self, trainer):
+        """Select best model using the given model trainer.
+
+        Performs model selection using AutoGluon according to the provided configuration space
+        and various model selection options, e.g. searcher and scheduler, number of iterations
+
+        Args:
+            trainer (:class:`tmnt.models.base.base_trainer.BaseTrainer`): A trainer
+        """
         dd = datetime.datetime.now()
         scheduler = self._select(trainer)
         best_config_spec = scheduler.get_best_config()

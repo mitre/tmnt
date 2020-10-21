@@ -20,7 +20,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.models.bow.bow_doc_loader import DataIterLoader, SparseMatrixDataIter
-from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
+from tmnt.models.bow.bow_models import BowVAEModel, MetaDataBowVAEModel
 from tmnt.models.base.base_vae import BaseVAE
 
 from tmnt.coherence.npmi import EvaluateNPMI
@@ -300,15 +300,11 @@ class BowVAE(BaseBowVAE):
         """
         Calculate approximate perplexity for data X and y
 
-        Parameters
-        ----------
-        X: array-like or sparse matrix, [n_samples, vocab_size]
-           Document word matrix.
+        Parameters:
+            X (array-like or sparse matrix): Document word matrix of shape [n_samples, vocab_size]
 
-        Returns
-        -------
-        perplexity: float
-           Perplexity score.
+        Returns:
+           (float): Perplexity score.
         """
 
         return super().perplexity(X, None)
@@ -317,27 +313,24 @@ class BowVAE(BaseBowVAE):
         """
         Forward pass of BowVAE model given the supplied data
 
-        Parameters
-        ----------
-        model: MXNet model that returns elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, reconstruction
+        Parameters:
+            model (:class:`BowVAEModel`): Core VAE model for bag-of-words topic model
+            data (:class:`mxnet.ndarray.NDArray`): Document word matrix of shape (n_train_samples, vocab_size)
+            labels: Ignored
 
-        data:  {array-like, sparse matrix} of shape (n_train_samples, vocab_size)
-           Document word matrix.
-
-        labels: Ignored
-
-        Returns
-        -------
-        Tuple of elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, reconstruction
+        Returns:
+            (tuple): Tuple of:
+                elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, reconstruction
         """
         return model(data)
 
 
     def _get_model(self):
         """
-        Returns
-        -------
-        MXNet model initialized using provided hyperparameters
+        Initializes embedding weights and returns a `BowVAEModel` with hyperparameters provided.
+
+        Returns:
+            (:class:`BowVAEModel`) initialized using provided hyperparameters
         """
         #vocab, emb_size = self._initialize_embedding_layer(self.embedding_source, self.embedding_size)
         if self.embedding_source != 'random' and self.vocabulary.embedding is None:
@@ -348,7 +341,7 @@ class BowVAE(BaseBowVAE):
         else:
             emb_size = self.embedding_size
         model = \
-                BowNTM(self.vocabulary, self.enc_hidden_dim, self.n_latent, emb_size,
+                BowVAEModel(self.vocabulary, self.enc_hidden_dim, self.n_latent, emb_size,
                        fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
                        coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                        kappa=self.kappa, alpha=self.alpha,
@@ -361,10 +354,8 @@ class BowVAE(BaseBowVAE):
         """
         Get topic vectors of the fitted model.
 
-        Returns
-        -------
-        topic_vectors : shape=(n_latent, vocab_size)
-            Topic word distribution. topic_distribution[i, j] represents word j in topic i.
+        Returns:
+            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
         """
 
         return self.model.get_topic_vectors().asnumpy() 
@@ -373,15 +364,11 @@ class BowVAE(BaseBowVAE):
         """
         Transform data X according to the fitted model.
 
-        Parameters
-        ----------
-        X: {array-like, sparse matrix} of shape {n_samples, n_features)
-            Document word matrix.
+        Parameters:
+        X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features}
 
-        Returns
-        -------
-        topic_distribution : shape=(n_samples, n_latent)
-            Document topic distribution for X
+        Returns:
+            topic_distribution : shape=(n_samples, n_latent) Document topic distribution for X
         """
 
         mx_array = mx.nd.array(X,dtype='float32')
@@ -402,14 +389,11 @@ class BowVAE(BaseBowVAE):
         """
         Fit BowVAE model according to the given training data.
 
-        Parameters
-        ----------
-        X: {array-like, sparse matrix} of shape (n_train_samples, vocab_size)
-           Document word matrix.
+        Parameters:
+            X ({array-like, sparse matrix}): Document word matrix of shape (n_train_samples, vocab_size)
 
-        Returns
-        -------
-        Tuple of validation/objective scores, if applicable
+        Returns:
+            (`BowVAE`): Self
         """
 
         return super().fit(X, None)
@@ -443,7 +427,7 @@ class MetaBowVAE(BaseBowVAE):
         else:
             emb_size = self.embedding_size
         model = \
-            MetaDataBowNTM(self.label_map, n_covars=self.n_covars,
+            MetaDataBowVAEModel(self.label_map, n_covars=self.n_covars,
                            vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
                            fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,

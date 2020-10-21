@@ -1,6 +1,6 @@
 
-What is TMNT
-============
+Overview
+========
 
 The Topic Modeling Neural Toolkit (TMNT) provides implementations for
 training and applying neural network variational autoencoders (VAEs) on text data in order to

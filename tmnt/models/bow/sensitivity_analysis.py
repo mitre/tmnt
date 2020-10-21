@@ -7,7 +7,7 @@ import mxnet as mx
 import numpy as np
 import time
 import logging
-from tmnt.models.bow.bow_models import BowNTM, MetaDataBowNTM
+from tmnt.models.bow.bow_models import BowVAEModel, MetaDataBowVAEModel
 from tmnt.models.bow.runtime import BowNTMInference
 from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_data
 

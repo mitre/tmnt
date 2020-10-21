@@ -12,25 +12,38 @@ from tmnt.distributions import HyperSphericalLatentDistribution
 from tmnt.distributions import GaussianUnitVarLatentDistribution
 import logging
 
-__all__ = ['BowNTM', 'MetaDataBowNTM', 'CoherenceRegularizer']
+__all__ = ['BowVAEModel', 'MetaDataBowVAEModel', 'CoherenceRegularizer']
 
 
-class BowNTM(HybridBlock):
+class BowVAEModel(HybridBlock):
     """
+    Defines the neural architecture for a bag-of-words topic model.
+
     Parameters
     ----------
-    vocabulary : int size of the vocabulary
-    enc_dim : int number of dimension of input encoder (first FC layer)
-    n_latent : int number of dimensions of the latent dimension (i.e. number of topics)
-    gen_layers : int (default = 3) number of generator layers (after sample); size is the same as n_latent
-    batch_size : int (default None) provided only at training time (or when model is Hybridized) - otherwise will be inferred
-    ctx : context device (default is mx.cpu())
+    vocabulary: int 
+        size of the vocabulary
+
+    enc_dim: int 
+        number of dimension of input encoder (first FC layer)
+
+    n_latent: int 
+        number of dimensions of the latent dimension (i.e. number of topics)
+
+    gen_layers: int (default = 3) 
+        number of generator layers (after sample); size is the same as n_latent
+
+    batch_size: int (default None) 
+        provided only at training time (or when model is Hybridized) - otherwise will be inferred
+
+    ctx: int 
+        context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
                  kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers = 1, enc_dr=0.1,
                  wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
-        super(BowNTM, self).__init__()
+        super(BowVAEModel, self).__init__()
         self.batch_size = batch_size
         self._orig_batch_size = batch_size
         self.n_latent = n_latent
@@ -114,7 +127,17 @@ class BowNTM(HybridBlock):
 
     def encode_data(self, data):
         """
-        Encode data to the mean of the latent distribution defined by the input `data`
+        Encode data to the mean of the latent distribution defined by the input `data`.
+
+        Parameters
+        ----------
+        data: `mxnet.ndarray.NDArray` or `mxnet.symbol.Symbol` 
+            input data of shape (batch_size, vocab_size)
+
+        Returns
+        -------
+        `mxnet.ndarray.NDArray` or `mxnet.symbol.Symbol`
+            Result of encoding with shape (batch_size, n_latent)
         """
         return self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
     
@@ -132,6 +155,7 @@ class BowNTM(HybridBlock):
             return (cur_loss, F.zeros_like(cur_loss), F.zeros_like(cur_loss))
 
     def add_seed_constraint_loss(self, F, cur_loss):
+        
         # G - number of seeded topics
         # S - number of seeds per topic
         # K - number of topics
@@ -182,14 +206,14 @@ class BowNTM(HybridBlock):
         return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, y
 
 
-class MetaDataBowNTM(BowNTM):
+class MetaDataBowVAEModel(BowVAEModel):
 
     def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0,
                  batch_size=None, n_encoding_layers=1,
                  enc_dr=0.1, wd_freqs=None, seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
-        super(MetaDataBowNTM, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
+        super(MetaDataBowVAEModel, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
                                              latent_distrib, 
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
                                              wd_freqs, seed_mat, n_covars, ctx)

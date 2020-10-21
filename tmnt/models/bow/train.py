@@ -37,7 +37,6 @@ from tmnt.utils.random import seed_rng
 from tmnt.coherence.npmi import EvaluateNPMI
 
 
-
 import autogluon as ag
 from autogluon.scheduler.reporter import FakeReporter
 

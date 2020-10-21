@@ -41,13 +41,16 @@ release = '0.5.rc'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'sphinx.ext.napoleon',
     'sphinx.ext.autodoc',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.autosummary',    
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    'sphinx_gallery.gen_gallery',
-    'autoapi.extension'
+    'sphinx_gallery.gen_gallery'
+    #'autoapi.extension'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -127,6 +130,9 @@ html_theme = 'sphinx_rtd_theme'
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 using_rtd_theme = True
 
+html_style = 'override.css'
+html_show_sphinx = False
+
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'TMNTdoc'
@@ -201,8 +207,16 @@ epub_title = project
 epub_exclude_files = ['search.html']
 
 
-# -- AutoAPI ---
-
-autoapi_dirs = ['../../tmnt']
-
 # -- Extension configuration -------------------------------------------------
+
+autoclass_content = "both"
+autodoc_inherit_docstrings = True
+
+napoleon_google_docstring = True
+napoleon_numpy_docstring = False
+intersphinx_mapping = {'http://docs.python.org/': None}
+#autoapi_options = [ 'members', 'undoc-members', 'show-inheritance', 'show-module-summary', 'special-members', 'imported-members']
+#autoapi_dirs = ['../../tmnt']
+
+
+autosummary_generate = True

@@ -2,7 +2,7 @@ Quickstart Guide
 ================
 
 
-1. Building the Test Model
+Building the Test Model
 ++++++++++++++++++++++++++
 
 Training a topic model requires both a training file containing sparse vector representations of documents
@@ -24,7 +24,7 @@ and coherence, specified with the ``val_vec_file`` option.  If a validation file
 it may be ommitted in which case no evaluation is performed.  See the :ref:`training-label`.
 
 
-2. Preparing text data
+Preparing text data
 ++++++++++++++++++++++
 
 The sparse vector representation for a corpus can be obtained from two different input formats:
