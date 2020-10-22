@@ -5,6 +5,8 @@ Copyright (c) 2020 The MITRE Corporation.
 
 import logging
 
+__all__ = ['BaseVAE']
+
 class BaseVAE(object):
 
     def __init__(self, log_method='log', quiet=False):

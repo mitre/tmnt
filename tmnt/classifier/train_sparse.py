@@ -11,8 +11,8 @@ from mxnet.gluon.data import DataLoader
 import gluonnlp as nlp
 from sklearn.metrics import precision_recall_curve, average_precision_score
 
-from load_data import load_sparse_dataset
-from model import DANTextClassifier
+from tmnt.classifier.load_data import load_sparse_dataset
+from tmnt.classifier.model import DANTextClassifier
 from tmnt.utils.log_utils import logging_config
 
 

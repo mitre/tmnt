@@ -17,7 +17,7 @@ import sys
 
 target_dir = os.path.abspath("../..")
 sys.path.insert(0, target_dir)
-
+print("TARGET_DIR = {}".format(target_dir))
 
 # -- Project information -----------------------------------------------------
 

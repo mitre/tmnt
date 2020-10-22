@@ -12,6 +12,8 @@ from tmnt.utils.random import seed_rng
 from autogluon.scheduler.reporter import FakeReporter
 import gluonnlp as nlp
 
+__all__ = ['BaseTrainer']
+
 class BaseTrainer(object):
     """Abstract base class for topic model trainers. 
 

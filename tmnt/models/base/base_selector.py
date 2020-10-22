@@ -13,6 +13,8 @@ import io
 from autogluon.scheduler.reporter import FakeReporter
 from tabulate import tabulate
 
+__all__ = ['BaseSelector']
+
 
 class BaseSelector(object):
     """Base model selector.
