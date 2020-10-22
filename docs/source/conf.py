@@ -14,9 +14,10 @@
 #
 import os
 import sys
-sys.path.append(os.path.abspath('../../tmnt/'))
-sys.path.append(os.path.abspath('../tmnt/'))
-sys.path.append(os.path.abspath('./tmnt/'))
+
+current_dir = os.path.dirname(__file__)
+target_dir = os.path.abspath(os.path.join(current_dir, "../../tmnt"))
+sys.path.insert(0, target_dir)
 
 
 # -- Project information -----------------------------------------------------
