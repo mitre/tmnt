@@ -7,6 +7,7 @@ SPHINXBUILD   = sphinx-build
 SPHINXPROJ    = tmnt
 SOURCEDIR     = source
 BUILDDIR      = build
+#SPHINXAPIDOC  = sphinx-apidoc -f -o source/
 
 # Put it first so that "make" without argument is like "make help".
 help:

@@ -56,7 +56,7 @@ Table of Contents
    :caption: API
    :maxdepth: 1
 
-   api.rst
+   api
 
 
 Indices and tables

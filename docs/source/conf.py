@@ -15,8 +15,7 @@
 import os
 import sys
 
-current_dir = os.path.dirname(__file__)
-target_dir = os.path.abspath(os.path.join(current_dir, "../../tmnt"))
+target_dir = os.path.abspath("../..")
 sys.path.insert(0, target_dir)
 
 
