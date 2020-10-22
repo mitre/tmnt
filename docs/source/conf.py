@@ -62,7 +62,7 @@ from sphinx_gallery.sorting import ExampleTitleSortKey
 # with a relative path from the conf.py file location:
 sphinx_gallery_conf = {
     # path to your examples scripts
-    'examples_dirs': '../../../tmnt/examples',
+    'examples_dirs': '../../examples',
     # path where to save gallery generated examples
     'gallery_dirs': 'auto_examples',
     # ignore files with this pattern.
