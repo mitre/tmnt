@@ -6,8 +6,8 @@ import io
 import os
 import mxnet as mx
 
-from tmnt.bow_vae.runtime import BowNTMInference
-from tmnt.bow_vae.bow_doc_loader import collect_sparse_data
+from tmnt.models.bow.runtime import BowNTMInference
+from tmnt.models.bow.bow_doc_loader import file_to_data, load_vocab
 from tmnt.coherence.npmi import NPMI, EvaluateNPMI
 from tmnt.utils.ngram_helpers import BigramReader
 import gluonnlp as nlp
@@ -17,7 +17,6 @@ from itertools import combinations
 import umap
 from pathlib import Path
 
-from tmnt.bow_vae.bow_doc_loader import load_vocab
 
 import numpy as np
 
@@ -70,11 +69,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     verbose = False ### XXX - add as argument
-
+    vocab = load_vocab(args.vocab_file)        
     if args.override_top_k_terms:
         top_k_words_per_topic = get_top_k_terms_from_file(args.override_top_k_terms)
-        _, tst_csr, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
-        vocab = load_vocab(args.vocab_file)
+        tst_csr, _, _, _ = file_to_data(args.test_file, len(vocab))
         top_k_words_per_topic_ids = [ [ vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
         test_npmi = npmi_eval.evaluate_csr_mat(tst_csr)
@@ -105,7 +103,7 @@ if __name__ == "__main__":
     top_k_words_per_topic_ids = [ [ inference_model.vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
 
     npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
-    _, tst_csr, _, _, _ = collect_sparse_data(args.test_file, args.vocab_file, args.test_file)
+    tst_csr, _, _, _ = file_to_data(args.test_file, len(vocab))
     test_npmi = npmi_eval.evaluate_csr_mat(tst_csr)
     print("**** Test NPMI = {} *******".format(test_npmi))
     exit(0)

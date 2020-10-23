@@ -16,7 +16,7 @@ a model is built on the data as follows::
 
   python bin/train_model.py --tr_vec_file ./data/train.vec \
   --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
-  --config ./examples/train_model/model.config \
+  --config ./examples/train_model/model.2.config \
   --save_dir ./_exps/ --log_level info
 
 In general, TMNT assumes a test/validation corpus is available to determine the validation perplexity
