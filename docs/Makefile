@@ -2,7 +2,7 @@
 #
 
 # You can set these variables from the command line.
-SPHINXOPTS    =
+SPHINXOPTS    = -E
 SPHINXBUILD   = sphinx-build
 SPHINXPROJ    = tmnt
 SOURCEDIR     = source

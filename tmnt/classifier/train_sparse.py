@@ -16,23 +16,24 @@ from tmnt.classifier.model import DANTextClassifier
 from tmnt.utils.log_utils import logging_config
 
 
-parser = argparse.ArgumentParser(description='Train a (short) text classifier - via convolutional or other standard architecture')
-parser.add_argument('--train_file', type=str, help='File containing file representing the input TRAINING data')
-parser.add_argument('--val_file', type=str, help='File containing file representing the input VALIDATION data', default=None)
-parser.add_argument('--test_file', type=str, help='File containing file representing the input TEST data', default=None)
-parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
-parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
-parser.add_argument('--lr',type=float, help='Learning rate', default=0.0005)
-parser.add_argument('--batch_size',type=int, help='Training batch size', default=128)
-parser.add_argument('--dropout', type=float, help='Dropout ratio', default=0.4)
-parser.add_argument('--emb_dropout', type=float, help='Dropout ratio for embedding layer', default=0.4)
-parser.add_argument('--log_dir', type=str, default='.', help='Output directory for log file')
-parser.add_argument('--voc_size', type=int, default=2000, help='Vocab items')
-parser.add_argument('--max_length', type=int, default=64, help='Maximum length')
-parser.add_argument('--embedding_dim', type=int, default=50, help='Embedding dimension (default = 50)')
-parser.add_argument('--hidden_dims', type=str, default='50', help='List of integers with dimensions for hidden layers (e.g. "50,50"). Default = 50 (single layer)')
-
-args = parser.parse_args()
+def get_args():
+    parser = argparse.ArgumentParser(description='Train a (short) text classifier - via convolutional or other standard architecture')
+    parser.add_argument('--train_file', type=str, help='File containing file representing the input TRAINING data')
+    parser.add_argument('--val_file', type=str, help='File containing file representing the input VALIDATION data', default=None)
+    parser.add_argument('--test_file', type=str, help='File containing file representing the input TEST data', default=None)
+    parser.add_argument('--epochs', type=int, default=10, help='Upper epoch limit')
+    parser.add_argument('--optimizer',type=str, help='Optimizer (adam, sgd, etc.)', default='adam')
+    parser.add_argument('--lr',type=float, help='Learning rate', default=0.0005)
+    parser.add_argument('--batch_size',type=int, help='Training batch size', default=128)
+    parser.add_argument('--dropout', type=float, help='Dropout ratio', default=0.4)
+    parser.add_argument('--emb_dropout', type=float, help='Dropout ratio for embedding layer', default=0.4)
+    parser.add_argument('--log_dir', type=str, default='.', help='Output directory for log file')
+    parser.add_argument('--voc_size', type=int, default=2000, help='Vocab items')
+    parser.add_argument('--max_length', type=int, default=64, help='Maximum length')
+    parser.add_argument('--embedding_dim', type=int, default=50, help='Embedding dimension (default = 50)')
+    parser.add_argument('--hidden_dims', type=str, default='50', help='List of integers with dimensions for hidden layers (e.g. "50,50"). Default = 50 (single layer)')
+    return parser.parse_args()
+    
 loss_fn = gluon.loss.SoftmaxCrossEntropyLoss()
 
 def train_classifier(vocab_size, emb_output_dim, transformer, data_train, data_val, data_test, ctx=mx.cpu()):
@@ -107,6 +108,7 @@ def evaluate(model, dataloader, ctx=mx.cpu()):
     
 
 if __name__ == '__main__':
+    args = get_args()
     logging_config(args.log_dir, 'train', level=logging.INFO, console_level=logging.INFO)
     train_dataset, val_dataset, test_dataset, transform = \
         load_sparse_dataset(args.train_file, args.val_file, args.test_file, voc_size=args.voc_size, max_length=args.max_length)
