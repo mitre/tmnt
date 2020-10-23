@@ -2,21 +2,6 @@ name: TST_DOC
 channels:
   - defaults
 dependencies:
-  - ca-certificates=2020.10.14
-  - certifi=2020.6.20
-  - libcxx=10.0.0
-  - libedit=3.1.20191231
-  - libffi=3.3
-  - ncurses=6.2
-  - openssl=1.1.1h
-  - pip=20.2.4
-  - python=3.8.5
-  - readline=8.0
-  - sqlite=3.33.0
-  - tk=8.6.10
-  - wheel=0.35.1
-  - xz=5.2.5
-  - zlib=1.2.11
   - pip:
     - alabaster==0.7.12
     - astroid==2.4.2
