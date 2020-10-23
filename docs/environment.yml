@@ -2,21 +2,21 @@ name: TST_DOC
 channels:
   - defaults
 dependencies:
-  - ca-certificates=2020.10.14=0
-  - certifi=2020.6.20=py38_0
+  - ca-certificates=2020.10.14
+  - certifi=2020.6.20
   - libcxx=10.0.0=1
-  - libedit=3.1.20191231=h1de35cc_1
-  - libffi=3.3=hb1e8313_2
-  - ncurses=6.2=h0a44026_1
-  - openssl=1.1.1h=haf1e3a3_0
-  - pip=20.2.4=py38_0
-  - python=3.8.5=h26836e1_1
-  - readline=8.0=h1de35cc_0
-  - sqlite=3.33.0=hffcf06c_0
-  - tk=8.6.10=hb0a8c7a_0
-  - wheel=0.35.1=py_0
-  - xz=5.2.5=h1de35cc_0
-  - zlib=1.2.11=h1de35cc_3
+  - libedit=3.1.20191231
+  - libffi=3.3
+  - ncurses=6.2
+  - openssl=1.1.1h
+  - pip=20.2.4
+  - python=3.8.5
+  - readline=8.0
+  - sqlite=3.33.0
+  - tk=8.6.10
+  - wheel=0.35.1
+  - xz=5.2.5
+  - zlib=1.2.11
   - pip:
     - alabaster==0.7.12
     - astroid==2.4.2
@@ -135,5 +135,5 @@ dependencies:
     - wrapt==1.12.1
     - xmltodict==0.12.0
     - zict==2.0.0
-prefix: /Users/wellner/miniconda3/envs/TST_DOC
+
 
