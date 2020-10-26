@@ -257,7 +257,7 @@ class BaseBowVAE(BaseVAE):
         for epoch in range(self.epochs):
             ts_epoch = time.time()
             for i, (data, labels) in enumerate(train_dataloader):
-                if labels is None or labels.size == 0:
+                if labels is None:
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
                 labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
@@ -455,6 +455,8 @@ class MetaBowVAE(BaseBowVAE):
         -------
         Tuple of elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
         """
+        self.train_data = data
+        self.train_labels = labels
         return model(data, labels)
 
 
@@ -478,22 +480,23 @@ class MetaBowVAE(BaseBowVAE):
         npmi: Dictionary of npmi scores for each covariate.
         """
 
-        X_train, y_train = X.asnumpy(), y.asnumpy()
+        X_train = X.toarray()
+        y_train = y
         covars = np.unique(y_train, axis=0)
         covar_npmi = {}
         npmi_total = 0
         for covar in covars:
             mask = (y_train == covar).all(axis=1)
             X_covar, y_covar = mx.nd.array(X_train[mask], dtype=np.float32), mx.nd.array(y_train[mask], dtype=np.float32)
-            sorted_ids = self.model.get_ordered_terms(X_covar, y_covar)
+            sorted_ids = self.model.get_ordered_terms_with_covar_at_data(X_covar,k, y_covar)
             top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
             npmi_eval = EvaluateNPMI(top_k_words_per_topic)
             npmi = npmi_eval.evaluate_csr_mat(X_covar)
 
-            if(self.scalar):
+            if(self.label_map):
                 covar_key = covar[0]
             else:
-                covar_key = np.where(covar)[0]
+                covar_key = np.where(covar)[0][0]
             covar_npmi[covar_key] = npmi
             npmi_total += npmi
         return npmi_total / len(covars)
@@ -502,6 +505,15 @@ class MetaBowVAE(BaseBowVAE):
         return super()._npmi(X, y, k)
         #return self._npmi_per_covariate(X, y, k)
 
+    def get_topic_vectors(self):
+        """
+        Get topic vectors of the fitted model.
+
+        Returns:
+            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
+        """
+
+        return self.model.get_topic_vectors(self.train_data, self.train_labels).asnumpy()
 
     def transform(self, X, y):
         """

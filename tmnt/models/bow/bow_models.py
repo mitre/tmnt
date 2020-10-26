@@ -125,6 +125,22 @@ class BowVAEModel(HybridBlock):
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j
 
+    def get_topic_vectors(self):
+        """
+        Returns unnormalized topic vectors
+        """
+        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
+        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
+        z.attach_grad()
+        for i in range(self.vocab_size):
+            with mx.autograd.record():
+                y = self.decoder(z)
+                yi = y[0][i]
+            yi.backward()
+            jacobian[i] = z.grad
+        return jacobian        
+
+
     def encode_data(self, data):
         """
         Encode data to the mean of the latent distribution defined by the input `data`.
@@ -243,22 +259,66 @@ class MetaDataBowVAEModel(BowVAEModel):
         """
         Uses test/training data-point as the input points around which term sensitivity is computed
         """
-        if isinstance(covar, float):
-            covar = mx.nd.array([covar], ctx=self.model_ctx)
-        cv = mx.nd.expand_dims(covar, axis=0)
-        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent))
-        for i in range(self.vocab_size):
-            z_o.attach_grad()            
-            with mx.autograd.record():
-                #yy = self.decoder(data)
-                yy = self.cov_decoder(data, cv)
-                #y = yy1 + yy2
-                y_i = yy[:,i] ## get y[i] across batch for i-th vocab item
-            y_i.backward()
-            jacobian[i] = z_o.grad
+        data = data.as_in_context(self.model_ctx)
+        covar = covar.as_in_context(self.model_ctx)
+        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
+
+        batch_size = data.shape[0]
+        emb_out = self.embedding(data)
+
+        co_emb = mx.nd.concat(emb_out, covar)
+        z = self.latent_dist.mu_encoder(self.encoder(co_emb))
+
+        z.attach_grad()
+        outputs = []
+        with mx.autograd.record():
+
+            dec_out = self.decoder(z)
+            cov_dec_out = self.cov_decoder(z, covar)
+
+            y = mx.nd.softmax(cov_dec_out + dec_out, axis=1)
+            for i in range(self.vocab_size):
+                outputs.append(y[:,i])
+
+        for i, output in enumerate(outputs):
+            output.backward(retain_graph=True)
+            jacobian[i] += z.grad.sum(axis=0)
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j
-    
+
+    def get_topic_vectors(self, data, covar):
+        """
+        Returns unnormalized topic vectors based on the input data
+        """
+        data = data.as_in_context(self.model_ctx)
+        covar = covar.as_in_context(self.model_ctx)
+        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
+
+        batch_size = data.shape[0]
+        emb_out = self.embedding(data)
+
+        co_emb = mx.nd.concat(emb_out, covar)
+        z = self.latent_dist.mu_encoder(self.encoder(co_emb))
+
+
+
+        z.attach_grad()
+        outputs = []
+        with mx.autograd.record():
+
+            dec_out = self.decoder(z)
+            cov_dec_out = self.cov_decoder(z, covar)
+
+            y = mx.nd.softmax(cov_dec_out + dec_out, axis=1)
+            for i in range(self.vocab_size):
+                outputs.append(y[:,i])
+
+        for i, output in enumerate(outputs):
+            output.backward(retain_graph=True)
+            jacobian[i] += z.grad.sum(axis=0)
+        return jacobian
+        
+
 
     def hybrid_forward(self, F, data, covars):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
