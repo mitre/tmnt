@@ -4,5 +4,6 @@ from .base_selector import *
 from .base_trainer import *
 from .base_vae import *
 from .base_config import *
+from .base_inference import *
 
-__all__ = base_selector.__all__ + base_trainer.__all__ + base_vae.__all__ +  base_config.__all__
+__all__ = base_selector.__all__ + base_trainer.__all__ + base_vae.__all__ +  base_config.__all__ + base_inference.__all__

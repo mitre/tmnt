@@ -6,7 +6,7 @@ import io
 import os
 import mxnet as mx
 
-from tmnt.models.bow.runtime import BowNTMInference
+from tmnt.models.bow.runtime import BowVAEInferencer
 from tmnt.models.bow.bow_doc_loader import file_to_data, load_vocab
 from tmnt.coherence.npmi import NPMI, EvaluateNPMI
 from tmnt.utils.ngram_helpers import BigramReader
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     param_file, config_file, vocab_file = \
         args.model_dir / "model.params", args.model_dir / "model.config", args.model_dir / "vocab.json"
     
-    inference_model = BowNTMInference(param_file, config_file, vocab_file,
+    inference_model = BowVAEInferencer(param_file, config_file, vocab_file,
                                       ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
 
 

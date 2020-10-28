@@ -10,6 +10,7 @@ import gluonnlp as nlp
 import io
 import os
 import scipy
+from tmnt.models.base.base_inference import BaseInferencer, BaseTextEncoder
 from tmnt.models.bow.bow_models import BowVAEModel, MetaDataBowVAEModel
 from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
@@ -17,11 +18,13 @@ from tmnt.preprocess.vectorizer import TextVectorizer
 from multiprocessing import Pool
 
 
-class BowNTMInference(object):
+class BowVAEInferencer(BaseInferencer):
+    """
+    """
 
     def __init__(self, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
+        super().__init__(ctx)
         self.max_batch_size = 2
-
         if model_dir is not None:
             param_file = os.path.join(model_dir,'model.params')
             vocab_file = os.path.join(model_dir,'vocab.json')
@@ -32,7 +35,7 @@ class BowNTMInference(object):
             voc_js = f.read()
         self.vocab = nlp.Vocab.from_json(voc_js)
         self.vectorizer = TextVectorizer(min_doc_size=1)
-        self.ctx = ctx
+
         self.n_latent = config['n_latent']
         enc_dim = config['enc_hidden_dim']
         lat_distrib = config['latent_distribution']['dist_type']

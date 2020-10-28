@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import warnings
 
-from tmnt.models.bow.runtime import BowNTMInference
+from tmnt.models.bow.runtime import BowVAEInferencer
 
 parser = argparse.ArgumentParser()
 
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
     param_file, config_file, vocab_file = \
         args.model_dir / "model.params", args.model_dir / "model.config", args.model_dir / "vocab.json"
-    infer = BowNTMInference(param_file, config_file, vocab_file)
+    infer = BowVAEInferencer(param_file, config_file, vocab_file)
 
     if args.json_output_file:
         full_model_dict = infer.export_full_model_inference_details(args.vec_file, args.json_output_file)

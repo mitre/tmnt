@@ -212,7 +212,6 @@ class BertBowVED(Block):
             self.kld_wt = eps
         return self.kld_wt
 
-
     def add_coherence_reg_penalty(self, cur_loss):
         if (self.coherence_reg_penalty > 0.0  or self.redundancy_reg_penalty > 0) and self.embedding is not None:
             w = self.decoder.params.get('weight').data()
@@ -234,4 +233,28 @@ class BertBowVED(Block):
         loss = recon_loss + KL_loss
         ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
         return ii_loss, recon_loss, KL_loss, redundancy_loss, y
+
+    def get_encoder_jacobian(dataloader, batch_size, sample_size):
+        jacobians = np.zeros(shape=(model.n_latent, model.vocab_size))        
+        for bi, seqs in enumerate(dataloader):
+            if bi * batch_size >= sample_size:
+                print("Sample processed, exiting..")
+                break
+            input_ids, valid_length, type_ids, _ = seqs
+            input_ids_x = input_ids.as_in_context(self.model_ctx)
+            valid_length_x = input_ids.as_in_context(self.model_ctx)
+            type_ids_x = input_ids.as_in_context(self.model_ctx)
+            for i in range(model.n_latent):
+                x_data.attach_grad()
+                with mx.autograd.record():
+                    _, enc = self.encoder(input_ids_x, type_ids_x, valid_length_x)
+                    enc_out = model.latent_dist.mu_encoder(enc)
+                    yi = enc_out[:, i] ## for the ith topic, over batch
+                yi.backward()
+                mx.nd.waitall()
+                ss = x_data.grad.sum(axis=0).asnumpy()
+                jacobians[i] += ss
+        return jacobians
+
+        
     

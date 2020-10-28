@@ -8,7 +8,7 @@ import numpy as np
 import time
 import logging
 from tmnt.models.bow.bow_models import BowVAEModel, MetaDataBowVAEModel
-from tmnt.models.bow.runtime import BowNTMInference
+from tmnt.models.bow.runtime import BowVAEInferencer
 from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_data
 
 __all__ = ['get_encoder_jacobians_at_data_file', 'get_jacobians_at_data_file']
