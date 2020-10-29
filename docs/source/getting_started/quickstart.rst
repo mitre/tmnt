@@ -1,27 +1,9 @@
 Quickstart Guide
 ================
 
-
-Building the Test Model
-++++++++++++++++++++++++++
-
 Training a topic model requires both a training file containing sparse vector representations of documents
 along with a test/validation file in the same format. In addition, a vocabulary file is needed to
-map token indices back to their string representations.  See preparing data (below) for how to
-process a corpus of text data into this sparse vector format.
-
-Once the prepared files are in place, training a model invovles invoking the ``train_model.py`` script
-found in the ``bin/`` directory.  Using the example data provided (20 news corpus), 
-a model is built on the data as follows::
-
-  python bin/train_model.py --tr_vec_file ./data/train.vec \
-  --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
-  --config ./examples/train_model/model.2.config \
-  --save_dir ./_exps/ --log_level info
-
-In general, TMNT assumes a test/validation corpus is available to determine the validation perplexity
-and coherence, specified with the ``val_vec_file`` option.  If a validation file is not available/needed
-it may be ommitted in which case no evaluation is performed.  See the :ref:`training-label`.
+map token indices back to their string representations.  
 
 
 Preparing text data
@@ -47,16 +29,31 @@ An example invocation::
   --val_input_dir ./val-json-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  --val_vec_file ./val.2k.vec 
 
 
-The plain text input format assumes directories for training, validation and test sets, where each file is a separate plain text document. This should be
-invoked by adding the ``--txt_mode`` option::
-
+The plain text input format assumes directories for training, validation and test sets, where each file is a separate plain text document.
+This should be invoked by adding the ``--txt_mode`` option::
 
   python bin/prepare_corpus.py --vocab_size 2000 --file_pat '*.txt' --tr_input_dir ./train-txt-files/ \
   --val_input_dir ./val-txt-files/ --tr_vec_file ./train.2k.vec --vocab_file ./2k.vocab  \
   --val_vec_file ./val.2k.vec --txt_mode
    
-
 TMNT does its own rudimentary pre-processing of the text and includes a built-in stop-word list for English
 to remove certain common terms that tend to act as distractors for the purposes of generating coherent topics.
-Custom stop-word lists can also be provided. 
+Custom stop-word lists can also be provided.
+
+Training a Topic Model
+++++++++++++++++++++++
+
+To train a topic model on the ouputs of the `prepare_corpus.py` script, the `train_model.py` script is used::
+
+    python bin/train_model.py --tr_vec_file ./train.2k.vec \
+    --val_vec_file ./val.2k.vec --vocab_file ./2k.vocab \
+    --config ./examples/train_model/model.2.config \
+    --save_dir ./_exps/ --log_level info
+
+Note that most of the configuration options for training a topic model are provided by the supplied configuration
+file passed as the argument to the `--config` option.  Configuration files are described in
+detail :ref:`training-label`
+
+
+
 

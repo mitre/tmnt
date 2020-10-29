@@ -18,12 +18,13 @@ of latent topics present in the text.  In practical terms, the topic model encod
 an algorithm for `doc2vec` where the vector representation can be interpreted as the latent
 topic distribution.
 
-To use a trained model in this fashion within a larger application, or perhaps as a web-service
-the ``tmnt.bow_vae.runtime`` module provides a simple API to encode documents::
+To use a trained model in this fashion within a larger application
+the ``tmnt.models.bow.runtime`` module provides a simple API to encode documents.
+Below is an example::
 
   python 
-  >>> from tmnt.models.bow.runtime import BowNTMInference, TextEncoder
-  >>> infer = BowNTMInference('_model_dir/model.params','_model_dir/model.config', '_model_dir/vocab.json')
+  >>> from tmnt.models.bow.runtime import BowVAEInferencer, TextEncoder
+  >>> infer = BowVAEInferencer(model_dir = '_model_dir')
   >>> text_encoder = TextEncoder(infer)
   >>> encodings = text_encoder.encode_batch(['Greater Armenia would stretch from Karabakh, to the
         Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.',

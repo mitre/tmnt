@@ -32,7 +32,6 @@ Table of Contents
 	      
    getting_started/quickstart	     
    model_training/training   
-   configuration/config_options
    model_selection/model_selection
    options/command_options
    inference/evaluation.rst
@@ -48,8 +47,8 @@ Table of Contents
    :maxdepth: 3
 	      
    user_guide/modeling_covariates
-   user_guide/guided
-   user_guide/sequence_vae
+   .. user_guide/guided
+   .. user_guide/sequence_vae
    embeddings/embeddings	         
 
 .. toctree::

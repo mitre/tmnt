@@ -6,7 +6,7 @@ Installation
    work for Windows, some users have reported problems with installation of some of the 3rd party libraries.
 
 
-1. Downloading TMNT
+Downloading TMNT
 +++++++++++++++++++
 
 TMNT can be obtained via GitHub::
@@ -18,11 +18,11 @@ or via SSH::
   git clone git@github.com:mitre/tmnt.git
 
 
-2. Dependencies and Environment
+Dependencies and Environment
 +++++++++++++++++++++++++++++++
 
-TMNT is easiest to use vai Conda (Miniconda or Anaconda). If
-Conda is not installed, please install by grabbing the necessary install script from:
+TMNT is easiest to use via Conda (Miniconda or Anaconda). If
+Conda is not already installed, grab the necessary install script from:
 
 https://docs.conda.io/en/latest/miniconda.html
 
@@ -50,3 +50,18 @@ Finally, TMNT must be installed as a package locally by running::
 
   python setup.py develop
 
+  
+Building the Test Model
+++++++++++++++++++++++++++
+
+The following invocation should train a topic model on the example provided 20 news data
+for 27 training epochs::
+
+  python bin/train_model.py --tr_vec_file ./data/train.vec \
+  --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
+  --config ./examples/train_model/model.2.config \
+  --save_dir ./_exps/ --log_level info
+
+In general, TMNT assumes a test/validation corpus is available to determine the validation perplexity
+and coherence, specified with the ``val_vec_file`` option.  If a validation file is not available/needed
+it may be ommitted in which case no evaluation is performed.  See the :ref:`training-label`.
