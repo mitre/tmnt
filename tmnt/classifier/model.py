@@ -34,6 +34,7 @@ class DANTextClassifier(HybridBlock):
         embedded = self.emb_drop(embedded)
         pooled = self.pooler(F.reshape(embedded, (-1,1,self.seq_length, self.emb_dim)))
         encoded = self.encoder(pooled)
+        
         return self.output(encoded)
 
 
