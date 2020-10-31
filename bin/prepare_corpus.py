@@ -4,7 +4,6 @@ import os, sys
 import argparse
 import logging
 from tmnt.utils.log_utils import logging_config
-
 from tmnt.preprocess.vectorizer import JsonVectorizer, TextVectorizer
 
 parser = argparse.ArgumentParser('Prepare a training and validation/test dataset for topic model training')

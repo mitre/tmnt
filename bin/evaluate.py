@@ -6,9 +6,9 @@ import io
 import os
 import mxnet as mx
 
-from tmnt.models.bow.runtime import BowVAEInferencer
-from tmnt.models.bow.bow_doc_loader import file_to_data, load_vocab
-from tmnt.coherence.npmi import NPMI, EvaluateNPMI
+from tmnt.inference import BowVAEInferencer
+from tmnt.data_loading import file_to_data, load_vocab
+from tmnt.eval_npmi import NPMI, EvaluateNPMI
 from tmnt.utils.ngram_helpers import BigramReader
 import gluonnlp as nlp
 

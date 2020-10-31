@@ -1,6 +1,6 @@
 # coding: utf-8
 """
-Copyright (c) 2019 The MITRE Corporation.
+Copyright (c) 2020 The MITRE Corporation.
 """
 
 import json
@@ -10,12 +10,28 @@ import gluonnlp as nlp
 import io
 import os
 import scipy
-from tmnt.models.base.base_inference import BaseInferencer, BaseTextEncoder
-from tmnt.models.bow.bow_models import BowVAEModel, MetaDataBowVAEModel
-from tmnt.models.bow.bow_doc_loader import DataIterLoader, file_to_data
+from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel
+from tmnt.data_loading import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
 from tmnt.preprocess.vectorizer import TextVectorizer
 from multiprocessing import Pool
+
+
+class BaseInferencer(object):
+    """Base inference object for text encoding with a trained topic model.
+
+    """
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def encode_texts(self, intexts):
+        raise NotImplementedError
+
+    def get_top_k_words_per_topic(self, k):
+        raise NotImplementedError
+
+    def get_top_k_words_per_topic_per_covariate(self, k):
+        raise NotImplementedError
 
 
 class BowVAEInferencer(BaseInferencer):
@@ -173,9 +189,30 @@ class BowVAEInferencer(BaseInferencer):
 
     def get_top_k_words_per_topic_over_scalar_covariate(self, k, min_v=0.0, max_v=1.0, step=0.1):
         raise NotImplemented
+    
+
+class BaseTextEncoder(object):
+    """Base text encoder for various topic models
+
+    Args:
+        inferencer (`tmnt.models.base.base_inference.BaseInferencer`): Inferencer object that runs the encoder portion of a VAE/VED model.
+        use_probs (bool): Map topic vector encodings to the simplex (sum to 1).
+        temperature (float): Temperature to sharpen/flatten encoding distribution.
+    """
+    def __init__(self, inferencer, use_probs=True, temperature=0.5):
+        self.temp      = temperature
+        self.inference = inference
+        self.use_probs = use_probs
+
+    def encode_single_string(self, txt_string):
+        raise NotImplementedError
+
+    def encode_batch(self, txtx, covars=None, pool_size=4):
+        raise NotImplementedError
 
 
-class TextEncoder(object):
+
+class BOWTextEncoder(object):
 
     """
     Takes a batch of text strings/documents and returns a matrix of their encodings (each row in the matrix
@@ -230,3 +267,6 @@ class TextEncoder(object):
             e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
             encs = mx.nd.softmax(e1 ** self.temp)
         return encs
+    
+
+    

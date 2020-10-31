@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import warnings
 
-from tmnt.models.bow.runtime import BowVAEInferencer
+from tmnt.inference import BowVAEInferencer
 
 parser = argparse.ArgumentParser()
 

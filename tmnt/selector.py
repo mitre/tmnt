@@ -12,9 +12,8 @@ import json
 import io
 from autogluon.scheduler.reporter import FakeReporter
 from tabulate import tabulate
-
-__all__ = ['BaseSelector']
-
+from tmnt.configuration import TMNTConfigBOW, TMNTConfigSeqBOW
+from tmnt.trainer import BowVAETrainer, SeqBowVEDTrainer
 
 class BaseSelector(object):
     """Base model selector.
@@ -141,5 +140,38 @@ class BaseSelector(object):
         scheduler.shutdown()
 
 
+def model_select_bow_vae(c_args):
+    tmnt_config = TMNTConfigBOW(c_args.config_space).get_configspace()
+    trainer = BowVAETrainer.from_arguments(c_args, val_each_epoch = (not (c_args.searcher == 'random')))
+    selector = BaseSelector(tmnt_config,
+                            c_args.iterations,
+                            c_args.searcher,
+                            c_args.scheduler,
+                            c_args.brackets,
+                            c_args.cpus_per_task,
+                            c_args.use_gpu,
+                            c_args.num_final_evals,
+                            c_args.seed,
+                            trainer.log_out_dir)
+    sources = [ e['source'] for e in tmnt_config.get('embedding').data if e['source'] != 'random' ]
+    logging.info('>> Pre-caching pre-trained embeddings/vocabularies: {}'.format(sources))
+    trainer.pre_cache_vocabularies(sources)
+    selector.select_model(trainer)
+        
 
-
+def model_select_seq_bow(c_args):
+    tmnt_config = TMNTConfigSeqBOW(c_args.config_space).get_configspace()
+    trainer = SeqBowVEDTrainer.from_arguments(c_args)
+    selector = BaseSelector(tmnt_config,
+                            c_args.iterations,
+                            c_args.searcher,
+                            c_args.scheduler,
+                            c_args.brackets,
+                            c_args.cpus_per_task,
+                            c_args.use_gpu,
+                            c_args.num_final_evals,
+                            c_args.seed,
+                            trainer.model_out_dir)
+    selector.select_model(trainer)
+    
+        

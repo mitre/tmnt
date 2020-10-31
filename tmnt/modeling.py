@@ -5,14 +5,17 @@ Copyright (c) 2019-2020. The MITRE Corporation.
 
 import mxnet as mx
 from mxnet import gluon
-from mxnet.gluon import HybridBlock
-from tmnt.distributions import LogisticGaussianLatentDistribution
-from tmnt.distributions import GaussianLatentDistribution
-from tmnt.distributions import HyperSphericalLatentDistribution
-from tmnt.distributions import GaussianUnitVarLatentDistribution
+import math
+import os
+import numpy as np
+import gluonnlp as nlp
 import logging
+from mxnet.gluon.block import HybridBlock, Block
 
-__all__ = ['BowVAEModel', 'MetaDataBowVAEModel', 'CoherenceRegularizer']
+from tmnt.distribution import LogisticGaussianDistribution
+from tmnt.distribution import GaussianDistribution
+from tmnt.distribution import HyperSphericalDistribution
+from tmnt.distribution import GaussianUnitVarDistribution
 
 
 class BowVAEModel(HybridBlock):
@@ -64,13 +67,13 @@ class BowVAEModel(HybridBlock):
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
             self.encoder = self._get_encoder(self.encoding_dims, dr=enc_dr)
             if latent_distrib == 'logistic_gaussian':
-                self.latent_dist = LogisticGaussianLatentDistribution(n_latent, ctx, alpha=alpha)
+                self.latent_dist = LogisticGaussianDistribution(n_latent, ctx, alpha=alpha)
             elif latent_distrib == 'vmf':
-                self.latent_dist = HyperSphericalLatentDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
+                self.latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
             elif latent_distrib == 'gaussian':
-                self.latent_dist = GaussianLatentDistribution(n_latent, ctx)
+                self.latent_dist = GaussianDistribution(n_latent, ctx)
             elif latent_distrib == 'gaussian_unitvar':
-                self.latent_dist = GaussianUnitVarLatentDistribution(n_latent, ctx)
+                self.latent_dist = GaussianUnitVarDistribution(n_latent, ctx)
             else:
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
@@ -425,3 +428,134 @@ class CoherenceRegularizer(HybridBlock):
         D = F.sum(D1)
         return C * self.coherence_pen , D * self.redundancy_pen
 
+
+
+class BertBowVED(Block):
+    def __init__(self, bert_base, bow_vocab, latent_distrib='vmf', 
+                 n_latent=256, max_sent_len=32, 
+                 kappa = 100.0,
+                 batch_size=16, kld=0.1, wd_freqs=None,
+                 redundancy_reg_penalty=0.0,
+                 ctx = mx.cpu(),
+                 prefix=None, params=None):
+        super(BertBowVED, self).__init__(prefix=prefix, params=params)
+        self.kld_wt = kld
+        self.n_latent = n_latent
+        self.model_ctx = ctx
+        self.max_sent_len = max_sent_len
+        self.batch_size = batch_size
+        self.bow_vocab_size = len(bow_vocab)
+        self.vocabulary = bow_vocab
+        self.latent_distrib = latent_distrib
+        self.kappa = kappa
+        self.coherence_reg_penalty = 0.0
+        self.redundancy_reg_penalty = redundancy_reg_penalty
+        with self.name_scope():
+            self.encoder = bert_base            
+            if latent_distrib == 'logistic_gaussian':
+                self.latent_dist = LogisticGaussianDistribution(n_latent, ctx, dr=0.0)
+            elif latent_distrib == 'vmf':
+                self.latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=self.model_ctx, dr=0.0)
+            elif latent_distrib == 'gaussian':
+                self.latent_dist = GaussianDistribution(n_latent, ctx, dr=0.0)
+            elif latent_distrib == 'gaussian_unitvar':
+                self.latent_dist = GaussianUnitVarDistribution(n_latent, ctx, dr=0.0, var=0.05)
+            else:
+                raise Exception("Invalid distribution ==> {}".format(latent_distrib))
+            self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.bow_vocab_size, activation=None)
+            self.decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+            self.latent_dist.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+            self.latent_dist.post_init(self.model_ctx)
+            self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
+            if self.vocabulary.embedding:
+                self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary), units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
+                self.embedding.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+                emb = self.vocabulary.embedding.idx_to_vec.transpose()
+                emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
+                emb_norm = emb / emb_norm_val
+                self.embedding.collect_params().setattr('grad_req', 'null')
+                                                
+        if wd_freqs is not None:
+            freq_nd = wd_freqs + 1
+            total = freq_nd.sum()
+            log_freq = freq_nd.log() - freq_nd.sum().log()
+            bias_param = self.decoder.collect_params().get('bias')
+            bias_param.set_data(log_freq)
+            bias_param.grad_req = 'null'
+            self.out_bias = bias_param.data()
+
+    def get_top_k_terms(self, k):
+        """
+        Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
+        probability increases the most for a unit increase in a given topic score/probability
+        are those most associated with the topic. This is just the topic-term weights for a 
+        linear decoder - but code here will work with arbitrary decoder.
+        """
+        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
+        jacobian = mx.nd.zeros(shape=(self.bow_vocab_size, self.n_latent), ctx=self.model_ctx)
+        z.attach_grad()        
+        for i in range(self.bow_vocab_size):
+            with mx.autograd.record():
+                y = self.decoder(z)
+                yi = y[0][i]
+            yi.backward()
+            jacobian[i] = z.grad
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
+        return sorted_j
+
+    def __call__(self, toks, tok_types, valid_length, bow):
+        return super(BertBowVED, self).__call__(toks, tok_types, valid_length, bow)
+
+    def set_kl_weight(self, epoch, max_epochs):
+        burn_in = int(max_epochs / 10)
+        eps = 1e-6
+        if epoch > burn_in:
+            self.kld_wt = ((epoch - burn_in) / (max_epochs - burn_in)) + eps
+        else:
+            self.kld_wt = eps
+        return self.kld_wt
+
+    def add_coherence_reg_penalty(self, cur_loss):
+        if (self.coherence_reg_penalty > 0.0  or self.redundancy_reg_penalty > 0) and self.embedding is not None:
+            w = self.decoder.params.get('weight').data()
+            emb = self.embedding.params.get('weight').data()
+            _, redundancy_loss = self.coherence_regularization(w, emb)
+            return (cur_loss + redundancy_loss), redundancy_loss
+        else:
+            return cur_loss, mx.nd.zeros_like(cur_loss)
+    
+
+    def forward(self, toks, tok_types, valid_length, bow):
+        _, enc = self.encoder(toks, tok_types, valid_length)
+        z, KL = self.latent_dist(enc, self.batch_size)
+        y = self.decoder(z)
+        y = mx.nd.softmax(y, axis=1)
+        rr = bow * mx.nd.log(y+1e-12)
+        recon_loss = -mx.nd.sparse.sum( rr, axis=1 )
+        KL_loss = ( KL * self.kld_wt )
+        loss = recon_loss + KL_loss
+        ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
+        return ii_loss, recon_loss, KL_loss, redundancy_loss, y
+
+    def get_encoder_jacobian(dataloader, batch_size, sample_size):
+        jacobians = np.zeros(shape=(model.n_latent, model.vocab_size))        
+        for bi, seqs in enumerate(dataloader):
+            if bi * batch_size >= sample_size:
+                print("Sample processed, exiting..")
+                break
+            input_ids, valid_length, type_ids, _ = seqs
+            input_ids_x = input_ids.as_in_context(self.model_ctx)
+            valid_length_x = input_ids.as_in_context(self.model_ctx)
+            type_ids_x = input_ids.as_in_context(self.model_ctx)
+            for i in range(model.n_latent):
+                x_data.attach_grad()
+                with mx.autograd.record():
+                    _, enc = self.encoder(input_ids_x, type_ids_x, valid_length_x)
+                    enc_out = model.latent_dist.mu_encoder(enc)
+                    yi = enc_out[:, i] ## for the ith topic, over batch
+                yi.backward()
+                mx.nd.waitall()
+                ss = x_data.grad.sum(axis=0).asnumpy()
+                jacobians[i] += ss
+        return jacobians
+    
