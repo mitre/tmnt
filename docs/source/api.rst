@@ -1,5 +1,5 @@
-Models
-******
+Modeling
+********
 
 .. autosummary::
     :toctree: _autosummary
@@ -7,9 +7,55 @@ Models
     :template: custom-module-template.rst	      	      
     :recursive:
 
-   tmnt.models.base
-   tmnt.models.bow
-   tmnt.models.seq_bow
+   tmnt.modeling
+
+
+Latent Distributions
+********************
+
+.. autosummary::
+    :toctree: _autosummary
+    :caption: API Reference	      
+    :template: custom-module-template.rst	      	      
+    :recursive:
+
+   tmnt.distribution
+   
+Estimator
+*********
+
+.. autosummary::
+    :toctree: _autosummary
+    :caption: API Reference	      
+    :template: custom-module-template.rst	      	      
+    :recursive:
+
+   tmnt.estimator
+
+
+Selector
+********
+
+.. autosummary::
+    :toctree: _autosummary
+    :caption: API Reference	      
+    :template: custom-module-template.rst	      	      
+    :recursive:
+
+   tmnt.selector
+
+
+Inference
+*********
+
+.. autosummary::
+    :toctree: _autosummary
+    :caption: API Reference	      
+    :template: custom-module-template.rst	      	      
+    :recursive:
+
+   tmnt.inference
+   
 
    
 Preprocessing
@@ -25,17 +71,3 @@ Preprocessing
    tmnt.preprocess.vectorizer
 
    
-Latnet Distributions
-********************
-
-.. autosummary::
-    :toctree: _autosummary
-    :caption: API Reference	      
-    :template: custom-module-template.rst	      	      
-    :recursive:
-
-   tmnt.distributions.latent_distrib
-   tmnt.distributions.gaussian
-   tmnt.distributions.gaussian_fixedvar
-   tmnt.distributions.logistic_gaussian
-   tmnt.distributions.hypersphere
