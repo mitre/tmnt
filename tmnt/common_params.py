@@ -18,7 +18,7 @@ def get_base_argparser():
     parser.add_argument('--scalar_covars', action='store_true', help='If labels/meta-data are provided, treat value as scalar rather than categorical', default=False)
     parser.add_argument('--topic_seed_file', type=str, default=None, help='Seed topic terms')
     parser.add_argument('--eval_each_epoch', action='store_true', help='Evaluation against validation data during training', default=False)
-    parser.add_argument('--encoder_coherence', action='store_true', help='Get top K terms for coherence via encoder Jacobian')
+    parser.add_argument('--encoder_coherence', action='store_true', help='Get top K terms for coherence via encoder Jacobian', default=False)
     parser.add_argument('--optimize_encoder_coherence', action='store_true', help='Optimize encoder-derived coherence')
     parser.add_argument('--num_final_evals', type=int, help='Number of times to evaluate selected configuration (with random initializations)', default=1)
     parser.add_argument('--str_encoding', type=str, default='utf-8')

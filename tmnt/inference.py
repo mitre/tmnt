@@ -163,8 +163,7 @@ class BowVAEInferencer(BaseInferencer):
         return encodings
 
     def get_top_k_words_per_topic(self, k):
-        w = self.model.decoder.collect_params().get('weight').data()
-        sorted_ids = w.argsort(axis=0, is_ascend=False)
+        sorted_ids = self.get_ordered_terms()
         topic_terms = []
         for t in range(self.n_latent):
             top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]

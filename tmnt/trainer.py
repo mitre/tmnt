@@ -161,10 +161,10 @@ class BaseTrainer(object):
                 logging.info("Final {} Objective    ==> Mean: {}, StdDev: {}"
                              .format(test_type, statistics.mean(objectives), statistics.stdev(objectives)))
             else:
-                logging.info("Final {} NPMI         ==> {}".format(test_type, npmis[0]))
-                logging.info("Final {} Perplexity   ==> {}".format(test_type, perplexities[0]))
-                logging.info("Final {} Redundancy   ==> {}".format(test_type, redundancies[0]))
-                logging.info("Final {} Objective    ==> {}".format(test_type, objectives[0]))            
+                logging.info("Final {} NPMI           ==> {}".format(test_type, npmis[0]))
+                logging.info("Final {} Perplexity     ==> {}".format(test_type, perplexities[0]))
+                logging.info("Final {} Redundancy     ==> {}".format(test_type, redundancies[0]))
+                logging.info("Final {} Objective      ==> {}".format(test_type, objectives[0]))            
             return best_model, best_obj
         else:
             model, obj, _, _, _ = self.train_model(config, FakeReporter())
@@ -308,6 +308,7 @@ class BowVAETrainer(BaseTrainer):
                            num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
                            epochs=epochs, log_method='log')
         else:
+            print("Encoder coherence = {}".format(self.c_args.encoder_coherence))
             model = \
                 BowEstimator(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, wd_freqs=self.wd_freqs,
                        ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
@@ -316,7 +317,7 @@ class BowVAETrainer(BaseTrainer):
                        redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
                        embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
                        num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
-                       epochs=epochs, log_method='log')
+                             epochs=epochs, log_method='log', coherence_via_encoder=self.c_args.encoder_coherence)
         model.validate_each_epoch = self.validate_each_epoch
         return model
     

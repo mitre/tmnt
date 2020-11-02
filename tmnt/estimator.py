@@ -139,10 +139,9 @@ class BaseBowEstimator(BaseEstimator):
     gpu_id: int, optional(default=-1)
         ID of GPU device, GPU training disabled if gpu_id<0.
     """
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False):
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False, coherence_via_encoder=False):
         
         super().__init__(log_method=log_method, quiet=quiet)
-        
         self.reporter = reporter
         self.coherence_coefficient = coherence_coefficient
         self.lr = lr
@@ -169,6 +168,7 @@ class BaseBowEstimator(BaseEstimator):
         self.wd_freqs = wd_freqs
         self.num_val_words = num_val_words
         self.model = None
+        self.coherence_via_encoder = coherence_via_encoder
 
     def _get_wd_freqs(self, X, max_sample_size=1000000):
         sample_size = min(max_sample_size, X.shape[0])
@@ -178,6 +178,7 @@ class BaseBowEstimator(BaseEstimator):
 
     def _get_model(self):
         raise NotImplementedError()
+
 
     def _npmi(self, X, y, k=10):
         """
@@ -198,7 +199,7 @@ class BaseBowEstimator(BaseEstimator):
         """
         sorted_ids = self.model.get_ordered_terms()
         num_topics = min(self.n_latent, sorted_ids.shape[-1])
-        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
+        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t])] for t in range(self.n_latent)]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic)
         npmi = npmi_eval.evaluate_csr_mat(X)
         unique_term_ids = set()
@@ -211,9 +212,9 @@ class BaseBowEstimator(BaseEstimator):
         return npmi, redundancy
 
     def _npmi_with_dataloader(self, dataloader, k=10):
-        sorted_ids = self.model.get_ordered_terms()
+        sorted_ids = self.model.get_ordered_terms_encoder(dataloader) if self.coherence_via_encoder else self.model.get_ordered_terms()
         num_topics = min(self.n_latent, sorted_ids.shape[-1])
-        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
+        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t])] for t in range(self.n_latent)]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic)
         npmi = npmi_eval.evaluate_csr_loader(dataloader)
         unique_term_ids = set()
@@ -279,10 +280,13 @@ class BaseBowEstimator(BaseEstimator):
     def validate(self, val_X, val_y):
         val_dataloader = self._get_val_dataloader(val_X, val_y)
         ppl = self._perplexity(val_dataloader, self.num_val_words)
-        if val_X.shape[0] > 50000:
-            val_X = val_X[:50000]
-            val_y = val_y[:50000]
-        npmi, redundancy = self._npmi(val_X, val_y)
+        if self.coherence_via_encoder:
+            npmi, redundancy = self._npmi_with_dataloader(val_dataloader)
+        else:
+            if val_X.shape[0] > 50000:
+                val_X = val_X[:50000]
+                val_y = val_y[:50000]
+            npmi, redundancy = self._npmi(val_X, val_y)
         return ppl, npmi, redundancy
 
 
@@ -337,9 +341,9 @@ class BaseBowEstimator(BaseEstimator):
 
 class BowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print'):
-        
-        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method)
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', coherence_via_encoder=False):
+
+        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method, False, coherence_via_encoder)
 
 
     def npmi(self, X, k=10):
@@ -407,7 +411,7 @@ class BowEstimator(BaseBowEstimator):
             topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
         """
 
-        return self.model.get_topic_vectors().asnumpy() 
+        return self.model.get_topic_vectors() 
 
     def transform(self, X):
         """
@@ -563,7 +567,7 @@ class MetaBowEstimator(BaseBowEstimator):
             topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
         """
 
-        return self.model.get_topic_vectors(self.train_data, self.train_labels).asnumpy()
+        return self.model.get_topic_vectors(self.train_data, self.train_labels)
 
     def transform(self, X, y):
         """
@@ -635,7 +639,7 @@ class SeqBowEstimator(BaseEstimator):
         num_topics = model.n_latent
         sorted_ids = model.get_top_k_terms(k)
         num_topics = min(num_topics, sorted_ids.shape[-1])
-        top_k_words_per_topic = [[ int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(num_topics)]
+        top_k_words_per_topic = [[ int(i) for i in list(sorted_ids[:k, t])] for t in range(num_topics)]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic)
         npmi = npmi_eval.evaluate_csr_mat(test_data)
         unique_term_ids = set()

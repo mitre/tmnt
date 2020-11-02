@@ -110,6 +110,29 @@ class BowVAEModel(HybridBlock):
                 encoder.add(gluon.nn.Dropout(dr))
         return encoder
 
+    def get_ordered_terms_encoder(self, dataloader, sample_size=-1):
+        jacobians = np.zeros(shape=(self.n_latent, self.vocab_size))
+        samples = 0
+        for bi, (data, _) in enumerate(dataloader):
+            if sample_size > 0 and samples >= sample_size:
+                print("Sample processed, exiting..")
+                break
+            samples += data.shape[0]
+            x_data = data.tostype('default')
+            x_data = x_data.as_in_context(self.model_ctx)
+            for i in range(self.n_latent):
+                x_data.attach_grad()
+                with mx.autograd.record():
+                    emb_out = self.embedding(x_data)
+                    enc_out = self.latent_dist.mu_encoder(self.encoder(emb_out))
+                    yi = enc_out[:, i] ## for the ith topic, over batch
+                yi.backward()
+                mx.nd.waitall()
+                ss = x_data.grad.sum(axis=0).asnumpy()
+                jacobians[i] += ss
+        sorted_j = (- jacobians).argsort(axis=1).transpose()
+        return sorted_j
+
     def get_ordered_terms(self):
         """
         Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
@@ -126,7 +149,8 @@ class BowVAEModel(HybridBlock):
             yi.backward()
             jacobian[i] = z.grad
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
-        return sorted_j
+        return sorted_j.asnumpy()
+    
 
     def get_topic_vectors(self):
         """
@@ -141,7 +165,7 @@ class BowVAEModel(HybridBlock):
                 yi = y[0][i]
             yi.backward()
             jacobian[i] = z.grad
-        return jacobian        
+        return jacobian.asnumpy()        
 
 
     def encode_data(self, data):
@@ -501,7 +525,7 @@ class BertBowVED(Block):
             yi.backward()
             jacobian[i] = z.grad
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
-        return sorted_j
+        return sorted_j.asnumpy()
 
     def __call__(self, toks, tok_types, valid_length, bow):
         return super(BertBowVED, self).__call__(toks, tok_types, valid_length, bow)
