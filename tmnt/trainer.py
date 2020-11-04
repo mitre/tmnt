@@ -15,7 +15,7 @@ from autogluon.scheduler.reporter import FakeReporter
 from pathlib import Path
 from tmnt.utils.random import seed_rng
 from tmnt.utils.log_utils import logging_config
-from tmnt.data_loading import load_vocab, file_to_data
+from tmnt.data_loading import load_vocab, file_to_data, load_dataset_bert
 from tmnt.estimator import BowEstimator, MetaBowEstimator, SeqBowEstimator
 
 

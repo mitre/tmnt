@@ -19,7 +19,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel
+from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel, BertBowVED
 from tmnt.eval_npmi import EvaluateNPMI
 
 MAX_DESIGN_MATRIX = 250000000 
