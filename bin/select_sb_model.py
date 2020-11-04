@@ -3,7 +3,7 @@
 import os, sys
 import argparse
 
-from tmnt.models.seq_bow.train import model_select_main
+from tmnt.selector import model_select_seq_bow
 from tmnt.common_params import get_base_argparser
 
 parser = argparse.ArgumentParser(description='Model selection for Transformer VED Topic Model')
@@ -34,5 +34,5 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
     os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
-    model_select_main(args)
+    model_select_seq_bow(args)
 

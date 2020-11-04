@@ -3,7 +3,7 @@
 import os, sys
 import argparse
 
-from tmnt.models.seq_bow.train import train_main
+from tmnt.trainer import train_seq_bow
 
 parser = argparse.ArgumentParser(description='Train a Transformer-based Variational Encoder-Decoder on Context-aware Encodings with BOW decoding')
 
@@ -26,4 +26,4 @@ parser.add_argument('--config', type=str, help='JSON-formatted configuration fil
 
 args = parser.parse_args()
 
-train_main(args)
+train_seq_bow(args)
