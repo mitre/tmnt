@@ -10,6 +10,7 @@ import gluonnlp as nlp
 import datetime
 import time
 import copy
+import statistics
 import autogluon as ag
 from autogluon.scheduler.reporter import FakeReporter
 from pathlib import Path
