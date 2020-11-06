@@ -5,7 +5,7 @@ Copyright (c) 2019-2020 The MITRE Corporation.
 
 import yaml
 import io
-import autogluon as ag
+import autogluon.core as ag
 
 __all__ = ['BaseTMNTConfig']
 

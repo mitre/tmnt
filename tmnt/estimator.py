@@ -251,8 +251,7 @@ class BaseBowEstimator(BaseEstimator):
 
     def perplexity(self, X, y):
         dataloader = self._get_val_dataloader(X, y)
-        if self.num_val_words < 0:
-            self.num_val_words = X.sum()
+        self.num_val_words = X.sum()
         return self._perplexity(dataloader, self.num_val_words)
 
     def _get_val_dataloader(self, val_X, val_y):
@@ -270,11 +269,11 @@ class BaseBowEstimator(BaseEstimator):
         elif test_size < 1000000000:
             val_X = mx.nd.sparse.csr_matrix(val_X)
             val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, test_batch_size,
-                                                              last_batch_handle='discard', shuffle=False),
+                                                              last_batch_handle='pad', shuffle=False),
                                                 num_batches=num_val_batches, last_batch_size = last_batch_size)
         else:
             val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = test_batch_size,
-                                                                     last_batch_handle='discard', shuffle=False))
+                                                                     last_batch_handle='pad', shuffle=False))
         return val_dataloader
 
     def validate(self, val_X, val_y):
@@ -297,7 +296,8 @@ class BaseBowEstimator(BaseEstimator):
         x_size = X.shape[0] * X.shape[1]
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
-            train_dataloader = DataIterLoader(SparseMatrixDataIter(X, y, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
+            train_dataloader = \
+                DataIterLoader(SparseMatrixDataIter(X, y, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
         else:
             X = mx.nd.sparse.csr_matrix(X)
             train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
