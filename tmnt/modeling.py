@@ -327,8 +327,6 @@ class MetaDataBowVAEModel(BowVAEModel):
         co_emb = mx.nd.concat(emb_out, covar)
         z = self.latent_dist.mu_encoder(self.encoder(co_emb))
 
-
-
         z.attach_grad()
         outputs = []
         with mx.autograd.record():
