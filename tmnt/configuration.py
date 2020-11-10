@@ -135,6 +135,7 @@ class TMNTConfigSeqBOW(BaseTMNTConfig):
         sp_dict['warmup_ratio'] = self._get_range_uniform('warmup_ratio', cd)
         sp_dict['embedding_source'] = self._get_categorical('embedding_source', cd)
         sp_dict['redundancy_reg_penalty'] = self._get_range_uniform('redundancy_reg_penalty', cd)
+        sp_dict['sent_size'] = self._get_range_integer('sent_size', cd)
         latent_types = cd['latent_distribution']
         latent_space = []
         for lt in latent_types:

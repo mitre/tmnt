@@ -9,5 +9,6 @@
     "batch_size": 16,
     "warmup_ratio": 0.1,
     "embedding_source": "glove:glove.6B.200d",
-    "redundancy_reg_penalty": 0.1
+    "redundancy_reg_penalty": 0.1,
+    "sent_size": 256
 }

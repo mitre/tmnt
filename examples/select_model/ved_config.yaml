@@ -12,3 +12,4 @@
   embedding_source: ["glove:glove.6B.200d"]
   redundancy_reg_penalty: {range: [0.01, 0.1]}
   batch_size: {i_range: [16]}
+  sent_size: {i_range: [128, 256], step: 64}

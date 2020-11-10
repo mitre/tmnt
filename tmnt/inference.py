@@ -15,6 +15,8 @@ from tmnt.data_loading import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
 from tmnt.preprocess.vectorizer import TextVectorizer
 from multiprocessing import Pool
+from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
+
 
 
 class BaseInferencer(object):
@@ -194,7 +196,7 @@ class BaseTextEncoder(object):
     """Base text encoder for various topic models
 
     Args:
-        inferencer (`tmnt.models.base.base_inference.BaseInferencer`): Inferencer object that runs the encoder portion of a VAE/VED model.
+        inferencer (`tmnt.inference.BaseInferencer`): Inferencer object that runs the encoder portion of a VAE/VED model.
         use_probs (bool): Map topic vector encodings to the simplex (sum to 1).
         temperature (float): Temperature to sharpen/flatten encoding distribution.
     """
@@ -268,4 +270,47 @@ class BOWTextEncoder(object):
         return encs
     
 
+class SeqVEDInferencer(BaseInferencer):
+    """Inferencer for sequence variational encoder-decoder models using BERT
+    """
+    def __init__(self, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
+        super().__init__(ctx)
+        if model_dir is not None:
+            param_file = os.path.join(model_dir, 'model.params')
+            vocab_file = os.path.join(model_dir, 'vocab.json')
+            config_file = os.path.join(model_dir, 'model.config')
+        with open(config_file) as f:
+            config = json.loads(f.read())
+        with open(vocab_file) as f:
+            voc_js = f.read()
+        self.bow_vocab = nlp.Vocab.from_json(voc_js)
+        self.ctx = ctx
+        self.bert_base, self.vocab = nlp.model.get_model('bert_12_768_12',  
+                                             dataset_name='book_corpus_wiki_en_uncased',
+                                             pretrained=True, ctx=ctx, use_pooler=True,
+                                             use_decoder=False, use_classifier=False) #, output_attention=True)
+        self.latent_dist = config['latent_distribution']['dist_type']       
+        self.n_latent    = config['n_latent']
+        self.kappa       = config['latent_distribution']['kappa']
+        self.pad_id      = self.vocab[self.vocab.padding_token]
+        self.max_sent_len = config['sent_size']  
+        self.max_sent_len = 32
+        self.model = BertBowVED(self.bert_base, self.bow_vocab, latent_distrib=self.latent_dist,
+                 n_latent=self.n_latent, max_sent_len=self.max_sent_len, 
+                 kappa = self.kappa,
+                 batch_size=1)
+        self.tokenizer = BERTTokenizer(self.vocab)
+        self.transform = BERTSentenceTransform(self.tokenizer, self.max_sent_len, pair=False)
+        self.model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
+
+
+    def prep_text(self, txt):    # used for integrated gradients
+        tokens = self.tokenizer(txt)
+        ids, lens, segs = self.transform((txt,))
+        return tokens, mx.nd.array([ids], dtype='int32'), mx.nd.array([lens], dtype='int32'), mx.nd.array([segs], dtype='int32')
     
+
+    def encode_text(self, txt):                   
+        tokens, ids, lens, segs = self.prep_text(txt)
+        topics, attention = self.model.encode(ids.as_in_context(self.ctx), segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
+        return topics, tokens, attention
