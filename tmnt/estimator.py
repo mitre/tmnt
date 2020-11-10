@@ -594,7 +594,7 @@ class MetaBowEstimator(BaseBowEstimator):
 
 class SeqBowEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, vocab, coherence_coefficient=8.0, reporter=None, latent_distribution="vmf", n_latent=20, redundancy_reg_penalty=0.0, max_sent_len=64, kappa=64.0, batch_size=32, kld=1.0, wd_freqs=None, num_val_words=-1, warmup_ratio=0.1, optimizer="adam", epochs=3, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, ctx=mx.cpu(), log_interval=1, log_method='log'):
+    def __init__(self, bert_base, vocab, coherence_coefficient=8.0, reporter=None, latent_distribution="vmf", n_latent=20, redundancy_reg_penalty=0.0, kappa=64.0, batch_size=32, kld=1.0, wd_freqs=None, num_val_words=-1, warmup_ratio=0.1, optimizer="adam", epochs=3, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, ctx=mx.cpu(), log_interval=1, log_method='log'):
         super().__init__(log_method=log_method)
         self.bert_base = bert_base
         self.coherence_coefficient = coherence_coefficient
@@ -604,7 +604,6 @@ class SeqBowEstimator(BaseEstimator):
         self.log_interval = log_interval
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.n_latent = n_latent
-        self.max_sent_len = max_sent_len
         self.kappa = kappa
         self.batch_size = batch_size
         self.kld = kld
@@ -624,7 +623,7 @@ class SeqBowEstimator(BaseEstimator):
 
     def _get_model(self):
         model = BertBowVED(self.bert_base, self.vocabulary, self.latent_distribution, 
-                           n_latent=self.n_latent, max_sent_len=self.max_sent_len,
+                           n_latent=self.n_latent, 
                            kappa = self.kappa, 
                            batch_size = self.batch_size,
                            kld=1.0, wd_freqs=self.wd_freqs,

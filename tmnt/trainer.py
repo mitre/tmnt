@@ -383,20 +383,19 @@ def get_wd_freqs(data_csr, max_sample_size=1000000):
 
 
 class SeqBowVEDTrainer(BaseTrainer):
-    def __init__(self, model_out_dir, sent_size, vocabulary, wd_freqs, num_val_words, train_data, 
+    def __init__(self, model_out_dir, vocabulary, wd_freqs, num_val_words, train_data, 
                  test_data, train_labels=None, test_labels=None, use_gpu=False, log_interval=10, rng_seed=1234):
         super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
         self.wd_freqs = wd_freqs
         self.seed_matrix = None
-        self.sent_size = sent_size
         self.kld_wt = 1.0
         self.num_val_words = num_val_words
         self.log_interval = log_interval
 
     @classmethod
-    def from_arguments(cls, args):
+    def from_arguments(cls, args, config):
         i_dt = datetime.datetime.now()
         train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,
                                                             i_dt.minute,i_dt.second)
@@ -405,16 +404,15 @@ class SeqBowVEDTrainer(BaseTrainer):
         logging.info(args)
         bow_vocab = load_vocab(args.bow_vocab_file)
         data_train, bert_base, vocab, data_csr = load_dataset_bert(args.tr_file, len(bow_vocab),
-                                                                   max_len=args.sent_size, ctx=mx.cpu())
+                                                                   max_len=config.sent_size, ctx=mx.cpu())
         if args.val_file:
-            data_val, _, _, val_csr = load_dataset_bert(args.val_file, len(bow_vocab), max_len=args.sent_size, ctx=mx.cpu())
+            data_val, _, _, val_csr = load_dataset_bert(args.val_file, len(bow_vocab), max_len=config.sent_size, ctx=mx.cpu())
             val_wds = val_csr.sum().asscalar()
         else:
             data_val, val_csr, val_wds = None, None, None
         wd_freqs = get_wd_freqs(data_csr)
         trainer = cls(
             train_out_dir,
-            args.sent_size,
             bow_vocab,
             wd_freqs,
             val_wds, 
@@ -458,7 +456,6 @@ class SeqBowVEDTrainer(BaseTrainer):
                           latent_distribution=latent_distrib,
                           n_latent=n_latent,
                           redundancy_reg_penalty=redundancy_reg_penalty,
-                          max_sent_len=self.sent_size,
                           kappa = kappa, 
                           batch_size=batch_size,
                           kld=self.kld_wt, wd_freqs=self.wd_freqs, num_val_words = self.num_val_words,
@@ -522,7 +519,7 @@ def train_seq_bow(c_args):
         logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(c_args.config))
         raise Exception("Invalid JSON configuration file")
     config = ag.space.Dict(**config_dict)    
-    trainer = SeqBowVEDTrainer.from_arguments(c_args)
+    trainer = SeqBowVEDTrainer.from_arguments(c_args, config)
     model, obj = trainer.train_with_single_config(config, 1)
     trainer.write_model(model, config_dict)
     

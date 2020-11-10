@@ -454,7 +454,7 @@ class CoherenceRegularizer(HybridBlock):
 
 class BertBowVED(Block):
     def __init__(self, bert_base, bow_vocab, latent_distrib='vmf', 
-                 n_latent=256, max_sent_len=32, 
+                 n_latent=256, 
                  kappa = 100.0,
                  batch_size=16, kld=0.1, wd_freqs=None,
                  redundancy_reg_penalty=0.0,
@@ -464,7 +464,6 @@ class BertBowVED(Block):
         self.kld_wt = kld
         self.n_latent = n_latent
         self.model_ctx = ctx
-        self.max_sent_len = max_sent_len
         self.batch_size = batch_size
         self.bow_vocab_size = len(bow_vocab)
         self.vocabulary = bow_vocab
