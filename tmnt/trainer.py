@@ -319,10 +319,9 @@ class BowVAETrainer(BaseTrainer):
                        redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
                        embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
                        num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
-                             epochs=epochs, log_method='log', coherence_via_encoder=self.c_args.encoder_coherence)
+                             epochs=epochs, log_method='log', coherence_via_encoder=self.c_args.encoder_coherence,
+                             pretrained_param_file = self.pretrained_param_file)
         model.validate_each_epoch = self.validate_each_epoch
-        if self.pretrained_param_file is not None:
-            model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
     
 

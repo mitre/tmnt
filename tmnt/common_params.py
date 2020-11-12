@@ -24,6 +24,7 @@ def get_base_argparser():
     parser.add_argument('--str_encoding', type=str, default='utf-8')
     parser.add_argument('--hybridize', action='store_true', help='Use Symbolic computation graph (i.e. MXNet hybridize)')
     parser.add_argument('--use_gpu', action='store_true', help='Use GPU for fitting models', default=False)
-    parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch, perplexity, NPMI) on validation data into a separate file')    
+    parser.add_argument('--trace_file', type=str, default=None, help='Trace: (epoch, perplexity, NPMI) on validation data into a separate file')
+    parser.add_argument('--pretrained_param_file', type=str, help='File with pre-trained model parameters to be fine-tuned')    
     return parser
 

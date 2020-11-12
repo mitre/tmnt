@@ -341,9 +341,10 @@ class BaseBowEstimator(BaseEstimator):
 
 class BowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', coherence_via_encoder=False):
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False, coherence_via_encoder=False, pretrained_param_file=None):
 
-        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method, False, coherence_via_encoder)
+        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method, quiet, coherence_via_encoder)
+        self.pretrained_param_file = pretrained_param_file
 
 
     def npmi(self, X, k=10):
@@ -400,6 +401,8 @@ class BowEstimator(BaseBowEstimator):
                        kappa=self.kappa, alpha=self.alpha,
                        batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
                        wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+        if self.pretrained_param_file is not None:
+            model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
     
 
