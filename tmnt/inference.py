@@ -10,7 +10,7 @@ import gluonnlp as nlp
 import io
 import os
 import scipy
-from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel
+from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel, BertBowVED
 from tmnt.data_loading import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
 from tmnt.preprocess.vectorizer import TextVectorizer
