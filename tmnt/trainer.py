@@ -197,6 +197,7 @@ class BowVAETrainer(BaseTrainer):
         self.wd_freqs = wd_freqs
         self.validate_each_epoch = val_each_epoch
         self.seed_matrix = None
+        self.pretrained_param_file = c_args.pretrained_param_file
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
         
@@ -320,6 +321,8 @@ class BowVAETrainer(BaseTrainer):
                        num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
                              epochs=epochs, log_method='log', coherence_via_encoder=self.c_args.encoder_coherence)
         model.validate_each_epoch = self.validate_each_epoch
+        if self.pretrained_param_file is not None:
+            model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
     
 

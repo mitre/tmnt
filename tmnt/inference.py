@@ -311,5 +311,7 @@ class SeqVEDInferencer(BaseInferencer):
 
     def encode_text(self, txt):                   
         tokens, ids, lens, segs = self.prep_text(txt)
-        topics, attention = self.model.encode(ids.as_in_context(self.ctx), segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
-        return topics, tokens, attention
+        _, enc = self.model.encoder(ids.as_in_context(self.ctx),
+                                              segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
+        topic_encoding = self.model.latent_dist.mu_encoder(enc)
+        return topic_encoding, tokens

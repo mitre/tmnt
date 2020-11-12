@@ -544,7 +544,10 @@ class BertBowVED(Block):
             return (cur_loss + redundancy_loss), redundancy_loss
         else:
             return cur_loss, mx.nd.zeros_like(cur_loss)
-    
+
+    def encode(self, toks, tok_types, valid_length):
+        _, enc = self.encoder(toks, tok_types, valid_length)
+        return self.latent_dist.mu_encoder(enc)
 
     def forward(self, toks, tok_types, valid_length, bow):
         _, enc = self.encoder(toks, tok_types, valid_length)
