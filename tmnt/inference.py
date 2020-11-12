@@ -294,11 +294,10 @@ class SeqVEDInferencer(BaseInferencer):
         self.kappa       = config['latent_distribution']['kappa']
         self.pad_id      = self.vocab[self.vocab.padding_token]
         self.max_sent_len = config['sent_size']  
-        self.max_sent_len = 32
         self.model = BertBowVED(self.bert_base, self.bow_vocab, latent_distrib=self.latent_dist,
-                 n_latent=self.n_latent, max_sent_len=self.max_sent_len, 
-                 kappa = self.kappa,
-                 batch_size=1)
+                                n_latent=self.n_latent,
+                                kappa = self.kappa,
+                                batch_size=1)
         self.tokenizer = BERTTokenizer(self.vocab)
         self.transform = BERTSentenceTransform(self.tokenizer, self.max_sent_len, pair=False)
         self.model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
