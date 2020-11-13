@@ -24,9 +24,10 @@ class BaseTrainer(object):
     """Abstract base class for topic model trainers. 
 
     Objects of this class provide all functionality for training a topic model, including 
-    handle data prep/loading, model definition, and training parameters.
+    handle data prep/loading, model definition, and training parameters. Trainer objects include
+    a tmnt.estimator.BaseEstimator that is responsible for fitting/estimating the topic model parameters.
 
-    Args:
+    Parameters:
         vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
         train_data (array-like or sparse matrix): Training input data tensor
         test_data (array-like or sparse matrix): Testing/validation input data tensor
@@ -89,7 +90,7 @@ class BaseTrainer(object):
         """Gets visible gpus from MXNet.
         
         Returns:
-            `mxnet.context.Context` representing the GPU context
+            (`mxnet.context.Context`): representing the GPU context
         """
         gpu_count = 0
         while True:
@@ -184,6 +185,25 @@ class BaseTrainer(object):
 
 
 class BowVAETrainer(BaseTrainer):
+    """Trainer for bag-of-words VAE topic models.
+    
+    Parameters:
+        log_out_dir (str): String path to directory for outputting log file and potentially saved model information
+        model_out_dir (str): Explicit string path to saved model information
+        c_args (`argparse.Namespace`): Command-line arguments
+        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
+        wd_freqs (`mxnet.ndarray.NDArray`): Tensor representing term frequencies in training dataset used to 
+            initialize decoder bias weights.
+        train_data (array-like or sparse matrix): Training input data tensor
+        test_data (array-like or sparse matrix): Testing/validation input data tensor
+        total_tst_words: Total test/validation words (used for computing perplexity from likelihood)
+        train_labels (array-like or sparse matrix): Labels associated with training inputs. Optional (default = None).
+        test_labels (array-like or sparse matrix): Labels associated with test inputs. Optional (default = None).
+        label_map (dict): Mapping between label strings and integers for co-variate/labels. Optional (default = None).
+        use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
+        val_each_epoch (bool): Perform validation (NPMI and perplexity) on the validation set after each epoch. Default = False.
+        rng_seed (int): Seed for random number generator. Default = 1234
+    """
     def __init__(self, log_out_dir, model_out_dir, c_args, vocabulary, wd_freqs, train_data, 
                  test_data, total_tst_words, train_labels=None, test_labels=None, label_map=None, use_gpu=False,
                  val_each_epoch=True, rng_seed=1234):
@@ -201,9 +221,14 @@ class BowVAETrainer(BaseTrainer):
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
         
-
     @classmethod
     def from_arguments(cls, c_args, val_each_epoch=True):
+        """Constructor method to build BowVAETrainer from command-line arguments directly.
+        
+        Parameters:
+            c_args (`argparse.Namespace`): Command-line arguments.
+            val_each_epoch (bool): Flag for performing validation each epoch. optional (default = True)
+        """
         i_dt = datetime.datetime.now()
         log_out_dir = \
             os.path.join(c_args.save_dir,
@@ -249,6 +274,10 @@ class BowVAETrainer(BaseTrainer):
 
 
     def pre_cache_vocabularies(self, sources):
+        """Pre-cache pre-trained vocabularies.
+        NOTE: This may cause problems with model selection when serializing a BowVAETrainer with
+        large, memory-consuming pre-trained word embeddings.
+        """
         for s in sources:
             self._initialize_vocabulary(s, set_vocab=False)
 
@@ -260,13 +289,17 @@ class BowVAETrainer(BaseTrainer):
         self.test_labels   = tst_labels
         self.total_tst_words = total_tst_words
 
-    def _get_vae_model(self, config, reporter, ctx):
+    def _get_vae_estimator(self, config, reporter, ctx):
         """Take a model configuration - specified by a config file or as determined by model selection and 
         return a VAE topic model ready for training.
 
-        Parameters
-        ----------
-        config: an autogluon configuration/argument object 
+        Parameters:
+            config (dict): an autogluon configuration/argument object, instantiated to particular parameters
+            reporter (`autogluon.core.scheduler.reporter.Reporter`): object for reporting model evaluations to scheduler
+            ctx (`mxnet.context.Context`): Mxnet compute context
+        
+        Returns:
+            (tmnt.estimator.BaseEstimator): Either BowEstimator or MetaBowEstimator
         """
         
         lr = config.lr
@@ -300,7 +333,8 @@ class BowVAETrainer(BaseTrainer):
             #n_covars = len(self.label_map) if self.label_map else 1
             n_covars = -1
             model = \
-                MetaBowEstimator(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, wd_freqs=self.wd_freqs,
+                MetaBowEstimator(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words,
+                                 wd_freqs=self.wd_freqs,
                            label_map=self.label_map,
                            covar_net_layers=1, ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                            n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
@@ -312,7 +346,8 @@ class BowVAETrainer(BaseTrainer):
         else:
             print("Encoder coherence = {}".format(self.c_args.encoder_coherence))
             model = \
-                BowEstimator(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words, wd_freqs=self.wd_freqs,
+                BowEstimator(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words,
+                             wd_freqs=self.wd_freqs,
                        ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                        n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                        coherence_reg_penalty=coherence_reg_penalty,
@@ -329,62 +364,77 @@ class BowVAETrainer(BaseTrainer):
         """Main training function which takes a single model configuration and a budget (i.e. number of epochs) and
         fits the model to the training data.
         
-        Parameters
-        ----------
-        config: `Configuration` object within the specified `ConfigSpace`
-        reporter: Reporter callback for model selection
+        Parameters:
+            config: `Configuration` object within the specified `ConfigSpace`
+            reporter: Reporter callback for model selection
 
-        Returns
-        -------
-        model: VAE model with trained parameters
-        obj: scaled objective
-        npmi: coherence on validation set
-        perplexity: perplexity score on validation data
-        redundancy: topic model redundancy of top 5 terms for each topic
+        Returns:
+            (tuple): with
+                model: VAE model with trained parameters
+                obj: scaled objective
+                npmi: coherence on validation set
+                perplexity: perplexity score on validation data
+                redundancy: topic model redundancy of top 5 terms for each topic
         """
         logging.debug("Evaluating with Config: {}".format(config))
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
-        vae_model = self._get_vae_model(config, reporter, ctx)
-        obj, npmi, perplexity, redundancy = vae_model.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
-        return vae_model.model, obj, npmi, perplexity, redundancy
+        vae_estimator = self._get_vae_estimator(config, reporter, ctx)
+        obj, npmi, perplexity, redundancy = vae_estimator.fit_with_validation(self.train_data, self.train_labels,
+                                                                              self.test_data, self.test_labels)
+        return vae_estimator.model, obj, npmi, perplexity, redundancy
 
-    def write_model(self, m, config):
+    def write_model(self, model, config):
+        """Method to write an estimated model to disk along with configuration used to train the model and the vocabulary.
+
+        Parameters:
+            model (tmnt.modeling.BowVAEModel): Bag-of-words model (itself a gluon.block.Block)
+            config (tmnt.configuration.TMNTConfigBOW): Configuration for models of tmnt.modeling.BowVAEModel type
+        """
         model_dir = self.model_out_dir
         if model_dir:
             pfile = os.path.join(model_dir, 'model.params')
             sp_file = os.path.join(model_dir, 'model.config')
             vocab_file = os.path.join(model_dir, 'vocab.json')
             logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
-            m.save_parameters(pfile)
+            model.save_parameters(pfile)
             ## additional derived information from auto-searched configuration
             ## helpful to have for runtime use of model (e.g. embedding size)
             derived_info = {}
-            derived_info['embedding_size'] = m.embedding_size
+            derived_info['embedding_size'] = model.embedding_size
             config['derived_info'] = derived_info
             if 'num_enc_layers' not in config.keys():
-                config['num_enc_layers'] = m.num_enc_layers
-                config['n_covars'] = int(m.n_covars)
-                config['l_map'] = m.label_map
-                config['covar_net_layers'] = m.covar_net_layers
+                config['num_enc_layers'] = model.num_enc_layers
+                config['n_covars'] = int(model.n_covars)
+                config['l_map'] = model.label_map
+                config['covar_net_layers'] = model.covar_net_layers
             specs = json.dumps(config, sort_keys=True, indent=4)
             with open(sp_file, 'w') as f:
                 f.write(specs)
             with open(vocab_file, 'w') as f:
-                f.write(m.vocabulary.to_json())
+                f.write(model.vocabulary.to_json())
         else:
             raise Exception("Model write failed, output directory not provided")
 
 
-def get_wd_freqs(data_csr, max_sample_size=1000000):
-    sample_size = min(max_sample_size, data_csr.shape[0])
-    data = data_csr[:sample_size] 
-    sums = mx.nd.sum(data, axis=0)
-    return sums
-
-
 
 class SeqBowVEDTrainer(BaseTrainer):
+    """Trainer for bag-of-words VAE topic models.
+    
+    Parameters:
+        model_out_dir (str): Explicit string path to saved model information (and logging info).
+        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
+        wd_freqs (`mxnet.ndarray.NDArray`): Tensor representing term frequencies in training dataset used to 
+            initialize decoder bias weights.
+        num_val_words (int): Number of words in the validation data (for computing perplexity)
+        train_data (tuple): Training input data tensor for input sequence and separate tensor for bag-of-words output
+        test_data (tuple): Testing/validation input data tensor for input sequence and separate tensor for bag-of-words output
+        train_labels (array-like or sparse matrix): Labels associated with training inputs. Optional (default = None).
+        test_labels (array-like or sparse matrix): Labels associated with test inputs. Optional (default = None).
+        use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
+        log_interval (int): Perform validation (NPMI and perplexity) on the validation set this many batches. Default = 10.
+        rng_seed (int): Seed for random number generator. Default = 1234
+    """
     def __init__(self, model_out_dir, vocabulary, wd_freqs, num_val_words, train_data, 
                  test_data, train_labels=None, test_labels=None, use_gpu=False, log_interval=10, rng_seed=1234):
         super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
@@ -412,7 +462,9 @@ class SeqBowVEDTrainer(BaseTrainer):
             val_wds = val_csr.sum().asscalar()
         else:
             data_val, val_csr, val_wds = None, None, None
-        wd_freqs = get_wd_freqs(data_csr)
+        sample_size = min(50000, data_csr.shape[0])
+        data = data_csr[:sample_size] 
+        wd_freqs = mx.nd.sum(data, axis=0)
         trainer = cls(
             train_out_dir,
             bow_vocab,
@@ -424,7 +476,7 @@ class SeqBowVEDTrainer(BaseTrainer):
             log_interval = args.log_interval
             )
         return trainer
-        
+
 
     def _get_ved_model(self, config, reporter, ctx):
         gen_lr = config.gen_lr
@@ -472,6 +524,21 @@ class SeqBowVEDTrainer(BaseTrainer):
         return model
 
     def train_model(self, config, reporter):
+        """Primary training call used for model training/evaluation by autogluon model selection
+        or for training one off models.
+        
+        Parameters:
+            config (tmnt.configuration.TMNTConfigBOW): TMNT configuration for bag-of-words models
+            reporter (`autogluon.core.scheduler.reporter.Reporter`): object for reporting model evaluations to scheduler
+        
+        Returns:
+            (tuple): with
+                model: variational encoder-decoder model with trained parameters
+                obj: scaled objective with fit model
+                npmi: coherence on validation set
+                perplexity: perplexity score on validation data
+                redundancy: topic model redundancy of top 5 terms for each topic
+        """
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         seq_ved_model = self._get_ved_model(config, reporter, ctx)
@@ -480,20 +547,27 @@ class SeqBowVEDTrainer(BaseTrainer):
         return seq_ved_model.model, obj, npmi, perplexity, redundancy
 
 
-    def write_model(self, m, config, epoch_id=0):
+    def write_model(self, model, config, epoch_id=0):
+        """Method to write an estimated model to disk along with configuration used to train the model and the vocabulary.
+
+        Parameters:
+            model (tmnt.modeling.BowVAEModel): Bag-of-words model (itself a gluon.block.Block)
+            config (tmnt.configuration.TMNTConfigBOW): Configuration for models of tmnt.modeling.BowVAEModel type
+            epoch_id (int): Id for printing out current epoch as checkpoint
+        """
         model_dir = self.model_out_dir
         if model_dir:
             suf = '_'+ str(epoch_id) if epoch_id > 0 else ''
             pfile = os.path.join(model_dir, ('model.params' + suf))
             conf_file = os.path.join(model_dir, ('model.config' + suf))
             vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
-            m.save_parameters(pfile)
+            model.save_parameters(pfile)
             dd = {}
             specs = json.dumps(config, sort_keys=True, indent=4)
             with open(conf_file, 'w') as f:
                 f.write(specs)
             with open(vocab_file, 'w') as f:
-                f.write(m.vocabulary.to_json())
+                f.write(model.vocabulary.to_json())
     
 
 def train_bow_vae(args):
@@ -518,7 +592,8 @@ def train_seq_bow(c_args):
         with open(c_args.config, 'r') as f:
             config_dict = json.load(f)
     except:
-        logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance".format(c_args.config))
+        logging.error("File passed to --config, {}, does not appear to be a valid .json configuration instance"
+                      .format(c_args.config))
         raise Exception("Invalid JSON configuration file")
     config = ag.space.Dict(**config_dict)    
     trainer = SeqBowVEDTrainer.from_arguments(c_args, config)

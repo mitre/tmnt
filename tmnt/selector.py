@@ -21,7 +21,7 @@ class BaseSelector(object):
     Perform model selection using AutoGluon with any type of topic model.
 
     Args:
-        tmnt_config_space(`tmnt.models.base.base_config.TMNTConfigBase`): Object defining the search space for a TMNT topic model
+        tmnt_config_space(`tmnt.configuration.TMNTConfigBase`): Object defining the search space for a TMNT topic model
         iterations (int): Number of total model evaluations
         searcher (str): Search algortihm used (random, bayesopt, skopt)
         scheduler (str): Scheduler for search (fifo, hyperband)

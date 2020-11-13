@@ -303,6 +303,19 @@ class SeqVEDInferencer(BaseInferencer):
         self.model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
 
 
+    def _embed_sequence(self, ids, segs):
+        embeddings = self.bert_base.word_embed(ids) + self.bert_base.token_type_embed(segs)
+        return embeddings.transpose((1,0,2))
+
+    def _encode_from_embedding(self, embeddings, lens):
+        outputs, _ = self.bert_base.encoder(embeddings, valid_length=lens)
+        outputs = outputs.transpose((1,0,2))
+        # outputs should be (batch, seq_len, C) shaped now
+        pooled_out = self.bert_base._apply_pooling(outputs)
+        topic_encoding = self.model.latent_dist.mu_encoder(pooled_out)
+        return topic_encoding
+
+
     def prep_text(self, txt):    # used for integrated gradients
         tokens = self.tokenizer(txt)
         ids, lens, segs = self.transform((txt,))

@@ -80,64 +80,32 @@ class BaseBowEstimator(BaseEstimator):
     """
     Bag of words variational autoencoder algorithm
 
-    Parameters
-    ----------
-    vocabulary: list[string]
-        Vocabulary list used for pretrained emeddings
-
-    lr: float, optional (default=0.005)
-        Learning rate of training.
-
-    latent_distribution: 'logistic_gaussian' | 'vmf' | 'gaussian' | 'gaussian_unitvar', optional (default="vmf")
-        Latent distribution of the variational autoencoder.
-    
-    n_latent: int, optional (default=20)
-        Size of the latent distribution.
-
-    kappa: float, optional (default=64.0)
-        Distribution parameter for Von-Mises Fisher distribution, ignored if latent_distribution not 'vmf'.
-
-    alpha: float, optional (default=1.0)
-        Prior parameter for Logistic Gaussian distribution, ignored if latent_distribution not 'logistic_gaussian'.
-
-    enc_hidden_dim: int, optional (default=150)
-        Size of hidden encoder layers.
-    
-    coherence_reg_penalty: float, optional (default=0.0)
-        Regularization penalty for topic coherence.
-
-    redundancy_reg_penalty: float, optional (default=0.0)
-        Regularization penalty for topic redundancy.
-
-    batch_size: int, optional (default=128)
-        Batch training size.
-
-    embedding_source: 'random' | 'glove' | 'fasttext' | 'word2vec', optional (default='random')
-        Word embedding source for vocabulary.
-
-    embedding_size: int, optional (default=128)
-        Word embedding size, ignored if embedding_source not 'random'.
-
-    fixed_embedding: bool, optional(default=False)
-        Enable fixed embeddings.
-
-    num_enc_layers: int, optional(default=1)
-        Number of layers in encoder.
-
-    enc_dr: float, optional(default=0.1)
-        Dropout probability in encoder.
-
-    seed_matrix: mxnet matrix, optional(default=None)
-        Seed matrix for guided topic model.
-
-    hybridize: bool, optional(default=False)
-        Hybridize underlying mxnet model.
-
-    epochs: int, optional(default=40)
-        Number of training epochs.
-
-    gpu_id: int, optional(default=-1)
-        ID of GPU device, GPU training disabled if gpu_id<0.
+    Parameters:
+        vocabulary (list[string]): Vocabulary list used for pretrained emeddings
+        lr (float): Learning rate of training. (default=0.005)
+        latent_distribution (str): Latent distribution of the variational autoencoder.
+            'logistic_gaussian' | 'vmf' | 'gaussian' | 'gaussian_unitvar', optional (default="vmf")
+        n_latent (int): Size of the latent distribution. optional (default=20)
+        kappa (float): Distribution parameter for Von-Mises Fisher distribution, ignored if latent_distribution not 'vmf'. 
+            optional (default=64.0)
+        alpha (float): Prior parameter for Logistic Gaussian distribution, ignored if latent_distribution not 'logistic_gaussian'. 
+            optional (default=1.0)
+        enc_hidden_dim (int): Size of hidden encoder layers. optional (default=150)
+        coherence_reg_penalty (float): Regularization penalty for topic coherence. optional (default=0.0)
+        redundancy_reg_penalty (float): Regularization penalty for topic redundancy. optional (default=0.0)
+        batch_size (int): Batch training size. optional (default=128)
+        embedding_source (str): Word embedding source for vocabulary.
+            'random' | 'glove' | 'fasttext' | 'word2vec', optional (default='random')
+        embedding_size (int): Word embedding size, ignored if embedding_source not 'random'. optional (default=128)
+        fixed_embedding (bool): Enable fixed embeddings. optional(default=False)
+        num_enc_layers (int): Number of layers in encoder. optional(default=1)
+        enc_dr (float): Dropout probability in encoder. optional(default=0.1)
+        seed_matrix (mxnet matrix): Seed matrix for guided topic model. optional(default=None)
+        hybridize (bool): Hybridize underlying mxnet model. optional(default=False)
+        epochs (int): Number of training epochs. optional(default=40)
+        log_method (str): Method for logging. 'print' | 'log', optional (default='log')
+        quiet (bool): Flag for whether to force minimal logging/ouput. optional (default=False)
+        coherence_via_encoder (bool): Flag 
     """
     def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False, coherence_via_encoder=False):
         
@@ -184,18 +152,12 @@ class BaseBowEstimator(BaseEstimator):
         """
         Calculate NPMI(Normalized Pointwise Mutual Information) for data X
 
-        Parameters
-        ----------
-        X: array-like or sparse matrix, [n_samples, vocab_size]
-           Document word matrix.
+        Parameters:
+            X (array-like or sparse matrix): Document word matrix. shape [n_samples, vocab_size]
+            k (int): Threshold at which to compute npmi. optional (default=10)
 
-        k: int, optional (default=10)
-           Threshold at which to compute npmi.
-
-        Returns
-        -------
-        npmi: float
-           NPMI score.
+        Returns:
+            npmi (float): NPMI score.
         """
         sorted_ids = self.model.get_ordered_terms()
         num_topics = min(self.n_latent, sorted_ids.shape[-1])
@@ -421,7 +383,7 @@ class BowEstimator(BaseBowEstimator):
         Transform data X according to the fitted model.
 
         Parameters:
-        X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features}
+            X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features}
 
         Returns:
             topic_distribution : shape=(n_samples, n_latent) Document topic distribution for X
@@ -470,7 +432,6 @@ class MetaBowEstimator(BaseBowEstimator):
     def _get_model(self):
         """
         Returns
-        -------
         MXNet model initialized using provided hyperparameters
         """
         if self.embedding_source != 'random' and self.vocabulary.embedding is None:
@@ -498,19 +459,14 @@ class MetaBowEstimator(BaseBowEstimator):
         """
         Forward pass of BowVAE model given the supplied data
 
-        Parameters
-        ----------
-        model: MXNet model that returns elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
+        Parameters:
+            model (MXNet model): Model that returns elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
+            data ({array-like, sparse matrix}): Document word matrix of shape (n_train_samples, vocab_size) 
+            labels ({array-like, sparse matrix}): Covariate matrix of shape (n_train_samples, n_covars)
 
-        data:  {array-like, sparse matrix} of shape (n_train_samples, vocab_size)
-           Document word matrix.
-
-        labels: {array-like, sparse matrix} of shape (n_train_samples, n_covars)
-           Covariate matrix.
-
-        Returns
-        -------
-        Tuple of elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
+        Returns:
+            (tuple): Tuple of: 
+                elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
         """
         self.train_data = data
         self.train_labels = labels
@@ -521,20 +477,13 @@ class MetaBowEstimator(BaseBowEstimator):
         """
         Calculate NPMI(Normalized Pointwise Mutual Information) for each covariate for data X
 
-        Parameters
-        ----------
-        X: array-like or sparse matrix, [n_samples, vocab_size]
-           Document word matrix.
+        Parameters:
+            X (array-like or sparse matrix): Document word matrix. shape [n_samples, vocab_size]
+            y (array-like or sparse matrix): Covariate matrix. shape [n_samples, n_covars]
+            k (int): Threshold at which to compute npmi. optional (default=10)
 
-        y: array-like or sparse matrix, [n_samples, n_covars]
-           Covariate matrix.
-
-        k: int, optional (default=10)
-           Threshold at which to compute npmi.
-
-        Returns
-        -------
-        npmi: Dictionary of npmi scores for each covariate.
+        Returns:
+            (dict): Dictionary of npmi scores for each covariate.
         """
 
         X_train = X.toarray()
@@ -567,7 +516,8 @@ class MetaBowEstimator(BaseBowEstimator):
         Get topic vectors of the fitted model.
 
         Returns:
-            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
+            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. 
+                shape=(n_latent, vocab_size)
         """
 
         return self.model.get_topic_vectors(self.train_data, self.train_labels)
@@ -576,18 +526,12 @@ class MetaBowEstimator(BaseBowEstimator):
         """
         Transform data X and y according to the fitted model.
 
-        Parameters
-        ----------
-        X: {array-like, sparse matrix} of shape {n_samples, n_features)
-            Document word matrix.
+        Parameters:
+            X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features)
+            y ({array-like, sparse matrix}): Covariate matrix of shape (n_train_samples, n_covars)
 
-        y: {array-like, sparse matrix} of shape (n_train_samples, n_covars)
-           Covariate matrix.
-
-        Returns
-        -------
-        topic_distribution : shape=(n_samples, n_latent)
-            Document topic distribution for X and y
+        Returns:
+            ({array-like, sparse matrix}): Document topic distribution for X and y of shape=(n_samples, n_latent)
         """
 
         x_mxnet, y_mxnet = mx.nd.array(X, dtype=np.float32), mx.nd.array(y, dtype=np.float32)
@@ -693,6 +637,15 @@ class SeqBowEstimator(BaseEstimator):
     
 
     def fit_with_validation(self, X, y, val_X, val_y):
+        """
+        Estimate a topic model by fine-tuning pre-trained BERT encoder.
+        
+        Parameters:
+            X ({array-like, sparse matrix}): Training document word matrix of shape {n_samples, n_features)
+            y ({array-like, sparse matrix}): Training covariate matrix of shape (n_train_samples, n_covars)
+            val_X ({array-like, sparse matrix}): Validation document word matrix of shape {n_samples, n_features)
+            val_y ({array-like, sparse matrix}): Validation covariate matrix of shape (n_train_samples, n_covars)
+        """
         seq_train, bow_train = X
         model = self._get_model()
         self.model = model

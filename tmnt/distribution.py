@@ -15,6 +15,8 @@ __all__ = ['GaussianDistribution', 'GaussianUnitVarDistribution', 'LogisticGauss
 
 
 class BaseDistribution(nn.HybridBlock):
+    """Base probabilistic latent distribution.
+    """
 
     def __init__(self, n_latent, ctx):
         super(BaseDistribution, self).__init__()
@@ -37,7 +39,13 @@ class BaseDistribution(nn.HybridBlock):
 
 
 class GaussianDistribution(BaseDistribution):
+    """Gaussian latent distribution with diagnol co-variance.
 
+    Parameters:
+        n_latent (int): Dimentionality of the latent distribution
+        ctx (mxnet.context.Context): Mxnet computational context (cpu or gpu[id])
+        dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
+    """
     def __init__(self, n_latent, ctx, dr=0.2):
         super(GaussianDistribution, self).__init__(n_latent, ctx)
         with self.name_scope():
@@ -53,6 +61,8 @@ class GaussianDistribution(BaseDistribution):
         return -0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
 
     def hybrid_forward(self, F, data, batch_size):
+        """Generate a sample according to the Gaussian given the encoder outputs
+        """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
         lv = self.lv_encoder(data)
@@ -60,12 +70,17 @@ class GaussianDistribution(BaseDistribution):
         z = self._get_gaussian_sample(F, mu_bn, lv_bn, batch_size)
         KL = self._get_kl_term(F, mu_bn, lv_bn)
         z = self.post_sample_dr_o(z)
-        #z = F.relu(z)
         return z, KL
 
 
 class GaussianUnitVarDistribution(BaseDistribution):
+    """Gaussian latent distribution with fixed unit variance.
 
+    Parameters:
+        n_latent (int): Dimentionality of the latent distribution
+        ctx (mxnet.context.Context): Mxnet computational context (cpu or gpu[id])
+        dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
+    """
     def __init__(self, n_latent, ctx, dr=0.2, var=1.0):
         super(GaussianUnitVarDistribution, self).__init__(n_latent, ctx)
         self.variance = mx.nd.array([var], ctx=ctx)
@@ -80,6 +95,8 @@ class GaussianUnitVarDistribution(BaseDistribution):
         return -0.5 * F.sum(1.0 + self.log_variance - mu*mu - self.variance, axis=1)
 
     def hybrid_forward(self, F, data, batch_size):
+        """Generate a sample according to the unit variance Gaussian given the encoder outputs
+        """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
         z = self._get_gaussian_sample(F, mu_bn, self.log_variance, batch_size)
@@ -88,7 +105,14 @@ class GaussianUnitVarDistribution(BaseDistribution):
 
 
 class LogisticGaussianDistribution(BaseDistribution):
+    """Logistic normal/Gaussian latent distribution with specified prior
 
+    Parameters:
+        n_latent (int): Dimentionality of the latent distribution
+        ctx (mxnet.context.Context): Mxnet computational context (cpu or gpu[id])
+        dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
+        alpha (float): Value the determines prior variance as 1/alpha - (2/n_latent) + 1/(n_latent^2)
+    """
     def __init__(self, n_latent, ctx, dr=0.2, alpha=1.0):
         super(LogisticGaussianDistribution, self).__init__(n_latent, ctx)
         self.alpha = alpha
@@ -116,6 +140,8 @@ class LogisticGaussianDistribution(BaseDistribution):
         return 0.5 * (F.sum((v_div + dt + lv_div), axis=1) - self.n_latent)
 
     def hybrid_forward(self, F, data, batch_size):
+        """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
+        """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)        
         lv = self.lv_encoder(data)
@@ -127,7 +153,14 @@ class LogisticGaussianDistribution(BaseDistribution):
     
 
 class HyperSphericalDistribution(BaseDistribution):
+    """Hyperspherical (von Mises-Fischer) latent distribution
 
+    Parameters:
+        n_latent (int): Dimentionality of the latent distribution
+        kappa (float): Concentration parameter for vMF distributioin (default = 100.0)
+        dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
+        ctx (mxnet.context.Context): Mxnet computational context (cpu or gpu[id])
+    """
     def __init__(self, n_latent, kappa=100.0, dr=0.2, ctx=mx.cpu()):
         super(HyperSphericalDistribution, self).__init__(n_latent, ctx)
         self.ctx = ctx
@@ -150,14 +183,16 @@ class HyperSphericalDistribution(BaseDistribution):
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
         self.mu_bn.collect_params().setattr('grad_req', 'null')
         self.been_initialized = False
-        #self.vmf_samples.initialize(ctx=self.ctx, force_reinit=True)
-        #self.vmf_samples.set_data(self.w_samples)
 
     def post_init(self, ctx):
+        """Method to post initialize the distribution with precomputed set of samples
+        """
         self.vmf_samples.set_data(self.w_samples.as_in_context(ctx))
         self.been_initialized = True
 
     def hybrid_forward(self, F, data, batch_size, kld_const, vmf_samples):
+        """Generate a sample according to the vFM latent distribution given the encoder outputs
+        """
         if not self.been_initialized:
             raise Exception("Hyperspherical distribution needs to be initialized after other layers by calling the 'post_init' method")
         mu = self.mu_encoder(data)
@@ -168,10 +203,6 @@ class HyperSphericalDistribution(BaseDistribution):
         z_r = F.softmax(z)
         return z_r, kld
 
-
-    """
-    Method to pre-generate 
-    """
     def _pregenerate_samples(self, num_samples=100000):
         dim = self.n_latent
         kappa = self.kappa

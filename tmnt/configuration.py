@@ -10,6 +10,11 @@ import autogluon.core as ag
 __all__ = ['BaseTMNTConfig']
 
 class BaseTMNTConfig(object):
+    """Base configuration (space) for TMNT
+    
+    Parameters:
+        c_file (str): String path to configuration space (.yaml) file
+    """
 
     def __init__(self, c_file):
         self.config_file = c_file
@@ -67,7 +72,12 @@ class BaseTMNTConfig(object):
         else:
             return None
 
-
+    def get_configspace(self):
+        """Returns a dictionary with a point/sample in the configspace.
+        Returns:
+            (dict): Dictionary with configuration parameter values.
+        """
+        raise NotImplemented
 
 
 class TMNTConfigBOW(BaseTMNTConfig):
