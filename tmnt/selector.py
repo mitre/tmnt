@@ -110,7 +110,7 @@ class BaseSelector(object):
         and various model selection options, e.g. searcher and scheduler, number of iterations
 
         Args:
-            trainer (:class:`tmnt.models.base.base_trainer.BaseTrainer`): A trainer
+            trainer (:class:`tmnt.trainer.BaseTrainer`): A trainer that fits and evaluates models given a configuration.
         """
         dd = datetime.datetime.now()
         scheduler = self._select(trainer)

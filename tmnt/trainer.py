@@ -90,7 +90,7 @@ class BaseTrainer(object):
         """Gets visible gpus from MXNet.
         
         Returns:
-            (`mxnet.context.Context`): representing the GPU context
+            (:class:`mxnet.context.Context`): representing the GPU context
         """
         gpu_count = 0
         while True:
@@ -128,8 +128,8 @@ class BaseTrainer(object):
 
         Returns:
             (tuple): Tuple containing:
-                model (:class:`tmnt.models.base.base_vae.BaseVAE`): VAE Model instance with trained/fit parameters.
-                objective (float): Value of the objective function with the best model.
+                - model (:class:`tmnt.modeling.BowVAEModel`): VAE Model instance with trained/fit parameters.
+                - obj (float): objective value of the objective function with the best model.
         """
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
@@ -175,10 +175,7 @@ class BaseTrainer(object):
         
 
     def train_model(self, config, reporter):
-        """
-        Parameters
-        ----------
-        
+        """Train a model with config and reporter callback.
         """
         raise NotImplementedError()
 
@@ -299,7 +296,7 @@ class BowVAETrainer(BaseTrainer):
             ctx (`mxnet.context.Context`): Mxnet compute context
         
         Returns:
-            (tmnt.estimator.BaseEstimator): Either BowEstimator or MetaBowEstimator
+            Estimator (:class:`tmnt.estimator.BaseEstimator`): Either BowEstimator or MetaBowEstimator
         """
         
         lr = config.lr
@@ -369,12 +366,12 @@ class BowVAETrainer(BaseTrainer):
             reporter: Reporter callback for model selection
 
         Returns:
-            (tuple): with
-                model: VAE model with trained parameters
-                obj: scaled objective
-                npmi: coherence on validation set
-                perplexity: perplexity score on validation data
-                redundancy: topic model redundancy of top 5 terms for each topic
+            (tuple): Tuple containing:
+                - model (:class:`tmnt.modeling.BowVAEModel`)VAE model with trained parameters
+                - obj (float): scaled objective
+                - npmi (float): coherence on validation set
+                - perplexity (float): perplexity score on validation data
+                - redundancy (float): topic model redundancy of top 5 terms for each topic
         """
         logging.debug("Evaluating with Config: {}".format(config))
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
@@ -528,16 +525,16 @@ class SeqBowVEDTrainer(BaseTrainer):
         or for training one off models.
         
         Parameters:
-            config (tmnt.configuration.TMNTConfigBOW): TMNT configuration for bag-of-words models
-            reporter (`autogluon.core.scheduler.reporter.Reporter`): object for reporting model evaluations to scheduler
+            config (:class:`tmnt.configuration.TMNTConfigBOW`): TMNT configuration for bag-of-words models
+            reporter (:class:`autogluon.core.scheduler.reporter.Reporter`): object for reporting model evaluations to scheduler
         
         Returns:
-            (tuple): with
-                model: variational encoder-decoder model with trained parameters
-                obj: scaled objective with fit model
-                npmi: coherence on validation set
-                perplexity: perplexity score on validation data
-                redundancy: topic model redundancy of top 5 terms for each topic
+            (tuple): Tuple containing:
+                - model (:class:`tmnt.modeling.BertBowVED`): variational BERT encoder-decoder model with trained parameters
+                - obj (float): scaled objective with fit model
+                - npmi (float): coherence on validation set
+                - perplexity (float): perplexity score on validation data
+                - redundancy (float): topic model redundancy of top 5 terms for each topic
         """
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]

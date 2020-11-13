@@ -22,25 +22,22 @@ class BowVAEModel(HybridBlock):
     """
     Defines the neural architecture for a bag-of-words topic model.
 
-    Parameters
-    ----------
-    vocabulary: int 
-        size of the vocabulary
-
-    enc_dim: int 
-        number of dimension of input encoder (first FC layer)
-
-    n_latent: int 
-        number of dimensions of the latent dimension (i.e. number of topics)
-
-    gen_layers: int (default = 3) 
-        number of generator layers (after sample); size is the same as n_latent
-
-    batch_size: int (default None) 
-        provided only at training time (or when model is Hybridized) - otherwise will be inferred
-
-    ctx: int 
-        context device (default is mx.cpu())
+    Parameters:
+        vocabulary (int): Size of the vocabulary
+        enc_dim (int): Number of dimension of input encoder (first FC layer)
+        n_latent (int): Number of dimensions of the latent dimension (i.e. number of topics)
+        embedding_size (int): Number of dimensions for embedding layer
+        fixed_embedding (bool): Whether to fix embedding weights (default = False)
+        latent_distrib (str): Latent distribution. 'vmf' | 'logistic_gaussian' | 'gaussian' (default = 'logistic_gaussian')
+        kappa (float): Concentration parameter for vmf
+        alpha (float): Hyperparameter to define prior variance for logistic gaussian
+        batch_size (int): provided only at training time (or when model is Hybridized) - otherwise will be inferred (default None) 
+        n_encoding_layers (int): Number of layers used for the encoder. (default = 1)
+        enc_dr (float): Dropout after each encoder layer. (default = 0.1)
+        wd_freqs (:class:`mxnet.ndarray.NDArray`): Tensor with word frequencies in training data to initialize bias terms.
+        seed_mat (:class:`mxnet.ndarray.NDArray`): Tensor with seed terms for guided topic modeling loss
+        n_covars (int): Number of values for categorical co-variate (0 for non-MetaData BOW model)
+        ctx (int): context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
@@ -93,6 +90,11 @@ class BowVAEModel(HybridBlock):
             self.set_biases(wd_freqs)
 
     def set_biases(self, wd_freqs):
+        """Set the biases to the log of the word frequencies.
+
+        Parameters:
+            wd_freqs (:class:`mxnet.ndarray.NDArray`): Word frequencies as determined from training data
+        """
         freq_nd = wd_freqs + 1
         total = freq_nd.sum()
         log_freq = freq_nd.log() - freq_nd.sum().log()

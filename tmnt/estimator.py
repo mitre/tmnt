@@ -386,7 +386,7 @@ class BowEstimator(BaseBowEstimator):
             X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features}
 
         Returns:
-            topic_distribution : shape=(n_samples, n_latent) Document topic distribution for X
+            (:class:`mxnet.ndarray.NDArray`) topic_distribution: shape=(n_samples, n_latent) Document topic distribution for X
         """
 
         mx_array = mx.nd.array(X,dtype='float32')
