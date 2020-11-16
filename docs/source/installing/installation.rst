@@ -28,7 +28,7 @@ https://docs.conda.io/en/latest/miniconda.html
 
 Once Conda is installed, install a new environment for TMNT as follows::
 
-  conda create --name TMNT -c conda-forge python=3 pip numpy==1.17.0
+  conda create --name TMNT python=3.8 --no-default-packages
 
 In some cases, the conda-forge versions may run into SSL timeouts. If the
 above command returns a HTTP 000 CONNECTION FAILED message, it is suggested
@@ -40,15 +40,11 @@ Once the environment is setup, activate it and install TMNT-specific libraries::
 
   conda activate TMNT 
   cd tmnt
-  pip install -r requirements.txt
+  pip install .
 
 If using a GPU, replace the last line above with ::
   
-  pip install -r requirements.gpu.txt
-
-Finally, TMNT must be installed as a package locally by running::
-
-  python setup.py develop
+  USE_CUDA=1 pip install .
 
   
 Building the Test Model
