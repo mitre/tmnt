@@ -30,12 +30,6 @@ Once Conda is installed, install a new environment for TMNT as follows::
 
   conda create --name TMNT python=3.8 --no-default-packages
 
-In some cases, the conda-forge versions may run into SSL timeouts. If the
-above command returns a HTTP 000 CONNECTION FAILED message, it is suggested
-to run the command again after disabling SSL as follows::
-
-  conda config --set ssl_verify false
-
 Once the environment is setup, activate it and install TMNT-specific libraries::
 
   conda activate TMNT 

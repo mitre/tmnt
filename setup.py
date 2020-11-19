@@ -42,11 +42,17 @@ if __name__ == '__main__':
             install.run(self)
 
     setup(name="tmnt",
-          version="0.5",
+          version="0.6",
           author="The MITRE Corporation",
+          author_email="wellner@mitre.org",
+          description="Topic modeling neural toolkit",
           url="https://github.com/mitre/tmnt.git",
           license='Apache',
-          #python_requires='<3.7,>=3.0',
+          classifiers = [
+              "Programming Language :: Python :: 3",
+              "License :: OSI Approved :: Apache Software License",
+              "Operating System :: OS Independent"
+          ],
           python_requires='>=3.7',
           setup_requires=setup_requires,
           install_requires=install_requires,
