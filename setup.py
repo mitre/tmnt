@@ -41,7 +41,7 @@ if __name__ == '__main__':
         def run(self):
             install.run(self)
 
-    setup(name="tmnt",
+    setup(name=("tmnt-cu101" if environ.get('USE_CUDA') == '1' else "tmnt"),
           version="0.6",
           author="The MITRE Corporation",
           author_email="wellner@mitre.org",
