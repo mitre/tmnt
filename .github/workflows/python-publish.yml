@@ -4,10 +4,10 @@
 name: Upload Python Package
 
 on:
-  workflow_dispatch
+  workflow_dispatch:
 
   schedule:
-    - cron "59 22 * * *"
+    - cron: "59 22 * * *"
   
 jobs:
   deploy:
