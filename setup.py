@@ -1,6 +1,19 @@
+import os
 from os import environ
 from setuptools import setup, find_packages
 from setuptools.command.install import install
+
+with open(os.path.join(os.path.dirname(__file__), 'VERSION')) as version_file:
+    version = version_file.read().strip()
+
+try:
+    if not os.getenv('RELEASE'):
+        from datetime import date
+        today = date.today()
+        day = today.strftime("b%Y%m%d")
+        version += day
+except Exception:
+    pass
 
 if __name__ == '__main__':
     setup_requires = [
@@ -42,7 +55,7 @@ if __name__ == '__main__':
             install.run(self)
 
     setup(name=("tmnt-cu101" if environ.get('USE_CUDA') == '1' else "tmnt"),
-          version="0.6",
+          version=version,
           author="The MITRE Corporation",
           author_email="wellner@mitre.org",
           description="Topic modeling neural toolkit",
