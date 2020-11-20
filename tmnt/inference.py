@@ -39,10 +39,17 @@ class BaseInferencer(object):
 class BowVAEInferencer(BaseInferencer):
     """
     """
-
-    def __init__(self, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
+    def __init__(self, model, ctx=mx.cpu()):
         super().__init__(ctx)
         self.max_batch_size = 2
+        self.vectorizer = TextVectorizer(min_doc_size=1)
+        self.vocab = model.vocabulary
+        self.n_latent = model.n_latent
+        self.model = model
+        
+
+    @classmethod
+    def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
         if model_dir is not None:
             param_file = os.path.join(model_dir,'model.params')
             vocab_file = os.path.join(model_dir,'vocab.json')
@@ -51,10 +58,8 @@ class BowVAEInferencer(BaseInferencer):
             config = json.loads(f.read())
         with open(vocab_file) as f:
             voc_js = f.read()
-        self.vocab = nlp.Vocab.from_json(voc_js)
-        self.vectorizer = TextVectorizer(min_doc_size=1)
-
-        self.n_latent = config['n_latent']
+        vocab = nlp.Vocab.from_json(voc_js)
+        n_latent = config['n_latent']
         enc_dim = config['enc_hidden_dim']
         lat_distrib = config['latent_distribution']['dist_type']
         n_encoding_layers = config.get('num_enc_layers', 0)
@@ -65,16 +70,18 @@ class BowVAEInferencer(BaseInferencer):
             self.n_covars = config['n_covars']
             self.label_map = config['l_map']
             self.covar_net_layers = config.get('covar_net_layers')
-            self.model = MetaDataBowVAEModel(self.label_map, self.n_covars,
-                                        self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
+            model = MetaDataBowVAEModel(self.label_map, self.n_covars,
+                                        vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
                                         n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
                                         covar_net_layers = self.covar_net_layers, ctx=ctx)
         else:
             self.covar_model = False
-            self.model = BowVAEModel(self.vocab, enc_dim, self.n_latent, emb_size, latent_distrib=lat_distrib,
+            model = BowVAEModel(vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
                                 n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
                                 ctx=ctx)
-        self.model.load_parameters(str(param_file), allow_missing=False)
+        model.load_parameters(str(param_file), allow_missing=False)
+        return cls(model, ctx)
+
 
 
     def get_model_details(self, sp_vec_file):
@@ -165,10 +172,10 @@ class BowVAEInferencer(BaseInferencer):
         return encodings
 
     def get_top_k_words_per_topic(self, k):
-        sorted_ids = self.get_ordered_terms()
+        sorted_ids = self.model.get_ordered_terms()
         topic_terms = []
         for t in range(self.n_latent):
-            top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t].asnumpy()) ]
+            top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t]) ]
             topic_terms.append(top_k)
         return topic_terms
 
