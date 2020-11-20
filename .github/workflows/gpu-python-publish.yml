@@ -1,7 +1,7 @@
 # This workflows will upload a Python Package using Twine when a release is created
 # For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
 
-name: Upload Python Package
+name: Upload Python Package for GPU Cuda 10.1
 
 on:
   workflow_dispatch:
@@ -28,6 +28,7 @@ jobs:
       env:
         TWINE_USERNAME: ${{ secrets.TMNT_API_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.TMNT_API_KEY }}
+        USE_CUDA: 1
       run: |
         python setup.py sdist bdist_wheel
         twine upload dist/*
