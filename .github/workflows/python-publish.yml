@@ -4,7 +4,7 @@
 name: Upload Python Package
 
 on:
-  workflow_dispach
+  workflow_dispatch
   
 jobs:
   deploy:
