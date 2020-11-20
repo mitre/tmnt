@@ -5,6 +5,9 @@ name: Upload Python Package
 
 on:
   workflow_dispatch
+
+  schedule:
+    - cron "59 22 * * *"
   
 jobs:
   deploy:
@@ -25,6 +28,14 @@ jobs:
       env:
         TWINE_USERNAME: ${{ secrets.TMNT_API_USERNAME }}
         TWINE_PASSWORD: ${{ secrets.TMNT_API_KEY }}
+      run: |
+        python setup.py sdist bdist_wheel
+        twine upload dist/*
+    - name: Build and publish GPU version
+      env:
+        TWINE_USERNAME: ${{ secrets.TMNT_API_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.TMNT_API_KEY }}
+	USE_CUDA: 1
       run: |
         python setup.py sdist bdist_wheel
         twine upload dist/*
