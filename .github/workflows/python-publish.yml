@@ -4,12 +4,8 @@
 name: Upload Python Package
 
 on:
-  schedule:
-    - cron: "59 21 * * *"
-    
   workflow_dispach
   
-
 jobs:
   deploy:
 
