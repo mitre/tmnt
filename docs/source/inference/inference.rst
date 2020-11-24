@@ -23,9 +23,9 @@ the ``tmnt.models.bow.runtime`` module provides a simple API to encode documents
 Below is an example::
 
   python 
-  >>> from tmnt.models.bow.runtime import BowVAEInferencer, TextEncoder
-  >>> infer = BowVAEInferencer(model_dir = '_model_dir')
-  >>> text_encoder = TextEncoder(infer)
+  >>> from tmnt.inference import BowVAEInferencer, BOWTextEncoder
+  >>> infer = BowVAEInferencer.from_saved(model_dir = '_model_dir')
+  >>> text_encoder = BOWTextEncoder(infer)
   >>> encodings = text_encoder.encode_batch(['Greater Armenia would stretch from Karabakh, to the
         Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.',
         'I have two pairs of headphones I\'d like to sell.  These are excellent, and both in great condition'])

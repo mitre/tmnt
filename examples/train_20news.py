@@ -1,7 +1,7 @@
 from tmnt.estimator import BowEstimator
 import gluonnlp as nlp
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.datasets import fetch_20newsgroups
+from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import BowVAEInferencer
 
 
@@ -15,16 +15,13 @@ data, _ = fetch_20newsgroups(shuffle=True, random_state=1,
                              return_X_y=True)
 data_samples = data[:2000]
 
-tf_vectorizer = CountVectorizer(max_df=0.95, min_df=2,
-                                max_features=n_features,
-                                stop_words='english')
+tf_vectorizer = TMNTVectorizer(vocab_size=1000)
 
-tf = tf_vectorizer.fit_transform(data_samples)
-vv = {v: 1 for v in tf_vectorizer.vocabulary_}
-vocab = nlp.Vocab(vv, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
-estimator = BowEstimator(vocab)
-_ = estimator.fit(tf)
+X, _ = tf_vectorizer.fit_transform(data_samples)
+estimator = BowEstimator(tf_vectorizer.get_vocab()).fit(X)
 inferencer = BowVAEInferencer(estimator.model)
-inferencer.get_top_k_words_per_topic(5)
+encodings = inferencer.encode_texts(['Greater Armenia would stretch from Karabakh, to the Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.','I have two pairs of headphones I\'d like to sell.  These are excellent, and both in great condition'])
+
+
 
 

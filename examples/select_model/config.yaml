@@ -7,7 +7,7 @@
   optimizer: [adam]
   n_latent: {i_range: [20]}
   enc_hidden_dim: {i_range: [50, 200], step: 50}
-  embedding: [{source: glove:glove.6B.200d}, {source: random, size: {i_range: [50,200], step: 50}}]
+  embedding: [{source: random, size: {i_range: [50,200], step: 50}}]
   coherence_loss_wt: {range: [0.0]}
   redundancy_loss_wt: {range: [0.0]}
   num_enc_layers: {i_range: [1]}

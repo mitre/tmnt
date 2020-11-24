@@ -249,6 +249,12 @@ class BaseBowEstimator(BaseEstimator):
                 val_y = val_y[:50000]
             npmi, redundancy = self._npmi(val_X, val_y)
         return ppl, npmi, redundancy
+    
+
+    def initialize_with_pretrained(self):
+        assert(self.pretrained_param_file is not None)
+        self.model = self._get_model()
+        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
@@ -391,17 +397,6 @@ class BowEstimator(BaseBowEstimator):
 
         mx_array = mx.nd.array(X,dtype='float32')
         return self.model.encode_data(mx_array).asnumpy()
-
-
-    ### Example using fit API:
-    ### from tmnt.models.bow.bow_doc_loader import load_vocab
-    ### from tmnt.models.bow.bow_vae import BowVAE
-    ### from sklearn.datasets import load_svmlight_file
-    ### vocab = load_vocab('/Users/wellner/Devel/tmnt-data/20news/raw/20news.vocab')
-    ### X,y = load_svmlight_file('/Users/wellner/Devel/tmnt-data/20news/raw/train.vec', n_features=len(vocab))
-    ### vae = BowVAE(vocab)
-    ### estimator = vae.fit(X)
-    ### encodings = estimator.transform(X)
 
     def fit(self, X):
         """

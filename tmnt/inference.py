@@ -13,10 +13,10 @@ import scipy
 from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel, BertBowVED
 from tmnt.data_loading import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
-from tmnt.preprocess.vectorizer import TextVectorizer
+from tmnt.preprocess.vectorizer import TMNTVectorizer
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
-
+from sklearn.datasets import load_svmlight_file
 
 
 class BaseInferencer(object):
@@ -42,10 +42,17 @@ class BowVAEInferencer(BaseInferencer):
     def __init__(self, model, ctx=mx.cpu()):
         super().__init__(ctx)
         self.max_batch_size = 2
-        self.vectorizer = TextVectorizer(min_doc_size=1)
         self.vocab = model.vocabulary
+        self.vectorizer = TMNTVectorizer(initial_vocabulary=model.vocabulary)
         self.n_latent = model.n_latent
         self.model = model
+        if isinstance(model, MetaDataBowVAEModel):
+            self.covar_model = True
+            self.n_covars = model.n_covars
+            self.label_map = model.label_map
+            self.covar_net_layers = model.covar_net_layers
+        else:
+            self.covar_model = False
         
 
     @classmethod
@@ -66,16 +73,14 @@ class BowVAEInferencer(BaseInferencer):
         enc_dr= float(config.get('enc_dr', 0.0))
         emb_size = config['derived_info']['embedding_size']
         if 'n_covars' in config:
-            self.covar_model = True
-            self.n_covars = config['n_covars']
-            self.label_map = config['l_map']
-            self.covar_net_layers = config.get('covar_net_layers')
-            model = MetaDataBowVAEModel(self.label_map, self.n_covars,
+            n_covars = config['n_covars']
+            label_map = config['l_map']
+            covar_net_layers = config.get('covar_net_layers')
+            model = MetaDataBowVAEModel(label_map, n_covars,
                                         vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
                                         n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
-                                        covar_net_layers = self.covar_net_layers, ctx=ctx)
+                                        covar_net_layers = covar_net_layers, ctx=ctx)
         else:
-            self.covar_model = False
             model = BowVAEModel(vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
                                 n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
                                 ctx=ctx)
@@ -83,9 +88,8 @@ class BowVAEInferencer(BaseInferencer):
         return cls(model, ctx)
 
 
-
     def get_model_details(self, sp_vec_file):
-        data_csr, labels, _, _ = file_to_data(sp_vec_file, len(self.vocab))
+        data_csr, labels = load_svmlight_file(sp_vec_file)
         data_csr = mx.nd.sparse.csr_matrix(data_csr, dtype='float32')
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
@@ -110,30 +114,21 @@ class BowVAEInferencer(BaseInferencer):
         d4 = list(map(lambda i: self.vocab.idx_to_token[i], range(len(self.vocab.idx_to_token))))
         d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
         return d
-    
+
 
     def export_full_model_inference_details(self, sp_vec_file, ofile):
         d = self.get_pyldavis_details(sp_vec_file)
         with io.open(ofile, 'w') as fp:
             json.dump(d, fp, sort_keys=True, indent=4)        
 
-
-    def encode_texts(self, intexts):
-        """
-        intexts - should be a list of lists of tokens (each token list being a document)
-        """
-        in_strms = [nlp.data.SimpleDataStream([t]) for t in intexts]
-        strm = nlp.data.SimpleDataStream(in_strms)
-        return self.encode_text_stream(strm)
-
     def encode_vec_file(self, sp_vec_file):
-        data_mat, labels, _, _ = file_to_data(sp_vec_file, len(self.vocab))
+        data_mat, labels = load_svmlight_file(sp_vec_file)
         return self.encode_data(data_mat, labels), labels
 
-    def encode_text_stream(self, strm):
-        vecs = [ self.vectorizer.vectorize_string(s, self.vocab) for s in strm ]
-        data = mx.nd.array(vecs)
-        return self.encode_data(data, None)
+    def encode_texts(self, texts, use_probs=False):
+        X, _ = self.vectorizer.transform(texts)
+        data = mx.nd.array(X)
+        return self.encode_data(data, None, use_probs=use_probs)
 
     def encode_data(self, data_mat, labels, use_probs=False):
         if isinstance(data_mat, scipy.sparse.csr.csr_matrix):
@@ -171,6 +166,7 @@ class BowVAEInferencer(BaseInferencer):
             encodings.extend(encs)
         return encodings
 
+
     def get_top_k_words_per_topic(self, k):
         sorted_ids = self.model.get_ordered_terms()
         topic_terms = []
@@ -199,83 +195,6 @@ class BowVAEInferencer(BaseInferencer):
         raise NotImplemented
     
 
-class BaseTextEncoder(object):
-    """Base text encoder for various topic models
-
-    Args:
-        inferencer (`tmnt.inference.BaseInferencer`): Inferencer object that runs the encoder portion of a VAE/VED model.
-        use_probs (bool): Map topic vector encodings to the simplex (sum to 1).
-        temperature (float): Temperature to sharpen/flatten encoding distribution.
-    """
-    def __init__(self, inferencer, use_probs=True, temperature=0.5):
-        self.temp      = temperature
-        self.inference = inference
-        self.use_probs = use_probs
-
-    def encode_single_string(self, txt_string):
-        raise NotImplementedError
-
-    def encode_batch(self, txtx, covars=None, pool_size=4):
-        raise NotImplementedError
-
-
-
-class BOWTextEncoder(object):
-
-    """
-    Takes a batch of text strings/documents and returns a matrix of their encodings (each row in the matrix
-    corresponds to the encoding of the corresponding input text).
-
-    Parameters
-    ----------
-    inference - the inference object using the trained model
-    use_probs - boolean that indicates whether raw topic scores should be converted to probabilities or not (default = True)
-    pool_size - integer that specifies the number of processes to use for concurrent text pre-processing
-    """
-    def __init__(self, inference, use_probs=True, temp=0.5):
-        self.temp      = temp
-        self.inference = inference
-        self.use_probs = use_probs
-        self.vocab_len = len(self.inference.vocab.idx_to_token)
-        self.tokenizer = BasicTokenizer(do_lower_case=True, use_stop_words=False)
-
-    def _txt_to_vec(self, txt):
-        toks = self.tokenizer.tokenize(txt)
-        ids = [self.inference.vocab[token] for token in toks if token in self.inference.vocab]
-        return ids
-
-    def encode_single_string(self, txt):
-        data = mx.nd.zeros((1, self.vocab_len))
-        for t in self._txt_to_vec(txt):
-            data[0][t] += 1.0
-        encs = self.inference.model.encode_data(data)
-        if self.use_probs:
-            e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
-            encs = mx.nd.softmax(e1 ** 0.5)
-        return encs
-
-    def encode_batch(self, txts, covars=None, pool_size=4):
-        pool = Pool(pool_size)
-        ids  = pool.map(self._txt_to_vec, txts)
-        # Prevent zombie threads from hanging around
-        pool.terminate()
-        pool = None
-        data = mx.nd.zeros((len(txts), self.vocab_len))
-        for i, txt_ids in enumerate(ids):
-            for t in txt_ids:
-                data[i][t] += 1.0
-        model = self.inference.model
-        if covars:
-            covar_ids = mx.nd.array([model.label_map[v] for v in covars])
-            covars = mx.nd.one_hot(covar_ids, depth=len(model.label_map))
-            encs = model.encode_data_with_covariates(data, covars)
-        else:
-            encs = model.encode_data(data)
-        if self.use_probs:
-            e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
-            encs = mx.nd.softmax(e1 ** self.temp)
-        return encs
-    
 
 class SeqVEDInferencer(BaseInferencer):
     """Inferencer for sequence variational encoder-decoder models using BERT
