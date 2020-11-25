@@ -42,6 +42,13 @@ class TMNTVectorizer(object):
         self.vocab_size = vocab_size if initial_vocabulary is None else len(initial_vocabulary)
         self.vectorizer = CountVectorizer(max_df=0.95, min_df=2, max_features=self.vocab_size,
                                           stop_words='english', vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None))
+
+    @classmethod
+    def from_vocab_file(cls, vocab_file):
+        with io.open(vocab_file, 'r') as fp:
+            voc_js = fp.read()
+        return cls(initial_vocabulary=nlp.Vocab.from_json(voc_js))
+    
     
     def get_vocab(self):
         if self.vocab is not None:
