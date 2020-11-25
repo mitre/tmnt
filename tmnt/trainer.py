@@ -322,7 +322,7 @@ class BowVAETrainer(BaseTrainer):
 
         Returns:
             (tuple): Tuple containing:
-                - model (:class:`tmnt.modeling.BowVAEModel`)VAE model with trained parameters
+                - model (:class:`tmnt.estimator.BowEstimator`) VAE model estimator with trained parameters
                 - obj (float): scaled objective
                 - npmi (float): coherence on validation set
                 - perplexity (float): perplexity score on validation data
@@ -334,37 +334,18 @@ class BowVAETrainer(BaseTrainer):
         vae_estimator = self._get_vae_estimator(config, reporter, ctx)
         obj, npmi, perplexity, redundancy = vae_estimator.fit_with_validation(self.train_data, self.train_labels,
                                                                               self.test_data, self.test_labels)
-        return vae_estimator.model, obj, npmi, perplexity, redundancy
+        return vae_estimator, obj, npmi, perplexity, redundancy
 
-    def write_model(self, model, config):
+    def write_model(self, estimator, config):
         """Method to write an estimated model to disk along with configuration used to train the model and the vocabulary.
 
         Parameters:
-            model (tmnt.modeling.BowVAEModel): Bag-of-words model (itself a gluon.block.Block)
+            model (tmnt.estimator.BowEstimator): BOW Estimator
             config (tmnt.configuration.TMNTConfigBOW): Configuration for models of tmnt.modeling.BowVAEModel type
         """
         model_dir = self.model_out_dir
         if model_dir:
-            pfile = os.path.join(model_dir, 'model.params')
-            sp_file = os.path.join(model_dir, 'model.config')
-            vocab_file = os.path.join(model_dir, 'vocab.json')
-            logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
-            model.save_parameters(pfile)
-            ## additional derived information from auto-searched configuration
-            ## helpful to have for runtime use of model (e.g. embedding size)
-            derived_info = {}
-            derived_info['embedding_size'] = model.embedding_size
-            config['derived_info'] = derived_info
-            if 'num_enc_layers' not in config.keys():
-                config['num_enc_layers'] = model.num_enc_layers
-                config['n_covars'] = int(model.n_covars)
-                config['l_map'] = model.label_map
-                config['covar_net_layers'] = model.covar_net_layers
-            specs = json.dumps(config, sort_keys=True, indent=4)
-            with open(sp_file, 'w') as f:
-                f.write(specs)
-            with open(vocab_file, 'w') as f:
-                f.write(model.vocabulary.to_json())
+            estimator.write_model(model_dir)
         else:
             raise Exception("Model write failed, output directory not provided")
 
@@ -485,7 +466,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         
         Returns:
             (tuple): Tuple containing:
-                - model (:class:`tmnt.modeling.BertBowVED`): variational BERT encoder-decoder model with trained parameters
+                - model (:class:`tmnt.estimator.SeqBowEstimator`): variational BERT encoder-decoder model with trained parameters
                 - obj (float): scaled objective with fit model
                 - npmi (float): coherence on validation set
                 - perplexity (float): perplexity score on validation data
@@ -499,7 +480,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         return seq_ved_model.model, obj, npmi, perplexity, redundancy
 
 
-    def write_model(self, model, config, epoch_id=0):
+    def write_model(self, estimator, config, epoch_id=0):
         """Method to write an estimated model to disk along with configuration used to train the model and the vocabulary.
 
         Parameters:
@@ -513,8 +494,7 @@ class SeqBowVEDTrainer(BaseTrainer):
             pfile = os.path.join(model_dir, ('model.params' + suf))
             conf_file = os.path.join(model_dir, ('model.config' + suf))
             vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
-            model.save_parameters(pfile)
-            dd = {}
+            estimator.model.save_parameters(pfile)
             specs = json.dumps(config, sort_keys=True, indent=4)
             with open(conf_file, 'w') as f:
                 f.write(specs)
@@ -532,8 +512,8 @@ def train_bow_vae(args):
     dd = datetime.datetime.now()
     trainer = BowVAETrainer.from_arguments(args, val_each_epoch=args.eval_each_epoch)
     config = ag.space.Dict(**config_dict)
-    model, obj = trainer.train_with_single_config(config, args.num_final_evals)
-    trainer.write_model(model, config_dict)
+    estimator, obj = trainer.train_with_single_config(config, args.num_final_evals)
+    trainer.write_model(estimator, config_dict)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
         
@@ -548,6 +528,6 @@ def train_seq_bow(c_args):
         raise Exception("Invalid JSON configuration file")
     config = ag.space.Dict(**config_dict)    
     trainer = SeqBowVEDTrainer.from_arguments(c_args, config)
-    model, obj = trainer.train_with_single_config(config, 1)
-    trainer.write_model(model, config_dict)
+    estimator, obj = trainer.train_with_single_config(config, 1)
+    trainer.write_model(estimator, config_dict)
     
