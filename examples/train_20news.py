@@ -1,3 +1,8 @@
+"""
+Simple example loading 20 news data, building a topic model
+and encoding strings.
+"""
+
 from tmnt.estimator import BowEstimator
 import gluonnlp as nlp
 from sklearn.datasets import fetch_20newsgroups
