@@ -298,63 +298,18 @@ class BowVAETrainer(BaseTrainer):
         Returns:
             Estimator (:class:`tmnt.estimator.BaseEstimator`): Either BowEstimator or MetaBowEstimator
         """
-        
-        lr = config.lr
-        latent_distrib = config.latent_distribution
-        optimizer = config.optimizer
-        n_latent = int(config.n_latent)
-        enc_hidden_dim = int(config.enc_hidden_dim)
-        coherence_reg_penalty = float(config.coherence_loss_wt)
-        redundancy_reg_penalty = float(config.redundancy_loss_wt)
-        batch_size = int(config.batch_size)
-
         embedding_source = config.embedding.source
-        fixed_embedding  = config.embedding.get('fixed') == True
-        covar_net_layers = config.covar_net_layers
-        n_encoding_layers = config.num_enc_layers
-        enc_dr = config.enc_dr
-        epochs = int(config.epochs)
-        ldist_def = config.latent_distribution
-        kappa = 0.0
-        alpha = 1.0
-        latent_distrib = ldist_def.dist_type
-        if latent_distrib == 'vmf':
-            kappa = ldist_def.kappa
-        elif latent_distrib == 'logistic_gaussian':
-            alpha = ldist_def.alpha
-        vocab, emb_size = self._initialize_vocabulary(embedding_source)
-        if emb_size < 0 and 'size' in config.embedding:
-            emb_size = config.embedding.size
-
+        vocab, _ = self._initialize_vocabulary(embedding_source)
         if self.c_args.use_labels_as_covars:
-            #n_covars = len(self.label_map) if self.label_map else 1
-            n_covars = -1
-            model = \
-                MetaBowEstimator(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words,
-                                 wd_freqs=self.wd_freqs,
-                           label_map=self.label_map,
-                           covar_net_layers=1, ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
-                           n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
-                           coherence_reg_penalty=coherence_reg_penalty,
-                           redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
-                           embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
-                           num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
-                           epochs=epochs, log_method='log')
+            estimator = MetaBowEstimator.from_config(config, vocab,
+                                                     pretrained_param_file=self.pretrained_param_file,
+                                                     wd_freqs=self.wd_freqs, ctx=ctx)
         else:
-            print("Encoder coherence = {}".format(self.c_args.encoder_coherence))
-            model = \
-                BowEstimator(vocab, coherence_coefficient=8.0, reporter=reporter, num_val_words=self.total_tst_words,
-                             wd_freqs=self.wd_freqs,
-                       ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
-                       n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
-                       coherence_reg_penalty=coherence_reg_penalty,
-                       redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
-                       embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
-                       num_enc_layers=n_encoding_layers, enc_dr=enc_dr, seed_matrix=self.seed_matrix, hybridize=False,
-                             epochs=epochs, log_method='log', coherence_via_encoder=self.c_args.encoder_coherence,
-                             pretrained_param_file = self.pretrained_param_file)
-        model.validate_each_epoch = self.validate_each_epoch
-        return model
+            estimator = BowEstimator.from_config(config, vocab,
+                                                     pretrained_param_file=self.pretrained_param_file,
+                                                     wd_freqs=self.wd_freqs, ctx=ctx)
+        estimator.validate_each_epoch = self.validate_each_epoch
+        return estimator
     
 
     def train_model(self, config, reporter):
@@ -582,7 +537,6 @@ def train_bow_vae(args):
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
         
-
 
 def train_seq_bow(c_args):
     try:

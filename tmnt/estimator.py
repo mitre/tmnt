@@ -12,7 +12,7 @@ import os
 import psutil
 import mxnet as mx
 import numpy as np
-
+import json
 from mxnet import autograd
 from mxnet import gluon
 import gluonnlp as nlp
@@ -21,6 +21,7 @@ from pathlib import Path
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
 from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel, BertBowVED
 from tmnt.eval_npmi import EvaluateNPMI
+import autogluon.core as ag
 
 MAX_DESIGN_MATRIX = 250000000 
 
@@ -107,7 +108,7 @@ class BaseBowEstimator(BaseEstimator):
         quiet (bool): Flag for whether to force minimal logging/ouput. optional (default=False)
         coherence_via_encoder (bool): Flag 
     """
-    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False, coherence_via_encoder=False):
+    def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False, coherence_via_encoder=False, pretrained_param_file=None):
         
         super().__init__(log_method=log_method, quiet=quiet)
         self.reporter = reporter
@@ -127,7 +128,7 @@ class BaseBowEstimator(BaseEstimator):
         self.enc_dr = enc_dr
         self.epochs = epochs
         self.vocab_cache = {}        
-        self.vocabulary = vocabulary ## nlp.Vocab(nlp.data.count_tokens(vocabulary), unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
+        self.vocabulary = vocabulary 
         self.ctx = ctx
         self.embedding_source = embedding_source
         self.embedding_size = embedding_size
@@ -137,6 +138,66 @@ class BaseBowEstimator(BaseEstimator):
         self.num_val_words = num_val_words
         self.model = None
         self.coherence_via_encoder = coherence_via_encoder
+        self.pretrained_param_file = pretrained_param_file
+
+
+    @classmethod
+    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, ctx=mx.cpu()):
+        if isinstance(config, str):
+            try:
+                with open(config, 'r') as f:
+                    config_dict = json.load(f)
+            except:
+                logging.error("File {} does not appear to be a valid config instance".format(config))
+                raise Exception("Invalid Json Configuration File")
+            config = ag.space.Dict(**config_dict)
+        if isinstance(vocabulary, str):
+            try:
+                with open(vocabulary, 'r') as f:
+                    voc_js = f.read()
+            except:
+                logging.error("File {} does not appear to be a valid vocabulary file".format(vocabulary))
+                raise Exception("Invalid Json Configuration File")            
+            vocabulary = nlp.Vocab.from_json(voc_js)
+        if vocabulary.embedding is not None:
+            emb_size = vocabulary.embedding.idx_to_vec[0].size
+        else:
+            emb_size = config.embedding.get('size', config.get('embedding_size'))
+        lr = config.lr
+        latent_distrib = config.latent_distribution
+        optimizer = config.optimizer
+        n_latent = int(config.n_latent)
+        enc_hidden_dim = int(config.enc_hidden_dim)
+        coherence_reg_penalty = float(config.coherence_loss_wt)
+        redundancy_reg_penalty = float(config.redundancy_loss_wt)
+        batch_size = int(config.batch_size)
+        embedding_source = config.embedding.source
+        fixed_embedding  = config.embedding.get('fixed') == True
+        covar_net_layers = config.covar_net_layers
+        n_encoding_layers = config.num_enc_layers
+        enc_dr = config.enc_dr
+        epochs = int(config.epochs)
+        ldist_def = config.latent_distribution
+        kappa = 0.0
+        alpha = 1.0
+        latent_distrib = ldist_def.dist_type
+        if latent_distrib == 'vmf':
+            kappa = ldist_def.kappa
+        elif latent_distrib == 'logistic_gaussian':
+            alpha = ldist_def.alpha
+        model = \
+                cls(vocabulary, coherence_coefficient=8.0, wd_freqs=wd_freqs,
+                             ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
+                             n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
+                             coherence_reg_penalty=coherence_reg_penalty,
+                             redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
+                             embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
+                             num_enc_layers=n_encoding_layers, enc_dr=enc_dr, 
+                             epochs=epochs, log_method='log', coherence_via_encoder=False,
+                             pretrained_param_file = pretrained_param_file)
+        return model
+
+        
 
     def _get_wd_freqs(self, X, max_sample_size=1000000):
         sample_size = min(max_sample_size, X.shape[0])
@@ -311,9 +372,13 @@ class BowEstimator(BaseBowEstimator):
 
     def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False, coherence_via_encoder=False, pretrained_param_file=None):
 
-        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method, quiet, coherence_via_encoder)
-        self.pretrained_param_file = pretrained_param_file
+        super().__init__(vocabulary, coherence_coefficient, reporter, num_val_words, wd_freqs, ctx, lr, latent_distribution, optimizer, n_latent, kappa, alpha, enc_hidden_dim, coherence_reg_penalty, redundancy_reg_penalty, batch_size, embedding_source, embedding_size, fixed_embedding, num_enc_layers, enc_dr, seed_matrix, hybridize, epochs, log_method, quiet, coherence_via_encoder, pretrained_param_file)
 
+
+    @classmethod
+    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, ctx=mx.cpu()):
+        return super().from_config(config, vocabulary, pretrained_param_file=pretrained_param_file, wd_freqs=wd_freqs, ctx=ctx)
+    
 
     def npmi(self, X, k=10):
         return self._npmi(X, None, k=k)
@@ -423,6 +488,10 @@ class MetaBowEstimator(BaseBowEstimator):
         self.n_covars = len(label_map) if label_map else 1
         self.label_map = label_map
 
+
+    @classmethod
+    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, ctx=mx.cpu()):
+        return super().from_config(config, vocabulary, pretrained_param_file=pretrained_param_file, wd_freqs=wd_freqs, ctx=ctx)
     
     def _get_model(self):
         """
