@@ -162,7 +162,7 @@ class BaseBowEstimator(BaseEstimator):
         if vocabulary.embedding is not None:
             emb_size = vocabulary.embedding.idx_to_vec[0].size
         else:
-            emb_size = config.embedding.get('size', config.get('embedding_size'))
+            emb_size = config.embedding.get('size', config.derived_info.get('embedding_size'))
         lr = config.lr
         latent_distrib = config.latent_distribution
         optimizer = config.optimizer
@@ -196,6 +196,41 @@ class BaseBowEstimator(BaseEstimator):
                              epochs=epochs, log_method='log', coherence_via_encoder=False,
                              pretrained_param_file = pretrained_param_file)
         return model
+
+    def write_model(self, model_dir):
+        pfile = os.path.join(model_dir, 'model.params')
+        sp_file = os.path.join(model_dir, 'model.config')
+        vocab_file = os.path.join(model_dir, 'vocab.json')
+        logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
+        self.model.save_parameters(pfile)
+        config = {}
+        config['lr']                 = self.lr
+        config['enc_hidden_dim']     = self.enc_hidden_dim
+        config['n_latent']           = self.n_latent
+        config['optimizer']          = self.optimizer
+        config['epochs']             = self.epochs
+        config['batch_size']         = self.batch_size
+        config['num_enc_layers']     = self.n_encoding_layers
+        config['enc_dr']             = self.enc_dr
+        config['coherence_loss_wt']  = self.coherence_reg_penalty
+        config['redundancy_loss_wt'] = self.redundancy_reg_penalty
+        config['covar_net_layers']   = 1
+        if self.latent_distrib == 'vmf':
+            config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}
+        elif self.latent_distrib == 'logistic_gaussian':
+            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.alpha}
+        else:
+            config['latent_distribution'] = {'dist_type':'gaussian'}
+        if self.embedding_source != 'random':
+            config['embedding'] = {'source': self.embedding_source}
+        else:
+            config['embedding'] = {'source': 'random', 'size': self.embedding_size}
+        config['derived_info'] = {'embedding_size': self.embedding_size}
+        specs = json.dumps(config, sort_keys=True, indent=4)
+        with io.open(sp_file, 'w') as fp:
+            fp.write(specs)
+        with io.open(vocab_file, 'w') as fp:
+            fp.write(self.model.vocabulary.to_json())
 
         
 
