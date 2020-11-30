@@ -162,7 +162,11 @@ class BaseBowEstimator(BaseEstimator):
         if vocabulary.embedding is not None:
             emb_size = vocabulary.embedding.idx_to_vec[0].size
         else:
-            emb_size = config.embedding.get('size', config.derived_info.get('embedding_size'))
+            emb_size = config.embedding.get('size')
+            if not emb_size:
+                emb_size = config.derived_info.get('embedding_size')
+            if not emb_size:
+                raise Exception("Embedding size must be provided as the 'size' attribute of 'embedding' or as 'derived_info.embedding_size'")
         lr = config.lr
         latent_distrib = config.latent_distribution
         optimizer = config.optimizer

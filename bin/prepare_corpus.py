@@ -40,7 +40,7 @@ if __name__ == '__main__':
         raise Exception("Training directory and output vector file must be provided")
     vectorizer = \
         TMNTVectorizer(text_key=args.json_text_key, custom_stop_word_file=args.custom_stop_words, label_key=args.json_label_key,
-                            min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars,
+                            min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars, file_pat=args.file_pat,
                             json_out_dir=args.json_out_dir,
                             encoding=args.str_encoding)
     tr_X, tr_y = vectorizer.fit_transform_json_dir(args.tr_input_dir)
