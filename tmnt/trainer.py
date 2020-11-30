@@ -130,7 +130,7 @@ class BaseTrainer(object):
             (tuple): Tuple containing:
                 - model (:class:`tmnt.modeling.BowVAEModel`): VAE Model instance with trained/fit parameters.
                 - obj (float): objective value of the objective function with the best model.
-        """
+       """
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
         best_model = None
@@ -303,11 +303,11 @@ class BowVAETrainer(BaseTrainer):
         if self.c_args.use_labels_as_covars:
             estimator = MetaBowEstimator.from_config(config, vocab,
                                                      pretrained_param_file=self.pretrained_param_file,
-                                                     wd_freqs=self.wd_freqs, ctx=ctx)
+                                                     wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
         else:
             estimator = BowEstimator.from_config(config, vocab,
                                                      pretrained_param_file=self.pretrained_param_file,
-                                                     wd_freqs=self.wd_freqs, ctx=ctx)
+                                                     wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
         estimator.validate_each_epoch = self.validate_each_epoch
         return estimator
     

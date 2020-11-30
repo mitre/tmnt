@@ -140,9 +140,8 @@ class BaseBowEstimator(BaseEstimator):
         self.coherence_via_encoder = coherence_via_encoder
         self.pretrained_param_file = pretrained_param_file
 
-
     @classmethod
-    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, ctx=mx.cpu()):
+    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
         if isinstance(config, str):
             try:
                 with open(config, 'r') as f:
@@ -190,7 +189,7 @@ class BaseBowEstimator(BaseEstimator):
         elif latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
         model = \
-                cls(vocabulary, coherence_coefficient=8.0, wd_freqs=wd_freqs,
+                cls(vocabulary, coherence_coefficient=8.0, reporter=reporter, wd_freqs=wd_freqs,
                              ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                              n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                              coherence_reg_penalty=coherence_reg_penalty,
@@ -415,8 +414,9 @@ class BowEstimator(BaseBowEstimator):
 
 
     @classmethod
-    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, ctx=mx.cpu()):
-        return super().from_config(config, vocabulary, pretrained_param_file=pretrained_param_file, wd_freqs=wd_freqs, ctx=ctx)
+    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
+        return super().from_config(config, vocabulary, pretrained_param_file=pretrained_param_file,
+                                   wd_freqs=wd_freqs, reporter=reporter, ctx=ctx)
     
 
     def npmi(self, X, k=10):
@@ -529,8 +529,9 @@ class MetaBowEstimator(BaseBowEstimator):
 
 
     @classmethod
-    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, ctx=mx.cpu()):
-        return super().from_config(config, vocabulary, pretrained_param_file=pretrained_param_file, wd_freqs=wd_freqs, ctx=ctx)
+    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
+        return super().from_config(config, vocabulary, pretrained_param_file=pretrained_param_file,
+                                   wd_freqs=wd_freqs, reporter=reporter, ctx=ctx)
     
     def _get_model(self):
         """
