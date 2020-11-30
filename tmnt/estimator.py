@@ -339,7 +339,10 @@ class BaseBowEstimator(BaseEstimator):
 
     def validate(self, val_X, val_y):
         val_dataloader = self._get_val_dataloader(val_X, val_y)
-        ppl = self._perplexity(val_dataloader, self.num_val_words)
+        total_val_words = val_X.sum()
+        if self.num_val_words < 0:
+            self.num_val_words = total_val_words
+        ppl = self._perplexity(val_dataloader, total_val_words)
         if self.coherence_via_encoder:
             npmi, redundancy = self._npmi_with_dataloader(val_dataloader)
         else:
