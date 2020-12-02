@@ -121,9 +121,9 @@ class BowVAEInferencer(BaseInferencer):
         with io.open(ofile, 'w') as fp:
             json.dump(d, fp, sort_keys=True, indent=4)        
 
-    def encode_vec_file(self, sp_vec_file):
-        data_mat, labels = load_svmlight_file(sp_vec_file)
-        return self.encode_data(data_mat, labels), labels
+    def encode_vec_file(self, sp_vec_file, use_probs=False):
+        data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab))
+        return self.encode_data(data_mat, labels, use_probs=use_probs), labels
 
     def encode_texts(self, texts, use_probs=False):
         X, _ = self.vectorizer.transform(texts)
@@ -245,12 +245,12 @@ class SeqVEDInferencer(BaseInferencer):
     def prep_text(self, txt):    # used for integrated gradients
         tokens = self.tokenizer(txt)
         ids, lens, segs = self.transform((txt,))
-        return tokens, mx.nd.array([ids], dtype='int32'), mx.nd.array([lens], dtype='int32'), mx.nd.array([segs], dtype='int32')
+        return tokens, mx.nd.array([ids], dtype='int32'), mx.nd.array([lens], dtype='float32'), mx.nd.array([segs], dtype='int32')
     
 
     def encode_text(self, txt):                   
         tokens, ids, lens, segs = self.prep_text(txt)
         _, enc = self.model.encoder(ids.as_in_context(self.ctx),
-                                              segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
+                                              segs.as_in_context(self.ctx), lens.as_in_context(self.ctx))
         topic_encoding = self.model.latent_dist.mu_encoder(enc)
         return topic_encoding, tokens

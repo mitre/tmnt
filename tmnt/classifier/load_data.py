@@ -27,14 +27,24 @@ def _sv_to_seq(sv):
     for i in range(nzs.shape[0]):
         v = sv[nzs[i]]
         li.extend([nzs[i]] * v)
-    return li
+    return li, sv
 
 
 def _convert_to_seqs(dataset, labels, max_length):
+    """
+    Parameters:
+        dataset (:class:`mxnet.ndarray.NDArray`): Sparse BOW dataset
+        labels (:class:`mxnet.ndarray.NDArray`): Labels for dataset
+
+    Returns:
+        (list): List of:
+            Tuples with (label, id sequence, bag-of-words)
+    """
     seqs = []
     for i in range(dataset.shape[0]):
-        seq = _sv_to_seq(dataset[i])
-        seqs.append((labels[i], seq[:max_length]))
+        seq, sv = _sv_to_seq(dataset[i])
+        #seqs.append((labels[i], seq[:max_length]))
+        seqs.append((labels[i], seq[:max_length], sv))
     return seqs
 
 def load_sparse_dataset(train_vec, val_vec, test_vec, voc_size = 2000, max_length=64):
@@ -64,12 +74,12 @@ class MaskTransform(object):
     def __init__(self, max_len=64):
         self._max_seq_length = max_len
     
-    def __call__(self, label_id, data):
+    def __call__(self, label_id, data, bow_data):
         padded_data = data + [0] * (self._max_seq_length - len(data))
         good = np.ones(len(data), dtype='float32')
         bad = np.zeros(self._max_seq_length - len(data), dtype='float32')
         mask = np.concatenate([good,bad])
-        return np.array(padded_data, dtype='int32'), np.array([label_id], dtype='int32'), mask
+        return np.array(bow_data, dtype='float32'), np.array(padded_data, dtype='int32'), np.array([label_id], dtype='int32'), mask
         
 
         
