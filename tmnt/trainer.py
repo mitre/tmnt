@@ -1,7 +1,9 @@
 # coding: utf-8
+# Copyright (c) 2020 The MITRE Corporation.
 """
-Copyright (c) 2020 The MITRE Corporation.
+Model trainers that handle data prep, pre-trained vocabularies and enable model selection.
 """
+
 import json
 import os
 import logging
@@ -389,7 +391,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         logging_config(folder=train_out_dir, name='train_trans_vae', level=logging.INFO, no_console=False)
         logging.info(args)
         bow_vocab = load_vocab(args.bow_vocab_file)
-        data_train, bert_base, vocab, data_csr = load_dataset_bert(args.tr_file, len(bow_vocab),
+        data_train, _, _, data_csr = load_dataset_bert(args.tr_file, len(bow_vocab),
                                                                    max_len=config.sent_size, ctx=mx.cpu())
         if args.val_file:
             data_val, _, _, val_csr = load_dataset_bert(args.val_file, len(bow_vocab), max_len=config.sent_size, ctx=mx.cpu())

@@ -1,1 +1,1 @@
-Example configurations for building models with TMNT.
+Examples using the TMNT API

@@ -1,6 +1,7 @@
 # coding: utf-8
+# Copyright (c) 2020 The MITRE Corporation.
 """
-Copyright (c) 2020 The MITRE Corporation.
+Model selection using AutoGluon.
 """
 
 import pandas as pd

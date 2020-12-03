@@ -41,8 +41,7 @@ Table of Contents
    :caption: Examples
    :maxdepth: 3
 
-   auto_examples/train_20news.rst
-   auto_examples/covariate_20news.rst
+   auto_examples/index.rst
 
 .. toctree::
    :caption: Advanced Use

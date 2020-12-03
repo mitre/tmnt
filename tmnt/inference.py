@@ -1,6 +1,7 @@
 # coding: utf-8
+# Copyright (c) 2020 The MITRE Corporation.
 """
-Copyright (c) 2020 The MITRE Corporation.
+Inferencers to make predictions and analyze data using trained topic models.
 """
 
 import json

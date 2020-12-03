@@ -39,7 +39,7 @@ Sub-Option        Parent Option          Type           Description
 source            embedding              categorical    Either ``random`` or a GluonNLP pre-trained embeddings
 fixed             embedding              categorical    Either ``True`` or ``False``; fixes weights of embedding layer
 kappa             latent_distribution    real           Concentration parameter when using ``vmf`` latent distribution, ``dist_type: vmf``
-alpha             latent_distributionn   real           Prior variance when using ``logistic_gaussian`` latent distribution, ``dist_type: logistic_gaussian``
+alpha             latent_distribution    real           Prior variance when using ``logistic_gaussian`` latent distribution, ``dist_type: logistic_gaussian``
 ================  ===================    ==========     =======================================================
 
 Some details on these options follows.
