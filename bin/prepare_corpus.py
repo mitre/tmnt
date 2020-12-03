@@ -1,8 +1,9 @@
 # coding: utf-8
 
-import os, sys
+import os, sys, io
 import argparse
 import logging
+import json
 from tmnt.utils.log_utils import logging_config
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 
@@ -23,6 +24,7 @@ parser.add_argument('--json_text_key', type=str, help='Key for json field contai
 parser.add_argument('--json_label_key', type=str,
                     help='Key for json field containing label (default is None). Only set if labels always available',
                     default=None)
+parser.add_argument('--label_map', type=str, help='JSON object to file with mapping between labels and indices', default=None)
 parser.add_argument('--json_out_dir', type=str, help='Create a new JSON list file with vectors added as a field in this target directory')
 parser.add_argument('--min_doc_length', type=int, help='Minimum document length (in tokens)', default=10)
 parser.add_argument('--custom_stop_words', type=str, help='Custom stop-word file (one word per line)', default=None)
@@ -39,10 +41,12 @@ if __name__ == '__main__':
     if (args.tr_vec_file is None) or (args.tr_input_dir is None):
         raise Exception("Training directory and output vector file must be provided")
     vectorizer = \
-        TMNTVectorizer(text_key=args.json_text_key, custom_stop_word_file=args.custom_stop_words, label_key=args.json_label_key,
-                            min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars, file_pat=args.file_pat,
-                            json_out_dir=args.json_out_dir,
-                            encoding=args.str_encoding)
+        TMNTVectorizer(text_key=args.json_text_key, custom_stop_word_file=args.custom_stop_words,
+                       label_key=args.json_label_key,
+                       min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars,
+                       file_pat=args.file_pat,
+                       json_out_dir=args.json_out_dir,
+                       encoding=args.str_encoding)
     tr_X, tr_y = vectorizer.fit_transform_json_dir(args.tr_input_dir)
     vectorizer.write_to_vec_file(tr_X, tr_y, args.tr_vec_file)
     vectorizer.write_vocab(args.vocab_file)
@@ -52,5 +56,8 @@ if __name__ == '__main__':
     if args.tst_input_dir and args.tst_vec_file:
         tst_X, tst_y = vectorizer.transform_json_dir(args.tst_input_dir)
         vectorizer.write_to_vec_file(tst_X, tst_y, args.tst_vec_file)
+    if args.label_map:
+        with io.open(args.label_map, 'w') as fp:
+            fp.write(json.dumps(vectorizer.label_map, indent=4))
 
                                        

@@ -38,8 +38,10 @@ Table of Contents
    inference/inference.rst
    
 .. toctree::
-   :caption: Tutorials
+   :caption: Examples
    :maxdepth: 3
+
+   auto_examples/train_20news	      
 
 
 .. toctree::

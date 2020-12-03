@@ -1,6 +1,9 @@
 # coding: utf-8
+# Copyright (c) 2020 The MITRE Corporation.
 """
-Copyright (c) 2020 The MITRE Corporation.
+Estimator module to train/fit/estimate individual models with fixed hyperparameters.
+Estimators are used by trainers to manage training with specific datasets; in addition,
+the estimator API supports inference/encoding with fitted models.
 """
 
 import logging
@@ -241,12 +244,8 @@ class BaseBowEstimator(BaseEstimator):
                              pretrained_param_file = pretrained_param_file)
         return model
 
-    def write_model(self, model_dir):
-        pfile = os.path.join(model_dir, 'model.params')
-        sp_file = os.path.join(model_dir, 'model.config')
-        vocab_file = os.path.join(model_dir, 'vocab.json')
-        logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
-        self.model.save_parameters(pfile)
+
+    def _get_config(self):
         config = {}
         config['lr']                 = self.lr
         config['enc_hidden_dim']     = self.enc_hidden_dim
@@ -270,13 +269,22 @@ class BaseBowEstimator(BaseEstimator):
         else:
             config['embedding'] = {'source': 'random', 'size': self.embedding_size}
         config['derived_info'] = {'embedding_size': self.embedding_size}
+        return config
+    
+
+    def write_model(self, model_dir):
+        pfile = os.path.join(model_dir, 'model.params')
+        sp_file = os.path.join(model_dir, 'model.config')
+        vocab_file = os.path.join(model_dir, 'vocab.json')
+        logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
+        self.model.save_parameters(pfile)
+        config = self._get_config()
         specs = json.dumps(config, sort_keys=True, indent=4)
         with io.open(sp_file, 'w') as fp:
             fp.write(specs)
         with io.open(vocab_file, 'w') as fp:
             fp.write(self.model.vocabulary.to_json())
 
-        
 
     def _get_wd_freqs(self, X, max_sample_size=1000000):
         sample_size = min(max_sample_size, X.shape[0])
@@ -466,7 +474,6 @@ class BaseBowEstimator(BaseEstimator):
 
 class BowEstimator(BaseBowEstimator):
 
-    #def __init__(self, vocabulary, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print', quiet=False, coherence_via_encoder=False, pretrained_param_file=None):
     def __init__(self, vocabulary, *args, **kwargs):
         super().__init__(vocabulary, *args, **kwargs)
 
@@ -574,22 +581,21 @@ class BowEstimator(BaseBowEstimator):
 
 class MetaBowEstimator(BaseBowEstimator):
 
-    #def __init__(self, vocabulary, covar_net_layers=1, label_map=None, coherence_coefficient=8.0, reporter=None, num_val_words=-1, wd_freqs=None, ctx=mx.cpu(), lr=0.005, latent_distribution="vmf", optimizer="adam", n_latent=20, kappa=64.0, alpha=1.0, enc_hidden_dim=150, coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, batch_size=128, embedding_source="random", embedding_size=128, fixed_embedding=False, num_enc_layers=1, enc_dr=0.1, seed_matrix=None, hybridize=False, epochs=40, log_method='print'):
-    def __init__(self, vocabulary, covar_net_layers=1, label_map=None, *args, **kwargs):
+    def __init__(self, vocabulary, n_covars=0, *args, **kwargs):
         
         super().__init__(vocabulary, *args, **kwargs)
 
-        self.covar_net_layers = covar_net_layers
-        self.n_covars = len(label_map) if label_map else 1
-        self.label_map = label_map
+        self.covar_net_layers = 1 ### XXX - temp hardcoded
+        self.n_covars = n_covars
 
 
     @classmethod
-    def from_config(cls, *args, **kwargs):
-        return super().from_config(*args, **kwargs)
-    #def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
-    #    return super().from_config(config, vocabulary, pretrained_param_file=pretrained_param_file,
-    #                               wd_freqs=wd_freqs, reporter=reporter, ctx=ctx)
+    def from_config(cls, n_covars, *args, **kwargs):
+        est = super().from_config(*args, **kwargs)
+        est.n_covars = n_covars
+        print("Estimator from_config with type = {}".format(type(est)))
+        print("Number of covars for estimator = {}".format(est.n_covars))
+        return est
     
     def _get_model(self):
         """
@@ -607,7 +613,7 @@ class MetaBowEstimator(BaseBowEstimator):
         else:
             emb_size = self.embedding_size
         model = \
-            MetaDataBowVAEModel(self.label_map, n_covars=self.n_covars,
+            MetaDataBowVAEModel(n_covars=self.n_covars,
                            vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
                            fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
@@ -616,6 +622,12 @@ class MetaBowEstimator(BaseBowEstimator):
                            wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
         return model
 
+
+    def _get_config(self):
+        config = super()._get_config()
+        config['n_covars'] = self.n_covars
+        return config
+    
     
     def _forward(self, model, data, labels):
         """
@@ -661,10 +673,11 @@ class MetaBowEstimator(BaseBowEstimator):
             npmi_eval = EvaluateNPMI(top_k_words_per_topic)
             npmi = npmi_eval.evaluate_csr_mat(X_covar)
 
-            if(self.label_map):
-                covar_key = covar[0]
-            else:
-                covar_key = np.where(covar)[0][0]
+            #if(self.label_map):
+            #    covar_key = covar[0]
+            #else:
+            #    covar_key = np.where(covar)[0][0]
+            covar_keky = covar[0]
             covar_npmi[covar_key] = npmi
             npmi_total += npmi
         return npmi_total / len(covars)
@@ -855,9 +868,10 @@ class SeqBowEstimator(BaseEstimator):
                 gen_trainer.set_learning_rate(new_lr)
                 with mx.autograd.record():
                     input_ids, valid_length, type_ids, output_vocab = seqs
-                    ls, recon_ls, kl_ls, redundancy_ls, predictions = model(input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-                                                                            valid_length.astype('float32').as_in_context(self.ctx),
-                                                                            output_vocab.as_in_context(self.ctx))
+                    ls, recon_ls, kl_ls, redundancy_ls, predictions = \
+                        model(input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+                              valid_length.astype('float32').as_in_context(self.ctx),
+                              output_vocab.as_in_context(self.ctx))
                     ls = ls.mean()
                 ls.backward()
                 grads = [p.grad(self.ctx) for p in differentiable_params]

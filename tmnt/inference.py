@@ -49,7 +49,6 @@ class BowVAEInferencer(BaseInferencer):
         if isinstance(model, MetaDataBowVAEModel):
             self.covar_model = True
             self.n_covars = model.n_covars
-            self.label_map = model.label_map
             self.covar_net_layers = model.covar_net_layers
         else:
             self.covar_model = False
@@ -74,9 +73,8 @@ class BowVAEInferencer(BaseInferencer):
         emb_size = config['derived_info']['embedding_size']
         if 'n_covars' in config:
             n_covars = config['n_covars']
-            label_map = config['l_map']
             covar_net_layers = config.get('covar_net_layers')
-            model = MetaDataBowVAEModel(label_map, n_covars,
+            model = MetaDataBowVAEModel(n_covars,
                                         vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
                                         n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
                                         covar_net_layers = covar_net_layers, ctx=ctx)

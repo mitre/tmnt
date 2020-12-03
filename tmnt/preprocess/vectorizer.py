@@ -41,13 +41,24 @@ class TMNTVectorizer(object):
         self.file_pat = file_pat
         self.vocab_size = vocab_size if initial_vocabulary is None else len(initial_vocabulary)
         self.vectorizer = CountVectorizer(max_df=0.95, min_df=2, max_features=self.vocab_size,
-                                          stop_words='english', vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None))
+                                          stop_words='english',
+                                          vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None))
+        self.label_map = {}
 
     @classmethod
     def from_vocab_file(cls, vocab_file):
         with io.open(vocab_file, 'r') as fp:
             voc_js = fp.read()
         return cls(initial_vocabulary=nlp.Vocab.from_json(voc_js))
+
+    def _get_update_label_index(self, v):
+        if self.label_prefix > 0:
+            v = v[:self.label_prefix]
+        i = self.label_map.get(v)
+        if i is None:
+            i = len(self.label_map)
+            self.label_map[v] = i
+        return i
     
     
     def get_vocab(self):
@@ -58,6 +69,7 @@ class TMNTVectorizer(object):
                               bos_token=None, eos_token=None)
             self.vocab = vocab
         return vocab
+    
 
     def _tr_json(self, tr_method, json_file):
         fp = io.open(json_file, 'r', encoding=self.encoding)
@@ -79,7 +91,9 @@ class TMNTVectorizer(object):
             ys = []
             with io.open(json_file, 'r', encoding=self.encoding) as fp:
                 for j in fp:
-                    ys.append(json.loads(j)[self.label_key])
+                    label_string = json.loads(j)[self.label_key]
+                    label_id = self._get_update_label_index(label_string)
+                    ys.append(label_id)
             return ys
         else:
             return None

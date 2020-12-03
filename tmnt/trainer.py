@@ -6,12 +6,14 @@ import json
 import os
 import logging
 import mxnet as mx
+import numpy as np
 import gluonnlp as nlp
 import datetime
 import time
 import copy
 import statistics
 import autogluon.core as ag
+
 from autogluon.core.scheduler.reporter import FakeReporter
 from pathlib import Path
 from tmnt.utils.random import seed_rng
@@ -196,13 +198,12 @@ class BowVAETrainer(BaseTrainer):
         total_tst_words: Total test/validation words (used for computing perplexity from likelihood)
         train_labels (array-like or sparse matrix): Labels associated with training inputs. Optional (default = None).
         test_labels (array-like or sparse matrix): Labels associated with test inputs. Optional (default = None).
-        label_map (dict): Mapping between label strings and integers for co-variate/labels. Optional (default = None).
         use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
         val_each_epoch (bool): Perform validation (NPMI and perplexity) on the validation set after each epoch. Default = False.
         rng_seed (int): Seed for random number generator. Default = 1234
     """
     def __init__(self, log_out_dir, model_out_dir, c_args, vocabulary, wd_freqs, train_data, 
-                 test_data, total_tst_words, train_labels=None, test_labels=None, label_map=None, use_gpu=False,
+                 test_data, total_tst_words, train_labels=None, test_labels=None, use_gpu=False,
                  val_each_epoch=True, rng_seed=1234):
         super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
         self.log_out_dir = log_out_dir
@@ -210,11 +211,11 @@ class BowVAETrainer(BaseTrainer):
         self.c_args = c_args
         self.use_gpu = use_gpu
         self.total_tst_words = total_tst_words
-        self.label_map = label_map
         self.wd_freqs = wd_freqs
         self.validate_each_epoch = val_each_epoch
         self.seed_matrix = None
         self.pretrained_param_file = c_args.pretrained_param_file
+        self.n_covars = int(np.max(train_labels) + 1) if train_labels is not None else 0
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
         
@@ -267,7 +268,7 @@ class BowVAETrainer(BaseTrainer):
             os.mkdir(model_out_dir)
         return cls(log_out_dir, model_out_dir, c_args, vocab, wd_freqs, X, val_X, total_test_wds,
                                 train_labels = y, test_labels = val_y,
-                                label_map=None, use_gpu=c_args.use_gpu, val_each_epoch=val_each_epoch)
+                                use_gpu=c_args.use_gpu, val_each_epoch=val_each_epoch)
 
 
     def pre_cache_vocabularies(self, sources):
@@ -301,7 +302,7 @@ class BowVAETrainer(BaseTrainer):
         embedding_source = config.embedding.source
         vocab, _ = self._initialize_vocabulary(embedding_source)
         if self.c_args.use_labels_as_covars:
-            estimator = MetaBowEstimator.from_config(config, vocab,
+            estimator = MetaBowEstimator.from_config(self.n_covars, config, vocab,
                                                      pretrained_param_file=self.pretrained_param_file,
                                                      wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
         else:

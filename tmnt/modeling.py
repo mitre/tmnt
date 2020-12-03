@@ -253,7 +253,7 @@ class BowVAEModel(HybridBlock):
 
 class MetaDataBowVAEModel(BowVAEModel):
 
-    def __init__(self, l_map, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
+    def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0,
                  batch_size=None, n_encoding_layers=1,
@@ -263,11 +263,11 @@ class MetaDataBowVAEModel(BowVAEModel):
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
                                              wd_freqs, seed_mat, n_covars, ctx)
         self.n_covars = n_covars
-        self.label_map = l_map
         self.covar_net_layers = covar_net_layers
+        print("VAE model with {} covars".format(self.n_covars))
         with self.name_scope():
-            if l_map is None:  
-                self.cov_decoder = ContinuousCovariateModel(self.n_latent, self.n_covars, self.vocab_size,
+            if self.n_covars < 1:  
+                self.cov_decoder = ContinuousCovariateModel(self.n_latent, self.vocab_size,
                                                             total_layers=covar_net_layers, ctx=ctx)
             else:
                 self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size,
@@ -346,10 +346,11 @@ class MetaDataBowVAEModel(BowVAEModel):
         return jacobian
         
 
-
     def hybrid_forward(self, F, data, covars):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
+        if self.n_covars > 0:
+            covars = F.one_hot(covars, self.n_covars)
         co_emb = F.concat(emb_out, covars)
         z, KL = self.run_encode(F, co_emb, batch_size)
         dec_out = self.decoder(z)
@@ -394,9 +395,9 @@ class CovariateModel(HybridBlock):
 
 class ContinuousCovariateModel(HybridBlock):
 
-    def __init__(self, n_topics, n_scalars, vocab_size, total_layers = 1, ctx=mx.cpu()):
+    def __init__(self, n_topics, vocab_size, total_layers = 1, ctx=mx.cpu()):
         self.n_topics  = n_topics
-        self.n_scalars = n_scalars   # number of continuous variables
+        self.n_scalars = 1   # number of continuous variables
         self.model_ctx = ctx
         self.time_topic_dim = 300
         super(ContinuousCovariateModel, self).__init__()

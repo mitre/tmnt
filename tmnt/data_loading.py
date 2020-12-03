@@ -210,10 +210,6 @@ def file_to_data(sp_file, voc_size, batch_size=1000):
 
 trans_table = str.maketrans(dict.fromkeys(string.punctuation))
 
-def remove_punct_and_urls(txt):
-    string = re.sub(r'https?:\/\/\S+\b|www\.(\w+\.)+\S*', '', txt) ## wipe out URLs
-    return string.translate(trans_table)
-
 def get_single_vec(els_sp):
     pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp ] )
     inds, vs = zip(*pairs)
