@@ -36,13 +36,13 @@ Table of Contents
    options/command_options
    inference/evaluation.rst
    inference/inference.rst
-   
+
 .. toctree::
    :caption: Examples
    :maxdepth: 3
 
-   auto_examples/train_20news	      
-
+   auto_examples/train_20news.rst
+   auto_examples/covariate_20news.rst
 
 .. toctree::
    :caption: Advanced Use
@@ -51,7 +51,8 @@ Table of Contents
    user_guide/modeling_covariates
    .. user_guide/guided
    .. user_guide/sequence_vae
-   embeddings/embeddings	         
+   embeddings/embeddings
+   
 
 .. toctree::
    :caption: API

@@ -1,6 +1,9 @@
 """
+Building a topic model with the API
+===================================
+
 Simple example loading 20 news data, building a topic model
-and encoding strings.
+and encoding strings. 
 """
 
 from tmnt.estimator import BowEstimator, MetaBowEstimator
@@ -15,7 +18,7 @@ from tmnt.inference import BowVAEInferencer
 n_samples = 2000
 n_features = 1000
 
-data, ys = fetch_20newsgroups(shuffle=True, random_state=1,
+data, _ = fetch_20newsgroups(shuffle=True, random_state=1,
                              remove=('headers', 'footers', 'quotes'),
                              return_X_y=True)
 data_samples = data[:n_samples]
@@ -37,16 +40,6 @@ est2.initialize_with_pretrained()
 est2.perplexity(X) # get preplexity
 est2.validate(X, None) # get perplexity, NPMI and redundancy
 
-
-## Fit a co-variate model using the 20news groups labels as co-variates
-## NOTE: This is probably not sensible as the categories line up with our expectations for topics
-##  but shows the process
-
-num_covar_values = int(np.max(ys)) + 1
-m_estimator = MetaBowEstimator(tf_vectorizer.get_vocab(), num_covar_values)
-_ = m_estimator.fit(X, y)
-m_inferencer = BowVAEInferencer(m_estimator.model)
-inferencer.get_top_k_words_per_topic_per_covariate(5)
 
 
 
