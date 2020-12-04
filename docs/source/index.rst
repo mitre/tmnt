@@ -48,8 +48,6 @@ Table of Contents
    :maxdepth: 3
 	      
    user_guide/modeling_covariates
-   .. user_guide/guided
-   .. user_guide/sequence_vae
    embeddings/embeddings
    
 
