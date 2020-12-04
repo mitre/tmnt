@@ -166,7 +166,7 @@ class HyperSphericalDistribution(BaseDistribution):
         super(HyperSphericalDistribution, self).__init__(n_latent, ctx)
         self.ctx = ctx
         self.kappa = kappa
-        self.kld_v = np.float(HyperSphericalDistribution._vmf_kld(self.kappa, self.n_latent))
+        self.kld_v = float(HyperSphericalDistribution._vmf_kld(self.kappa, self.n_latent))
         self.dim = n_latent - 1
         self.b = self.dim / (np.sqrt(4. * kappa ** 2 + self.dim ** 2) + 2 * kappa)  # b= 1/(sqrt(4.* kdiv**2 + 1) + 2 * kdiv)
         self.x = (1. - self.b) / (1. + self.b)
