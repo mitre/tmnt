@@ -1,6 +1,6 @@
 """
-Building a sequence VED topic model with the API
-================================================
+Building a BERT pre-trained seq2bow topic model
+===============================================
 
 Simple example loading 20 news data, building a topic model
 using a BERT pre-trained sequence to bag-of-words model.
