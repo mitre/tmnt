@@ -24,6 +24,7 @@ from collections import OrderedDict
 from mxnet.io import DataDesc, DataIter, DataBatch
 from sklearn.datasets import load_svmlight_file
 from sklearn.utils import shuffle as sk_shuffle
+from tmnt.preprocess.vectorizer import TMNTVectorizer
 
 
 class SparseMatrixDataIter(DataIter):
@@ -216,7 +217,7 @@ def get_single_vec(els_sp):
     return pairs, inds, vs
 
 
-def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp_vec", max_len=64, ctx=mx.cpu()):
+def _load_dataset_bert(line_gen, voc_size, max_len=64, ctx=mx.cpu()):
     indices = []
     values = []
     indptrs = [0]
@@ -225,6 +226,8 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
     ndocs = 0
     bert_model = 'bert_12_768_12'
     dname = 'book_corpus_wiki_en_uncased'
+    ## This is really only needed here to get the vocab
+    ## GluonNLP API doesn't enable that
     bert_base, vocab = nlp.model.get_model(bert_model,  
                                              dataset_name=dname,
                                              pretrained=True, ctx=ctx, use_pooler=True,
@@ -234,28 +237,60 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
     x_ids = []
     x_val_lens = []
     x_segs = []
-    with io.open(json_file, 'r', encoding='utf-8') as fp:
-        for line in fp:
-            if json_text_key:
-                js = json.loads(line)
-                line = js[json_text_key]
-            ids, lens, segs = transform((line,)) # create BERT-ready inputs
-            x_ids.append(ids)
-            x_val_lens.append(lens)
-            x_segs.append(segs)
-            ## Now, get the sparse vector
-            ndocs += 1
-            sp_vec_els = js[json_sp_key]
+    for t in line_gen:
+        if isinstance(t, tuple):
+            line = t[0]
+            sp_vec_els = t[1]
+        else:
+            line = t
+            sp_vec_els = None
+        ids, lens, segs = transform((line,)) # create BERT-ready inputs
+        x_ids.append(ids)
+        x_val_lens.append(lens)
+        x_segs.append(segs)
+        ## Now, get the sparse vector
+        ndocs += 1
+        if sp_vec_els:
             pairs, inds, vs = get_single_vec(sp_vec_els)
             cumulative += len(pairs)
             total_num_words += sum(vs)
             indptrs.append(cumulative)
             values.extend(vs)
             indices.extend(inds)
-    csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape=(ndocs, voc_size))
+    if len(indices) > 0:
+        csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape=(ndocs, voc_size)).tostype('default')
+    else:
+        csr_mat = None
+    return x_ids, x_val_lens, x_segs, bert_base, vocab, csr_mat
+
+
+def prepare_bert(content, max_len, bow_vocab_size=1000, vectorizer=None, ctx=mx.cpu()):
+    """
+    Utility function to take text content (e.g. list of document strings), a maximum sequence
+    length and vocabulary size, returning a data_train object that can be used
+    by a SeqBowEstimator object for the call to fit_with_validation. Also returns
+    the BOW matrix as a SciPy sparse matrix along with the BOW vocabulary.
+    """
+    x_ids, x_val_lens, x_segs, bert_base, bert_vocab, _ = _load_dataset_bert(content, 0, max_len, ctx)
+    tf_vectorizer = vectorizer or TMNTVectorizer(vocab_size = bow_vocab_size)
+    X, _ = tf_vectorizer.transform(content) if vectorizer else tf_vectorizer.fit_transform(content)
     data_train = gluon.data.ArrayDataset(
-        mx.nd.array(x_ids, dtype='int32'),
-        mx.nd.array(x_val_lens, dtype='int32'),
-        mx.nd.array(x_segs, dtype='int32'),
-        csr_mat.tostype('default'))
+            mx.nd.array(x_ids, dtype='int32'),
+            mx.nd.array(x_val_lens, dtype='int32'),
+            mx.nd.array(x_segs, dtype='int32'),
+            mx.nd.sparse.csr_matrix(X, dtype='float32').tostype('default'))
+    return data_train, X, tf_vectorizer, bert_base, bert_vocab
+
+
+def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp_vec", max_len=64, ctx=mx.cpu()):
+    with io.open(json_file, 'r', encoding='utf-8') as fp:
+        line_gen = ((json.loads(line)[json_text_key],json.loads(line)[json_sp_key]) for line in fp)
+        x_ids, x_val_lens, x_segs, bert_base, vocab, csr_mat =  _load_dataset_bert(line_gen, voc_size, max_len, ctx)
+        data_train = gluon.data.ArrayDataset(
+            mx.nd.array(x_ids, dtype='int32'),
+            mx.nd.array(x_val_lens, dtype='int32'),
+            mx.nd.array(x_segs, dtype='int32'),
+            csr_mat)
     return data_train, bert_base, vocab, csr_mat
+
+

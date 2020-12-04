@@ -716,12 +716,14 @@ class MetaBowEstimator(BaseBowEstimator):
 
 class SeqBowEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, vocab, coherence_coefficient=8.0, reporter=None, latent_distribution="vmf", n_latent=20, redundancy_reg_penalty=0.0, kappa=64.0, batch_size=32, kld=1.0, wd_freqs=None, num_val_words=-1, warmup_ratio=0.1, optimizer="adam", epochs=3, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, ctx=mx.cpu(), log_interval=1, log_method='log'):
+    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random', coherence_coefficient=8.0, reporter=None, latent_distribution="vmf", n_latent=20, redundancy_reg_penalty=0.0, kappa=64.0, batch_size=32, kld=1.0, wd_freqs=None, warmup_ratio=0.1, optimizer="adam", epochs=3, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, ctx=mx.cpu(), log_interval=1, log_method='log', max_batches=-1):
         super().__init__(log_method=log_method)
         self.bert_base = bert_base
+        self.embedding_source = bow_embedding_source
         self.coherence_coefficient = coherence_coefficient
         self.reporter = reporter
         self.vocabulary = vocab
+        self.bert_vocab = vocab
         self.latent_distribution = latent_distribution
         self.log_interval = log_interval
         self.redundancy_reg_penalty = redundancy_reg_penalty
@@ -739,9 +741,53 @@ class SeqBowEstimator(BaseEstimator):
         self.weight_decay = 0.00001
         self.offset_factor = 1.0
         self.ctx = ctx
-        self.num_val_words = num_val_words
         self.validate_each_epoch = True
-        self.max_steps = 2
+        self.max_batches = max_batches
+
+    @classmethod
+    def from_config(cls, config, vocab, wd_freqs, log_interval=1):
+        gen_lr = config.gen_lr
+        dec_lr = config.dec_lr
+        min_lr = config.min_lr
+        optimizer = config.optimizer
+        n_latent = int(config.n_latent)
+        batch_size = int(config.batch_size)
+        epochs = int(config.epochs)
+        ldist_def = config.latent_distribution
+        kappa = 0.0
+        alpha = 1.0
+        latent_distrib = ldist_def.dist_type
+        embedding_source = config.embedding_source
+        redundancy_reg_penalty = config.redundancy_reg_penalty
+        warmup_ratio = config.warmup_ratio
+        if latent_distrib == 'vmf':
+            kappa = ldist_def.kappa
+        elif latent_distrib == 'logistic_gaussian':
+            alpha = ldist_def.alpha
+        bert_base, bert_vocab = nlp.model.get_model('bert_12_768_12',  
+                                             dataset_name='book_corpus_wiki_en_uncased',
+                                             pretrained=True, ctx=ctx, use_pooler=True,
+                                             use_decoder=False, use_classifier=False)
+        model = cls(bert_base, bert_vocab, vocab,
+                    embedding_source=embedding_source,
+                          coherence_coefficient=8.0,
+                          reporter=reporter,
+                          latent_distribution=latent_distrib,
+                          n_latent=n_latent,
+                          redundancy_reg_penalty=redundancy_reg_penalty,
+                          kappa = kappa, 
+                          batch_size=batch_size,
+                          kld=1.0, wd_freqs=wd_freqs, 
+                          warmup_ratio = warmup_ratio,
+                          optimizer = optimizer,
+                          epochs = epochs,
+                          gen_lr = gen_lr,
+                          dec_lr = dec_lr,
+                          min_lr = min_lr,
+
+                          ctx=ctx,
+                          log_interval=log_interval)
+        return model
 
     def _get_model(self):
         model = BertBowVED(self.bert_base, self.vocabulary, self.latent_distribution, 
@@ -752,6 +798,38 @@ class SeqBowEstimator(BaseEstimator):
                            redundancy_reg_penalty=self.redundancy_reg_penalty,
                            ctx=self.ctx)
         return model
+
+
+    def _get_config(self):
+        config = {}
+        config['gen_lr'] = self.gen_lr
+        config['min_lr'] = self.min_lr
+        config['dec_lr'] = self.dec_lr
+        config['optimizer'] = self.optimizer
+        config['n_latent'] = self.n_latent
+        config['batch_size'] = self.batch_size
+        config['latent_distribution'] = self.latent_distribution
+        config['epochs'] = self.epochs
+        config['embedding_source'] = self.embedding_source
+        config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
+        config['warmup_ratio'] = self.warmup_ratio
+        config['kappa'] = self.kappa
+        config['alpha'] = self.alpha
+        return config
+
+
+    def write_model(self, model_dir, suf=''):
+        pfile = os.path.join(model_dir, ('model.params' + suf))
+        conf_file = os.path.join(model_dir, ('model.config' + suf))
+        vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
+        self.model.save_parameters(pfile)
+        config = self._get_config()
+        specs = json.dumps(config, sort_keys=True, indent=4)
+        with open(conf_file, 'w') as f:
+            f.write(specs)
+        with open(vocab_file, 'w') as f:
+            f.write(model.vocabulary.to_json())
+
 
     def fit(self, X, y):
         raise NotImplementedError()
@@ -807,7 +885,8 @@ class SeqBowEstimator(BaseEstimator):
         else:
             num_batches = bow_val_X.shape[0] // self.batch_size
             last_batch_size = self.batch_size
-        ppl = self._perplexity(dataloader, self.num_val_words, last_batch_size, num_batches)
+        num_val_words = bow_val_X.sum()
+        ppl = self._perplexity(dataloader, num_val_words, last_batch_size, num_batches)
         return ppl
     
 
@@ -852,12 +931,14 @@ class SeqBowEstimator(BaseEstimator):
             if p.grad_req != 'null':
                 differentiable_params.append(p)
 
-        sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0                
+        sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         for epoch_id in range(self.epochs):
             step_loss = 0
             step_recon_ls = 0
             step_kl_ls = 0
             step_red_ls = 0
+            if self.max_batches > 0 and step_num >= self.max_batches:
+                break
             for batch_id, seqs in enumerate(dataloader):
                 step_num += 1
                 if step_num < num_warmup_steps:
@@ -884,7 +965,7 @@ class SeqBowEstimator(BaseEstimator):
                 step_kl_ls += kl_ls.mean().asscalar()
                 step_red_ls += redundancy_ls.mean().asscalar()
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    logging.info('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, red_loss={:.4f}, gen_lr={:.7f}'
+                    self._output_status('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, red_loss={:.4f}, gen_lr={:.7f}'
                                  .format(epoch_id, self.epochs, batch_id + 1, len(dataloader),
                                          step_loss / self.log_interval, step_recon_ls / self.log_interval,
                                          step_kl_ls / self.log_interval, step_red_ls / self.log_interval,
@@ -893,6 +974,8 @@ class SeqBowEstimator(BaseEstimator):
                     step_recon_ls = 0
                     step_kl_ls = 0
                     _, _ = self._compute_coherence(model, 10, bow_train, log_terms=True)
+                if self.max_batches > 0 and step_num >= self.max_batches:
+                    break
             if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
                 npmi, redundancy = self._compute_coherence(model, 10, bow_train, log_terms=True)
                 ppl = self.validate(model, bow_val, dataloader_val)

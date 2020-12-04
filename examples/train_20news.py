@@ -14,7 +14,6 @@ from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import BowVAEInferencer
 
-
 n_samples = 2000
 n_features = 1000
 

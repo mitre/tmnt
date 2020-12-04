@@ -198,8 +198,16 @@ class BowVAEInferencer(BaseInferencer):
 class SeqVEDInferencer(BaseInferencer):
     """Inferencer for sequence variational encoder-decoder models using BERT
     """
-    def __init__(self, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
+    def __init__(self, model, bert_vocab, max_length, ctx=mx.cpu()):
         super().__init__(ctx)
+        self.model     = model
+        self.bert_base = model.encoder
+        self.tokenizer = BERTTokenizer(bert_vocab)
+        self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
+
+
+    @classmethod
+    def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, max_length=128, ctx=mx.cpu()):
         if model_dir is not None:
             param_file = os.path.join(model_dir, 'model.params')
             vocab_file = os.path.join(model_dir, 'vocab.json')
@@ -208,24 +216,22 @@ class SeqVEDInferencer(BaseInferencer):
             config = json.loads(f.read())
         with open(vocab_file) as f:
             voc_js = f.read()
-        self.bow_vocab = nlp.Vocab.from_json(voc_js)
-        self.ctx = ctx
-        self.bert_base, self.vocab = nlp.model.get_model('bert_12_768_12',  
+        bow_vocab = nlp.Vocab.from_json(voc_js)
+        bert_base, vocab = nlp.model.get_model('bert_12_768_12',  
                                              dataset_name='book_corpus_wiki_en_uncased',
                                              pretrained=True, ctx=ctx, use_pooler=True,
                                              use_decoder=False, use_classifier=False) #, output_attention=True)
-        self.latent_dist = config['latent_distribution']['dist_type']       
-        self.n_latent    = config['n_latent']
-        self.kappa       = config['latent_distribution']['kappa']
-        self.pad_id      = self.vocab[self.vocab.padding_token]
-        self.max_sent_len = config['sent_size']  
-        self.model = BertBowVED(self.bert_base, self.bow_vocab, latent_distrib=self.latent_dist,
-                                n_latent=self.n_latent,
-                                kappa = self.kappa,
+        latent_dist = config['latent_distribution']['dist_type']       
+        n_latent    = config['n_latent']
+        kappa       = config['latent_distribution']['kappa']
+        pad_id      = vocab[vocab.padding_token]
+        max_sent_len = config['sent_size']  
+        model = BertBowVED(bert_base, bow_vocab, latent_distrib=latent_dist,
+                                n_latent=n_latent,
+                                kappa = kappa,
                                 batch_size=1)
-        self.tokenizer = BERTTokenizer(self.vocab)
-        self.transform = BERTSentenceTransform(self.tokenizer, self.max_sent_len, pair=False)
-        self.model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
+        model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
+        return cls(model, vocab, max_length, ctx)
 
 
     def _embed_sequence(self, ids, segs):

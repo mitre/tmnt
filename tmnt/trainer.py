@@ -414,50 +414,10 @@ class SeqBowVEDTrainer(BaseTrainer):
         return trainer
 
 
-    def _get_ved_model(self, config, reporter, ctx):
-        gen_lr = config.gen_lr
-        dec_lr = config.dec_lr
-        min_lr = config.min_lr
-        optimizer = config.optimizer
-        n_latent = int(config.n_latent)
-        batch_size = int(config.batch_size)
-        epochs = int(config.epochs)
-        ldist_def = config.latent_distribution
-        kappa = 0.0
-        alpha = 1.0
-        latent_distrib = ldist_def.dist_type
-        embedding_source = config.embedding_source
-        redundancy_reg_penalty = config.redundancy_reg_penalty
-        vocab = self.vocabulary
-        warmup_ratio = config.warmup_ratio
-        if embedding_source.find(':'):
-            vocab, _ = self._initialize_vocabulary(embedding_source)
-        if latent_distrib == 'vmf':
-            kappa = ldist_def.kappa
-        elif latent_distrib == 'logistic_gaussian':
-            alpha = ldist_def.alpha
-        bert_base, _ = nlp.model.get_model('bert_12_768_12',  
-                                             dataset_name='book_corpus_wiki_en_uncased',
-                                             pretrained=True, ctx=ctx, use_pooler=True,
-                                             use_decoder=False, use_classifier=False)
-        model = SeqBowEstimator(bert_base, vocab,
-                          coherence_coefficient=8.0,
-                          reporter=reporter,
-                          latent_distribution=latent_distrib,
-                          n_latent=n_latent,
-                          redundancy_reg_penalty=redundancy_reg_penalty,
-                          kappa = kappa, 
-                          batch_size=batch_size,
-                          kld=self.kld_wt, wd_freqs=self.wd_freqs, num_val_words = self.num_val_words,
-                          warmup_ratio = warmup_ratio,
-                          optimizer = optimizer,
-                          epochs = epochs,
-                          gen_lr = gen_lr,
-                          dec_lr = dec_lr,
-                          min_lr = min_lr,
-                          ctx=ctx,
-                          log_interval=self.log_interval)
-        return model
+    def _get_ved_estimator(self, config, reporter, ctx):
+        vocab, _ = self._initialize_vocabulary(config.embedding.source)
+        estimator = SeqBowEstimator.from_config(config, vocab, self.wd_freqs, self.log_interval)
+        return estimator
 
     def train_model(self, config, reporter):
         """Primary training call used for model training/evaluation by autogluon model selection
@@ -477,10 +437,10 @@ class SeqBowVEDTrainer(BaseTrainer):
         """
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
-        seq_ved_model = self._get_ved_model(config, reporter, ctx)
+        seq_ved_estimator = self._get_ved_estimator(config, reporter, ctx)
         obj, npmi, perplexity, redundancy = \
-            seq_ved_model.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
-        return seq_ved_model.model, obj, npmi, perplexity, redundancy
+            seq_ved_estimator.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
+        return seq_ved_estimator.model, obj, npmi, perplexity, redundancy
 
 
     def write_model(self, estimator, config, epoch_id=0):
@@ -494,15 +454,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         model_dir = self.model_out_dir
         if model_dir:
             suf = '_'+ str(epoch_id) if epoch_id > 0 else ''
-            pfile = os.path.join(model_dir, ('model.params' + suf))
-            conf_file = os.path.join(model_dir, ('model.config' + suf))
-            vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
-            estimator.model.save_parameters(pfile)
-            specs = json.dumps(config, sort_keys=True, indent=4)
-            with open(conf_file, 'w') as f:
-                f.write(specs)
-            with open(vocab_file, 'w') as f:
-                f.write(model.vocabulary.to_json())
+            estimator.write_model(model_dir, suffix=suf)
     
 
 def train_bow_vae(args):
