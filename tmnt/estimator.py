@@ -716,7 +716,7 @@ class MetaBowEstimator(BaseBowEstimator):
 
 class SeqBowEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random', coherence_coefficient=8.0, reporter=None, latent_distribution="vmf", n_latent=20, redundancy_reg_penalty=0.0, kappa=64.0, batch_size=32, kld=1.0, wd_freqs=None, warmup_ratio=0.1, optimizer="adam", epochs=3, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, ctx=mx.cpu(), log_interval=1, log_method='log', max_batches=-1):
+    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random', coherence_coefficient=8.0, reporter=None, latent_distribution="vmf", n_latent=20, redundancy_reg_penalty=0.0, kappa=64.0, alpha=1.0, batch_size=32, kld=1.0, wd_freqs=None, warmup_ratio=0.1, optimizer="adam", epochs=3, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, ctx=mx.cpu(), log_interval=1, log_method='log', max_batches=-1):
         super().__init__(log_method=log_method)
         self.bert_base = bert_base
         self.embedding_source = bow_embedding_source
@@ -729,6 +729,7 @@ class SeqBowEstimator(BaseEstimator):
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.n_latent = n_latent
         self.kappa = kappa
+        self.alpha = alpha
         self.batch_size = batch_size
         self.kld = kld
         self.wd_freqs = wd_freqs
@@ -775,7 +776,8 @@ class SeqBowEstimator(BaseEstimator):
                           latent_distribution=latent_distrib,
                           n_latent=n_latent,
                           redundancy_reg_penalty=redundancy_reg_penalty,
-                          kappa = kappa, 
+                          kappa = kappa,
+                    alpha=alpha,
                           batch_size=batch_size,
                           kld=1.0, wd_freqs=wd_freqs, 
                           warmup_ratio = warmup_ratio,
@@ -784,7 +786,6 @@ class SeqBowEstimator(BaseEstimator):
                           gen_lr = gen_lr,
                           dec_lr = dec_lr,
                           min_lr = min_lr,
-
                           ctx=ctx,
                           log_interval=log_interval)
         return model
@@ -792,7 +793,8 @@ class SeqBowEstimator(BaseEstimator):
     def _get_model(self):
         model = BertBowVED(self.bert_base, self.vocabulary, self.latent_distribution, 
                            n_latent=self.n_latent, 
-                           kappa = self.kappa, 
+                           kappa = self.kappa,
+                           alpha = self.alpha,
                            batch_size = self.batch_size,
                            kld=1.0, wd_freqs=self.wd_freqs,
                            redundancy_reg_penalty=self.redundancy_reg_penalty,

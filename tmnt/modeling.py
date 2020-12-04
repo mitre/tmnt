@@ -460,6 +460,7 @@ class BertBowVED(Block):
     def __init__(self, bert_base, bow_vocab, latent_distrib='vmf', 
                  n_latent=256, 
                  kappa = 100.0,
+                 alpha = 1.0,
                  batch_size=16, kld=0.1, wd_freqs=None,
                  redundancy_reg_penalty=0.0,
                  ctx = mx.cpu(),
@@ -473,6 +474,7 @@ class BertBowVED(Block):
         self.vocabulary = bow_vocab
         self.latent_distrib = latent_distrib
         self.kappa = kappa
+        self.alpha = alpha
         self.coherence_reg_penalty = 0.0
         self.redundancy_reg_penalty = redundancy_reg_penalty
         with self.name_scope():
