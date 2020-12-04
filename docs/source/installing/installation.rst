@@ -13,7 +13,7 @@ Conda is not already installed, grab the necessary install script from:
 
 https://docs.conda.io/en/latest/miniconda.html
 
-Once Conda is installed, install a new environment for TMNT as follows::
+Once Conda is installed, setup a new environment for TMNT as follows::
 
   conda create --name TMNT python=3.7 --no-default-packages
 

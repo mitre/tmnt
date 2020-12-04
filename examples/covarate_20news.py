@@ -33,4 +33,10 @@ num_covar_values = int(np.max(y)) + 1 # get the number of possible labels
 m_estimator = MetaBowEstimator(tf_vectorizer.get_vocab(), num_covar_values)
 _ = m_estimator.fit(X, y) # fit a covariate model using y
 m_inferencer = BowVAEInferencer(m_estimator.model)
-inferencer.get_top_k_words_per_topic_per_covariate(5)
+
+## the following returns a list of top 5 words per topic per covariate/label
+t_terms = m_inferencer.get_top_k_words_per_topic_per_covariate(5)
+
+## top-5 terms for each topic over label index = 4
+cov_4_topics = t_terms[4]
+
