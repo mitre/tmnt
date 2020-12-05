@@ -810,13 +810,16 @@ class SeqBowEstimator(BaseEstimator):
         config['optimizer'] = self.optimizer
         config['n_latent'] = self.n_latent
         config['batch_size'] = self.batch_size
-        config['latent_distribution'] = self.latent_distribution
+        if self.latent_distrib == 'vmf':
+            config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}
+        elif self.latent_distrib == 'logistic_gaussian':
+            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.alpha}
+        else:
+            config['latent_distribution'] = {'dist_type':'gaussian'}
         config['epochs'] = self.epochs
         config['embedding_source'] = self.embedding_source
         config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
         config['warmup_ratio'] = self.warmup_ratio
-        config['kappa'] = self.kappa
-        config['alpha'] = self.alpha
         return config
 
 
@@ -830,7 +833,7 @@ class SeqBowEstimator(BaseEstimator):
         with open(conf_file, 'w') as f:
             f.write(specs)
         with open(vocab_file, 'w') as f:
-            f.write(model.vocabulary.to_json())
+            f.write(self.vocabulary.to_json())
 
 
     def fit(self, X, y):
