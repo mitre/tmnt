@@ -42,7 +42,7 @@ class BowVAEInferencer(BaseInferencer):
     """
     def __init__(self, model, ctx=mx.cpu()):
         super().__init__(ctx)
-        self.max_batch_size = 2
+        self.max_batch_size = 16
         self.vocab = model.vocabulary
         self.vectorizer = TMNTVectorizer(initial_vocabulary=model.vocabulary)
         self.n_latent = model.n_latent
@@ -126,17 +126,22 @@ class BowVAEInferencer(BaseInferencer):
 
     def encode_texts(self, texts, use_probs=False):
         X, _ = self.vectorizer.transform(texts)
-        data = mx.nd.array(X)
-        return self.encode_data(data, None, use_probs=use_probs)
+        return self.encode_data(X, None, use_probs=use_probs)
 
     def encode_data(self, data_mat, labels, use_probs=False):
         if isinstance(data_mat, scipy.sparse.csr.csr_matrix):
             data_mat = mx.nd.sparse.csr_matrix(data_mat, dtype='float32')
+        elif isinstance(data_mat, mx.nd.NDArray):
+            data_mat = mx.nd.array(data_mat, dtype='float32')
         batch_size = min(data_mat.shape[0], self.max_batch_size)
         last_batch_size = data_mat.shape[0] % batch_size
         covars = mx.nd.one_hot(mx.nd.array(labels, dtype='int'), self.n_covars) \
             if self.covar_model and labels[:-last_batch_size] is not None else None
-        infer_iter = DataIterLoader(mx.io.NDArrayIter(data_mat[:-last_batch_size], covars,
+        if last_batch_size < 1: 
+            data_to_iter = data_mat 
+        else:
+            data_to_iter = data_mat[:-last_batch_size]
+        infer_iter = DataIterLoader(mx.io.NDArrayIter(data_to_iter, covars,
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):
