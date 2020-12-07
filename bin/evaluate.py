@@ -79,11 +79,8 @@ if __name__ == "__main__":
         print("**** Test NPMI = {} *******".format(test_npmi))
         exit(0)
 
-    param_file, config_file, vocab_file = \
-        args.model_dir / "model.params", args.model_dir / "model.config", args.model_dir / "vocab.json"
-    
-    inference_model = BowVAEInferencer(param_file, config_file, vocab_file,
-                                      ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
+    inference_model = BowVAEInferencer.from_saved(model_dir=args.model_dir,
+                                                  ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
 
 
     if args.plot_file: # get UMAP embedding visualization

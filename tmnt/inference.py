@@ -243,7 +243,7 @@ class SeqVEDInferencer(BaseInferencer):
         outputs = outputs.transpose((1,0,2))
         # outputs should be (batch, seq_len, C) shaped now
         pooled_out = self.bert_base._apply_pooling(outputs)
-        topic_encoding = self.model.latent_dist.mu_encoder(pooled_out)
+        topic_encoding = self.model.latent_dist.get_mu_encoding(pooled_out)
         return topic_encoding
 
 
@@ -257,5 +257,5 @@ class SeqVEDInferencer(BaseInferencer):
         tokens, ids, lens, segs = self.prep_text(txt)
         _, enc = self.model.encoder(ids.as_in_context(self.ctx),
                                               segs.as_in_context(self.ctx), lens.as_in_context(self.ctx))
-        topic_encoding = self.model.latent_dist.mu_encoder(enc)
+        topic_encoding = self.model.latent_dist.get_mu_encoding(enc)
         return topic_encoding, tokens

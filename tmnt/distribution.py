@@ -23,6 +23,10 @@ class BaseDistribution(nn.HybridBlock):
         super(BaseDistribution, self).__init__()
         self.n_latent = n_latent
         self.model_ctx = ctx
+        with self.name_scope():
+            self.mu_encoder = gluon.nn.Dense(units = n_latent)
+            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
+        self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     ## perform any postinitialization setup
     def post_init(self, ctx):
@@ -38,6 +42,16 @@ class BaseDistribution(nn.HybridBlock):
         eps = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent), ctx=self.model_ctx)
         return mu + eps
 
+    def get_mu_encoding(self, data):
+        """Provide the distribution mean as the natural result of running the full encoder
+        
+        Parameters:
+            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
+        Returns:
+            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
+        """
+        return self.mu_bn(self.mu_encoder(data))
+
 
 class GaussianDistribution(BaseDistribution):
     """Gaussian latent distribution with diagnol co-variance.
@@ -50,12 +64,9 @@ class GaussianDistribution(BaseDistribution):
     def __init__(self, n_latent, ctx, dr=0.2):
         super(GaussianDistribution, self).__init__(n_latent, ctx)
         with self.name_scope():
-            self.mu_encoder = gluon.nn.Dense(units = n_latent)
-            self.lv_encoder = gluon.nn.Dense(units = n_latent)
-            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
+            self.lv_encoder = gluon.nn.Dense(units = n_latent)            
             self.lv_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
-            self.post_sample_dr_o = gluon.nn.Dropout(dr)
-        self.mu_bn.collect_params().setattr('grad_req', 'null')
+            self.post_sample_dr_o = gluon.nn.Dropout(dr)        
         self.lv_bn.collect_params().setattr('grad_req', 'null')        
 
     def _get_kl_term(self, F, mu, lv):
@@ -87,13 +98,11 @@ class GaussianUnitVarDistribution(BaseDistribution):
         self.variance = mx.nd.array([var], ctx=ctx)
         self.log_variance = mx.nd.log(self.variance)
         with self.name_scope():
-            self.mu_encoder = gluon.nn.Dense(units = n_latent)
-            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)
-        self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     def _get_kl_term(self, F, mu):
         return -0.5 * F.sum(1.0 + self.log_variance - mu*mu - self.variance, axis=1)
+
 
     def hybrid_forward(self, F, data, batch_size):
         """Generate a sample according to the unit variance Gaussian given the encoder outputs
@@ -123,12 +132,9 @@ class LogisticGaussianDistribution(BaseDistribution):
         self.prior_logvar = mx.nd.array([math.log(prior_var)], ctx=ctx)
 
         with self.name_scope():
-            self.mu_encoder = gluon.nn.Dense(units = n_latent)
             self.lv_encoder = gluon.nn.Dense(units = n_latent)
-            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.lv_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)
-        self.mu_bn.collect_params().setattr('grad_req', 'null')
         self.lv_bn.collect_params().setattr('grad_req', 'null')        
             
 
@@ -179,10 +185,7 @@ class HyperSphericalDistribution(BaseDistribution):
             self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
             self.vmf_samples = self.params.get('vmf_samples', shape=(self.num_samples,), grad_req='null',
                                                init = mx.init.Constant([self.kld_v]), differentiable=False)
-            self.mu_encoder = gluon.nn.Dense(units = n_latent)
-            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.001, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)            
-        self.mu_bn.collect_params().setattr('grad_req', 'null')
         self.been_initialized = False
 
     def post_init(self, ctx):

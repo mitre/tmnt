@@ -185,7 +185,7 @@ class BowVAEModel(HybridBlock):
         `mxnet.ndarray.NDArray` or `mxnet.symbol.Symbol`
             Result of encoding with shape (batch_size, n_latent)
         """
-        return self.latent_dist.mu_encoder(self.encoder(self.embedding(data)))
+        return self.latent_dist.get_mu_encoding(self.encoder(self.embedding(data)))
     
     def add_coherence_reg_penalty(self, F, cur_loss):
         if self.coherence_reg_penalty > 0.0:
@@ -281,7 +281,7 @@ class MetaDataBowVAEModel(BowVAEModel):
         """
         emb_out = self.embedding(data)
         enc_out = self.encoder(mx.nd.concat(emb_out, covars))
-        return self.latent_dist.mu_encoder(enc_out)
+        return self.latent_dist.get_mu_encoding(enc_out)
 
 
 
@@ -297,7 +297,7 @@ class MetaDataBowVAEModel(BowVAEModel):
         emb_out = self.embedding(data)
 
         co_emb = mx.nd.concat(emb_out, covar)
-        z = self.latent_dist.mu_encoder(self.encoder(co_emb))
+        z = self.latent_dist.get_mu_encoding(self.encoder(co_emb))
 
         z.attach_grad()
         outputs = []
@@ -328,7 +328,7 @@ class MetaDataBowVAEModel(BowVAEModel):
         emb_out = self.embedding(data)
 
         co_emb = mx.nd.concat(emb_out, covar)
-        z = self.latent_dist.mu_encoder(self.encoder(co_emb))
+        z = self.latent_dist.get_mu_encoding(self.encoder(co_emb))
 
         z.attach_grad()
         outputs = []
@@ -553,7 +553,7 @@ class BertBowVED(Block):
 
     def encode(self, toks, tok_types, valid_length):
         _, enc = self.encoder(toks, tok_types, valid_length)
-        return self.latent_dist.mu_encoder(enc)
+        return self.latent_dist.get_mu_encoding(enc)
 
     def forward(self, toks, tok_types, valid_length, bow):
         _, enc = self.encoder(toks, tok_types, valid_length)
@@ -581,7 +581,7 @@ class BertBowVED(Block):
                 x_data.attach_grad()
                 with mx.autograd.record():
                     _, enc = self.encoder(input_ids_x, type_ids_x, valid_length_x)
-                    enc_out = model.latent_dist.mu_encoder(enc)
+                    enc_out = model.latent_dist.get_mu_encoding(enc)
                     yi = enc_out[:, i] ## for the ith topic, over batch
                 yi.backward()
                 mx.nd.waitall()
