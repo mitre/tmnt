@@ -49,7 +49,7 @@ class DANVAETextClassifier(HybridBlock):
 
 class DANTextClassifier(HybridBlock):
     def __init__(self, emb_input_dim, emb_output_dim, dropout=0.2, dense_units=[100,100], emb_dropout=0.5,
-                 seq_length = 64, num_classes=2):
+                 seq_length = 64, n_classes=2):
         super(DANTextClassifier, self).__init__()
 
         self.seq_length = seq_length
@@ -65,7 +65,7 @@ class DANTextClassifier(HybridBlock):
                     self.encoder.add(gluon.nn.Dense(units=u, use_bias=True, activation='relu'))
             self.output = gluon.nn.HybridSequential()
             self.output.add(gluon.nn.Dropout(dropout))
-            self.output.add(gluon.nn.Dense(in_units = dense_units[-1], units=num_classes, use_bias=True))
+            self.output.add(gluon.nn.Dense(in_units = dense_units[-1], units=n_classes, use_bias=True))
 
     def hybrid_forward(self, F, bow_data, data, mask):
         embedded = self.embedding(data)

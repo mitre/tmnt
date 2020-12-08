@@ -55,7 +55,7 @@ def load_sparse_dataset(train_vec, val_vec, test_vec, voc_size = 2000, max_lengt
     val_dataset   = _convert_to_seqs(val_sv, val_y, max_length)
     test_dataset  = _convert_to_seqs(test_sv, test_y, max_length)
     transform = MaskTransform(max_len=max_length)
-    return train_dataset, val_dataset, test_dataset, transform
+    return train_dataset, val_dataset, test_dataset, transform, int(np.max(train_y) + 1)
 
 
 class MaskTransform(object):

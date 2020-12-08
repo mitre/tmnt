@@ -39,7 +39,8 @@ def get_args():
     
 loss_fn = gluon.loss.SoftmaxCrossEntropyLoss()
 
-def train_classifier(vocab_size, emb_output_dim, transformer, data_train, data_val, data_test, pretrained_vae, non_vae_weight=1.0, ctx=mx.cpu()):
+def train_classifier(vocab_size, emb_output_dim, transformer, data_train, data_val, data_test, pretrained_vae, non_vae_weight=1.0,
+                     n_classes=2, ctx=mx.cpu()):
 
     data_train = gluon.data.SimpleDataset(data_train).transform(transformer)
     data_val   = gluon.data.SimpleDataset(data_val).transform(transformer)
@@ -51,11 +52,13 @@ def train_classifier(vocab_size, emb_output_dim, transformer, data_train, data_v
 
     emb_input_dim = vocab_size
     hidden_dims = [int(i) for i in args.hidden_dims.split(',')]
+    is_multiclass = n_classes > 2
 
+    print("Num classes = {}".format(n_classes))
     if pretrained_vae:
         vae = BowVAEInferencer.from_saved(model_dir=pretrained_vae).model
         model = DANVAETextClassifier(vae, emb_input_dim, emb_output_dim, dropout = args.dropout, emb_dropout=args.emb_dropout,
-                              dense_units = hidden_dims,
+                                     dense_units = hidden_dims, n_classes = n_classes,
                                      seq_length=args.max_length, non_vae_weight=non_vae_weight)
         ## explicitly initialize non-pretrained parts of the model
         #model.embedding.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)
@@ -65,12 +68,11 @@ def train_classifier(vocab_size, emb_output_dim, transformer, data_train, data_v
         model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)  ## initialize model parameters on the context ctx
     else:
         model = DANTextClassifier(emb_input_dim, emb_output_dim, dropout = args.dropout, emb_dropout=args.emb_dropout,
-                              dense_units = hidden_dims,
+                                  dense_units = hidden_dims, n_classes = n_classes,
                               seq_length=args.max_length)
         model.initialize(mx.init.Xavier(magnitude=2.34), ctx=ctx, force_reinit=True)  ## initialize model parameters on the context ctx
-    
     trainer = gluon.Trainer(model.collect_params(), 'adam', {'learning_rate': args.lr})
-    start_ap, start_acc = evaluate(model, val_dataloader)
+    start_ap, start_acc = evaluate(model, val_dataloader, multiclass=is_multiclass)
     logging.info("Starting AP = {} Acc = {}".format(start_ap, start_acc))
     for epoch in range(args.epochs):
         epoch_loss = 0
@@ -86,16 +88,16 @@ def train_classifier(vocab_size, emb_output_dim, transformer, data_train, data_v
             trainer.step(1)
             epoch_loss += l.asscalar()
         logging.info("Epoch [{}] loss = {}".format(epoch+1, epoch_loss))
-        tr_ap, tr_acc = evaluate(model, train_dataloader)
+        tr_ap, tr_acc = evaluate(model, train_dataloader, multiclass=is_multiclass)
         logging.info("TRAINING AP = {} Acc = {}".format(tr_ap, tr_acc))        
-        val_ap, val_acc = evaluate(model, val_dataloader)
+        val_ap, val_acc = evaluate(model, val_dataloader, multiclass=is_multiclass)
         logging.info("VALIDATION AP = {} Acc = {}".format(val_ap, val_acc))
-    dev_ap, dev_acc = evaluate(model, test_dataloader)
+    dev_ap, dev_acc = evaluate(model, test_dataloader, multiclass=is_multiclass)
     logging.info("***** Training complete. *****")
     logging.info("Test AP = {} Acc = {}".format(dev_ap, dev_acc))
         
 
-def evaluate(model, dataloader, ctx=mx.cpu()):
+def evaluate(model, dataloader, multiclass=True, ctx=mx.cpu()):
     """
     Get predictions on the dataloader items from model
     Return metrics (accuracy, etc.)
@@ -111,23 +113,28 @@ def evaluate(model, dataloader, ctx=mx.cpu()):
         for j in range(out.shape[0]):
             probs = mx.nd.softmax(out[j])
             lab = int(label[j].asscalar())
-            all_scores.append(probs[1].asscalar())
-            all_labels.append(lab)
-            if probs[1] > probs[0] and lab == 1:
-                total_correct += 1
-            elif probs[1] < probs[0] and lab == 0:
-                total_correct += 1
+            if not multiclass:
+                all_scores.append(probs[1].asscalar())
+                all_labels.append(lab)
+                if probs[1] >= probs[0] and lab == 1:
+                    total_correct += 1
+                elif probs[1] < probs[0] and lab == 0:
+                    total_correct += 1
+            else:
+                #print("Lab = {}, argmax = {}".format(lab, int(np.argmax(probs.asnumpy()))))
+                if lab == int(np.argmax(probs.asnumpy())):
+                    total_correct += 1
             total += 1
     acc = total_correct / float(total)
-    ap = average_precision_score(all_labels, all_scores)
+    ap = average_precision_score(all_labels, all_scores, average = 'weighted' if multiclass else 'macro') if not multiclass else 0.0
     return ap, acc
     
 
 if __name__ == '__main__':
     args = get_args()
     logging_config(args.log_dir, 'train', level=logging.INFO, console_level=logging.INFO)
-    train_dataset, val_dataset, test_dataset, transform = \
+    train_dataset, val_dataset, test_dataset, transform, n_classes = \
         load_sparse_dataset(args.train_file, args.val_file, args.test_file, voc_size=args.voc_size, max_length=args.max_length)
     ctx = mx.cpu()
     train_classifier(args.voc_size, args.embedding_dim, transform, train_dataset, val_dataset, test_dataset,
-                     args.pretrained_vae, args.non_vae_weight, ctx)
+                     args.pretrained_vae, args.non_vae_weight, n_classes, ctx)
