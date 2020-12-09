@@ -17,7 +17,7 @@ from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import BowVAEInferencer
 
 
-data, _ = fetch_20newsgroups(shuffle=True, random_state=1,
+data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                              remove=('headers', 'footers', 'quotes'),
                              return_X_y=True)
 

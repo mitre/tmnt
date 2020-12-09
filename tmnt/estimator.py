@@ -376,11 +376,6 @@ class BaseBowEstimator(BaseEstimator):
             val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, test_batch_size,
                                                               last_batch_handle='pad', shuffle=False),
                                             num_batches=num_val_batches, last_batch_size = last_batch_size)
-        elif test_size < 1000000000:
-            val_X = mx.nd.sparse.csr_matrix(val_X)
-            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, test_batch_size,
-                                                              last_batch_handle='pad', shuffle=False),
-                                                num_batches=num_val_batches, last_batch_size = last_batch_size)
         else:
             val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = test_batch_size,
                                                                      last_batch_handle='pad', shuffle=False))
@@ -770,7 +765,7 @@ class SeqBowEstimator(BaseEstimator):
                                              pretrained=True, ctx=ctx, use_pooler=True,
                                              use_decoder=False, use_classifier=False)
         model = cls(bert_base, bert_vocab, vocab,
-                    embedding_source=embedding_source,
+                    bow_embedding_source=embedding_source,
                           coherence_coefficient=8.0,
                           reporter=reporter,
                           latent_distribution=latent_distrib,
