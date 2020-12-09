@@ -53,11 +53,11 @@ if __name__ == '__main__':
     vectorizer.write_vocab(args.vocab_file)
     if args.val_input and args.val_vec_file:
         val_X, val_y = \
-            vectorizer.transform_json_dir(args.val_input) if os.path.isdir(args.val_input) else vectorizer.fit_transform_json(args.val_input)
+            vectorizer.transform_json_dir(args.val_input) if os.path.isdir(args.val_input) else vectorizer.transform_json(args.val_input)
         vectorizer.write_to_vec_file(val_X, val_y, args.val_vec_file)
     if args.tst_input and args.tst_vec_file:
         tst_X, tst_y = \
-            vectorizer.transform_json_dir(args.tst_input) if os.path.isdir(args.tst_input) else vectorizer.fit_transform_json(args.tst_input)
+            vectorizer.transform_json_dir(args.tst_input) if os.path.isdir(args.tst_input) else vectorizer.transform_json(args.tst_input)
         vectorizer.write_to_vec_file(tst_X, tst_y, args.tst_vec_file)
     if args.label_map:
         with io.open(args.label_map, 'w') as fp:
