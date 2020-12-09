@@ -415,7 +415,7 @@ class SeqBowVEDTrainer(BaseTrainer):
 
 
     def _get_ved_estimator(self, config, reporter, ctx):
-        vocab, _ = self._initialize_vocabulary(config.embedding.source)
+        vocab, _ = self._initialize_vocabulary(config.embedding_source)
         estimator = SeqBowEstimator.from_config(config, vocab, self.wd_freqs, self.log_interval)
         return estimator
 
