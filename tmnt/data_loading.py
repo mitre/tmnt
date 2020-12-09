@@ -155,7 +155,7 @@ class DataIterLoader():
     def __next__(self):
         batch = self.data_iter.__next__()
         data = mx.nd.sparse.csr_matrix(batch.data[0], dtype='float32')
-        if batch.label and len(batch.label) > 0 and batch.data[0].shape[0] == batch.label[0].shape[0]:            
+        if batch.label and len(batch.label) > 0 and batch.data[0].shape[0] == batch.label[0].shape[0]:
             label = mx.nd.array(batch.label[0], dtype='float32')
         else:
             label = None

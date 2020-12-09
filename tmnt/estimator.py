@@ -373,12 +373,14 @@ class BaseBowEstimator(BaseEstimator):
             num_val_batches += 1
         if test_size < MAX_DESIGN_MATRIX:
             val_X = mx.nd.sparse.csr_matrix(val_X).tostype('default')
+            val_y = mx.nd.array(val_y) if val_y is not None else None
             val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, test_batch_size,
                                                               last_batch_handle='pad', shuffle=False),
                                             num_batches=num_val_batches, last_batch_size = last_batch_size)
         else:
             val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = test_batch_size,
-                                                                     last_batch_handle='pad', shuffle=False))
+                                                                 last_batch_handle='pad', shuffle=False),
+                                            )
         return val_dataloader
 
     def validate(self, val_X, val_y):
@@ -418,14 +420,13 @@ class BaseBowEstimator(BaseEstimator):
                sc_obj, npmi, perplexity, redundancy
         """
         wd_freqs = self.wd_freqs if self.wd_freqs is not None else self._get_wd_freqs(X)
-        val_y = mx.nd.array(val_y) if val_y is not None else None
-        y = mx.nd.array(y) if y is not None else None
         x_size = X.shape[0] * X.shape[1]
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
             train_dataloader = \
                 DataIterLoader(SparseMatrixDataIter(X, y, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
         else:
+            y = mx.nd.array(y) if y is not None else None
             X = mx.nd.sparse.csr_matrix(X)
             train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
         self.model = self._get_model()
