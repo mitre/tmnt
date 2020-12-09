@@ -746,7 +746,7 @@ class SeqBowEstimator(BaseEstimator):
         self.max_batches = max_batches
 
     @classmethod
-    def from_config(cls, config, vocab, wd_freqs, log_interval=1):
+    def from_config(cls, config, vocab, wd_freqs, log_interval=1, ctx=mx.cpu()):
         gen_lr = config.gen_lr
         dec_lr = config.dec_lr
         min_lr = config.min_lr
