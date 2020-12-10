@@ -37,12 +37,13 @@ class BaseTrainer(object):
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, vocabulary, train_data_path, test_data_path, rng_seed):
+    def __init__(self, vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed):
         self.train_data_path   = train_data_path
         self.test_data_path    = test_data_path
         self.rng_seed     = rng_seed
         self.vocabulary   = vocabulary
         self.vocab_cache  = {}
+        self.validate_each_epoch = val_each_epoch
 
 
     def _initialize_vocabulary(self, embedding_source, set_vocab=True):
@@ -136,6 +137,7 @@ class BaseTrainer(object):
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
         best_model = None
+        self.validate_each_epoch = False  
         if self.test_data_path is not None:
             #if c_args.tst_vec_file:
             #    trainer.set_heldout_data_path_as_test()        
@@ -204,13 +206,12 @@ class BowVAETrainer(BaseTrainer):
     def __init__(self, log_out_dir, model_out_dir, c_args, vocabulary, wd_freqs, train_data_path, 
                  test_data_path, use_gpu=False, n_covars=None,
                  val_each_epoch=True, rng_seed=1234):
-        super().__init__(vocabulary, train_data_path, test_data_path, rng_seed)
+        super().__init__(vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed)
         self.log_out_dir = log_out_dir
         self.model_out_dir = model_out_dir
         self.c_args = c_args
         self.use_gpu = use_gpu
         self.wd_freqs = wd_freqs
-        self.validate_each_epoch = val_each_epoch
         self.seed_matrix = None
         self.pretrained_param_file = c_args.pretrained_param_file
         self.n_covars = n_covars
