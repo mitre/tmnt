@@ -37,11 +37,9 @@ class BaseTrainer(object):
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, vocabulary, train_data, test_data, train_labels, test_labels, rng_seed):
-        self.train_data   = train_data
-        self.test_data    = test_data
-        self.train_labels = train_labels
-        self.test_labels  = test_labels
+    def __init__(self, vocabulary, train_data_path, test_data_path, rng_seed):
+        self.train_data_path   = train_data_path
+        self.test_data_path    = test_data_path
         self.rng_seed     = rng_seed
         self.vocabulary   = vocabulary
         self.vocab_cache  = {}
@@ -138,9 +136,9 @@ class BaseTrainer(object):
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
         best_model = None
-        if self.test_data is not None:
+        if self.test_data_path is not None:
             #if c_args.tst_vec_file:
-            #    trainer.set_heldout_data_as_test()        
+            #    trainer.set_heldout_data_path_as_test()        
             logging.info("Training with config: {}".format(config))
             npmis, perplexities, redundancies, objectives = [],[],[],[]
             ntimes = int(num_evals)
@@ -197,27 +195,25 @@ class BowVAETrainer(BaseTrainer):
             initialize decoder bias weights.
         train_data (array-like or sparse matrix): Training input data tensor
         test_data (array-like or sparse matrix): Testing/validation input data tensor
-        total_tst_words: Total test/validation words (used for computing perplexity from likelihood)
         train_labels (array-like or sparse matrix): Labels associated with training inputs. Optional (default = None).
         test_labels (array-like or sparse matrix): Labels associated with test inputs. Optional (default = None).
         use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
         val_each_epoch (bool): Perform validation (NPMI and perplexity) on the validation set after each epoch. Default = False.
         rng_seed (int): Seed for random number generator. Default = 1234
     """
-    def __init__(self, log_out_dir, model_out_dir, c_args, vocabulary, wd_freqs, train_data, 
-                 test_data, total_tst_words, train_labels=None, test_labels=None, use_gpu=False,
+    def __init__(self, log_out_dir, model_out_dir, c_args, vocabulary, wd_freqs, train_data_path, 
+                 test_data_path, use_gpu=False, n_covars=None,
                  val_each_epoch=True, rng_seed=1234):
-        super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
+        super().__init__(vocabulary, train_data_path, test_data_path, rng_seed)
         self.log_out_dir = log_out_dir
         self.model_out_dir = model_out_dir
         self.c_args = c_args
         self.use_gpu = use_gpu
-        self.total_tst_words = total_tst_words
         self.wd_freqs = wd_freqs
         self.validate_each_epoch = val_each_epoch
         self.seed_matrix = None
         self.pretrained_param_file = c_args.pretrained_param_file
-        self.n_covars = int(np.max(train_labels) + 1) if train_labels is not None else 0
+        self.n_covars = n_covars
         if c_args.topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
         
@@ -259,18 +255,12 @@ class BowVAETrainer(BaseTrainer):
         vocab = load_vocab(c_args.vocab_file, encoding=c_args.str_encoding)
         voc_size = len(vocab)
         X, y, wd_freqs, _ = file_to_data(c_args.tr_vec_file, voc_size)
-        total_test_wds = 0    
-        if c_args.val_vec_file:
-            val_X, val_y, _, total_test_wds = file_to_data(c_args.val_vec_file, voc_size)
-        else:
-            val_X, val_y, total_test_wds = None, None, 0
-        ctx = mx.cpu() if not c_args.use_gpu else mx.gpu(0)
         model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(log_out_dir, 'MODEL')
+        n_covars = int(float(np.max(y)) + 1)
         if not os.path.exists(model_out_dir):
             os.mkdir(model_out_dir)
-        return cls(log_out_dir, model_out_dir, c_args, vocab, wd_freqs, X, val_X, total_test_wds,
-                                train_labels = y, test_labels = val_y,
-                                use_gpu=c_args.use_gpu, val_each_epoch=val_each_epoch)
+        return cls(log_out_dir, model_out_dir, c_args, vocab, wd_freqs, c_args.tr_vec_file, c_args.val_vec_file, 
+                                use_gpu=c_args.use_gpu, n_covars=n_covars, val_each_epoch=val_each_epoch)
 
 
     def pre_cache_vocabularies(self, sources):
@@ -284,10 +274,7 @@ class BowVAETrainer(BaseTrainer):
     def set_heldout_data_as_test(self):
         """Load in the heldout test data for final model evaluation
         """
-        tst_mat, tst_labels, _, total_tst_words  = file_to_data(self.c_args.tst_vec_file, self.vocabulary)
-        self.data_test_csr = tst_mat
-        self.test_labels   = tst_labels
-        self.total_tst_words = total_tst_words
+        raise NotImplemented
 
     def _get_vae_estimator(self, config, reporter, ctx):
         """Take a model configuration - specified by a config file or as determined by model selection and 
@@ -335,8 +322,12 @@ class BowVAETrainer(BaseTrainer):
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         vae_estimator = self._get_vae_estimator(config, reporter, ctx)
-        obj, npmi, perplexity, redundancy = vae_estimator.fit_with_validation(self.train_data, self.train_labels,
-                                                                              self.test_data, self.test_labels)
+        X, y, _, _ = file_to_data(self.train_data_path, len(self.vocabulary))
+        if self.test_data_path is None:
+            vX, vy = None, None
+        else:
+            vX, vy, _, _ = file_to_data(self.test_data_path, len(self.vocabulary))
+        obj, npmi, perplexity, redundancy = vae_estimator.fit_with_validation(X, y, vX, vy)
         return vae_estimator, obj, npmi, perplexity, redundancy
 
     def write_model(self, estimator, config):
@@ -371,15 +362,13 @@ class SeqBowVEDTrainer(BaseTrainer):
         log_interval (int): Perform validation (NPMI and perplexity) on the validation set this many batches. Default = 10.
         rng_seed (int): Seed for random number generator. Default = 1234
     """
-    def __init__(self, model_out_dir, vocabulary, wd_freqs, num_val_words, train_data, 
-                 test_data, train_labels=None, test_labels=None, use_gpu=False, log_interval=10, rng_seed=1234):
-        super().__init__(vocabulary, train_data, test_data, train_labels, test_labels, rng_seed)
+    def __init__(self, model_out_dir, vocabulary, train_data_path, 
+                 test_data_path, use_gpu=False, log_interval=10, rng_seed=1234):
+        super().__init__(vocabulary, train_data_path, test_data_path, rng_seed)
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
-        self.wd_freqs = wd_freqs
         self.seed_matrix = None
         self.kld_wt = 1.0
-        self.num_val_words = num_val_words
         self.log_interval = log_interval
 
     @classmethod
@@ -391,32 +380,20 @@ class SeqBowVEDTrainer(BaseTrainer):
         logging_config(folder=train_out_dir, name='train_trans_vae', level=logging.INFO, no_console=False)
         logging.info(args)
         bow_vocab = load_vocab(args.bow_vocab_file)
-        data_train, _, _, data_csr = load_dataset_bert(args.tr_file, len(bow_vocab),
-                                                                   max_len=config.sent_size, ctx=mx.cpu())
-        if args.val_file:
-            data_val, _, _, val_csr = load_dataset_bert(args.val_file, len(bow_vocab), max_len=config.sent_size, ctx=mx.cpu())
-            val_wds = val_csr.sum().asscalar()
-        else:
-            data_val, val_csr, val_wds = None, None, None
-        sample_size = min(50000, data_csr.shape[0])
-        data = data_csr[:sample_size] 
-        wd_freqs = mx.nd.sum(data, axis=0)
         trainer = cls(
             train_out_dir,
             bow_vocab,
-            wd_freqs,
-            val_wds, 
-            (data_train, data_csr),
-            (data_val, val_csr),
+            args.tr_file,
+            args.val_file,
             use_gpu = args.use_gpu,
             log_interval = args.log_interval
             )
         return trainer
 
 
-    def _get_ved_estimator(self, config, reporter, ctx):
+    def _get_ved_estimator(self, config, reporter, wd_freqs, ctx):
         vocab, _ = self._initialize_vocabulary(config.embedding_source)
-        estimator = SeqBowEstimator.from_config(config, vocab, reporter, self.wd_freqs, self.log_interval, ctx)
+        estimator = SeqBowEstimator.from_config(config, vocab, reporter, wd_freqs, self.log_interval, ctx)
         return estimator
 
     def train_model(self, config, reporter):
@@ -437,9 +414,20 @@ class SeqBowVEDTrainer(BaseTrainer):
         """
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
-        seq_ved_estimator = self._get_ved_estimator(config, reporter, ctx)
+
+        train_data, _, _, train_csr = load_dataset_bert(self.train_data_path, len(self.vocabulary),
+                                                       max_len=config.sent_size, ctx=mx.cpu())
+        if self.test_data_path:
+            val_data, _, _, val_csr = load_dataset_bert(self.test_data_path, len(self.vocabulary), max_len=config.sent_size, ctx=mx.cpu())
+            val_wds = val_csr.sum().asscalar()
+        else:
+            val_data, val_csr, val_wds = None, None, None
+        sample_size = min(50000, train_csr.shape[0])
+        data = train_csr[:sample_size] 
+        wd_freqs = mx.nd.sum(data, axis=0)
+        seq_ved_estimator = self._get_ved_estimator(config, reporter, wd_freqs, ctx)
         obj, npmi, perplexity, redundancy = \
-            seq_ved_estimator.fit_with_validation(self.train_data, self.train_labels, self.test_data, self.test_labels)
+            seq_ved_estimator.fit_with_validation((train_data, train_csr), None, (val_data, val_csr), None)
         return seq_ved_estimator.model, obj, npmi, perplexity, redundancy
 
 

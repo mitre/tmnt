@@ -16,6 +16,14 @@ from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import BowVAEInferencer
 
+## NOTE: fetch_20newsgroups uses urllib and any SSL certificates, if needed, must
+## be accessible.
+
+## Either 1) as an environment variable:
+##    export SSL_CERT_FILE=<path_to_chain>/cert-chain.txt
+## Or 2) by adding the certs to the file paths at:
+## python -c 'import ssl; print(ssl.get_default_verify_paths().openssl_cafile)'
+## Or 3) explicitly setting the cafile to the SSL certfile
 
 data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                              remove=('headers', 'footers', 'quotes'),

@@ -20,7 +20,7 @@ if __name__ == '__main__':
         'numpy>=1.5.0'
     ]
     install_requires = [
-       'numpy>=1.5.0',
+       'numpy>=1.19.0,<1.20.0',
        'gluonnlp==0.9.1',
        'autogluon.core>=0.0.15b20201106',
        'mantichora==0.9.5',
@@ -31,7 +31,7 @@ if __name__ == '__main__':
        'sacremoses>=0.0.38',
        'sentence-splitter==1.4',
        'scikit-learn<0.23,>=0.22.0',
-       'umap-learn==0.3.7',
+       'umap-learn==0.4.6',
        'tabulate>=0.8.7'
     ]
     if(environ.get('USE_CUDA') == '1'):
