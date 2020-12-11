@@ -22,7 +22,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel, BertBowVED
+from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED
 from tmnt.eval_npmi import EvaluateNPMI
 import autogluon.core as ag
 
@@ -163,7 +163,7 @@ class BaseBowEstimator(BaseEstimator):
         self.embedding_source = embedding_source
         self.embedding_size = embedding_size
         self.seed_matrix = seed_matrix
-        self.validate_each_epoch = True
+        self.validate_each_epoch = False
         self.wd_freqs = wd_freqs
         self.num_val_words = num_val_words
         self.model = None
@@ -346,7 +346,7 @@ class BaseBowEstimator(BaseEstimator):
                 labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
             data = data.as_in_context(self.ctx)
             labels = labels.as_in_context(self.ctx)
-            _, kl_loss, rec_loss, _, _, _, log_out = self._forward(self.model, data, labels)
+            _, kl_loss, rec_loss, _, _, _, _ = self._forward(self.model, data, labels)
             if i == num_batches - 1:
                 total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
                 total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
@@ -436,19 +436,29 @@ class BaseBowEstimator(BaseEstimator):
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         for epoch in range(self.epochs):
             ts_epoch = time.time()
+            elbo_losses = []
+            lab_losses  = []
             for i, (data, labels) in enumerate(train_dataloader):
                 if labels is None:
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
                 labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
                 with autograd.record():
-                    elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, _ = \
+                    elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, lab_loss = \
                         self._forward(self.model, data, labels)
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
                 trainer.step(data.shape[0])
+                if not self.quiet:
+                    elbo_losses.append(float(elbo_mean.asscalar()))
+                    if lab_loss is not None:
+                        lab_losses.append(float(lab_loss.mean().asscalar()))
             if not self.quiet and not self.validate_each_epoch:
-                self._output_status("Epoch [{}] finished in {} seconds. ".format(epoch+1, (time.time()-ts_epoch)))
+                elbo_mean = np.mean(elbo_losses) if len(elbo_losses) > 0 else 0.0
+                lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
+                self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
+                                    .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
+                
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 ppl, npmi, redundancy = self.validate(val_X, val_y)
                 if self.reporter:
@@ -575,7 +585,107 @@ class BowEstimator(BaseBowEstimator):
 
 
 
-class MetaBowEstimator(BaseBowEstimator):
+class LabeledBowEstimator(BaseBowEstimator):
+
+    def __init__(self, vocabulary, n_labels,  *args, **kwargs):
+        super().__init__(vocabulary, *args, **kwargs)
+
+        self.n_labels = n_labels
+
+    @classmethod
+    def from_config(cls, n_labels, *args, **kwargs):
+        est = super().from_config(*args, **kwargs)
+        est.n_labels = n_labels
+        return est
+
+    def _get_model(self):
+        """
+        Returns
+        MXNet model initialized using provided hyperparameters
+        """
+        if self.embedding_source != 'random' and self.vocabulary.embedding is None:
+            e_type, e_name = tuple(self.embedding_source.split(':'))
+            pt_embedding = nlp.embedding.create(e_type, source=e_name)
+            self.vocabulary.set_embedding(pt_embedding)
+            emb_size = len(self.vocabulary.embedding.idx_to_vec[0])
+            for word in self.vocabulary.embedding._idx_to_token:
+                if (self.vocabulary.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                    self.vocabulary.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
+        else:
+            emb_size = self.embedding_size
+        model = \
+            LabeledBowVAEModel(n_labels=self.n_labels,
+                           vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
+                           fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
+                           coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
+                           kappa=self.kappa, alpha=self.alpha,
+                           batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
+                           wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+        return model
+
+
+    def _get_config(self):
+        config = super()._get_config()
+        config['n_labels'] = self.n_labels
+        return config
+    
+
+    def _forward(self, model, data, labels):
+        self.train_data = data
+        self.train_labels = labels
+        return model(data, labels)
+
+
+    def validate(self, val_X, val_y):
+        ppl, npmi, redundancy = super().validate(val_X, val_y)
+        val_loader = self._get_val_dataloader(val_X, val_y)
+        tot_correct = 0
+        tot = 0
+        bs = min(val_X.shape[0], self.batch_size)
+        num_std_batches = val_X.shape[0] // bs
+        for i, (data, labels) in enumerate(val_loader):
+            if i < num_std_batches - 1:
+                data = data.as_in_context(self.ctx)
+                labels = labels.as_in_context(self.ctx)
+                predictions = self.model.predict(data)
+                correct = mx.nd.argmax(predictions, axis=1) == labels
+                tot_correct += mx.nd.sum(correct).asscalar()
+                tot += data.shape[0]
+        print("Validation accuracy = {}".format(float(tot_correct) / float(tot)))
+        return ppl, npmi, redundancy
+            
+    
+
+    def get_topic_vectors(self):
+        """
+        Get topic vectors of the fitted model.
+
+        Returns:
+            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. 
+                shape=(n_latent, vocab_size)
+        """
+
+        return self.model.get_topic_vectors(self.train_data, self.train_labels)
+
+
+    def transform(self, X):
+        """
+        Transform data X according to the fitted model.
+
+        Parameters:
+            X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features}
+
+        Returns:
+            (:class:`mxnet.ndarray.NDArray`) topic_distribution: shape=(n_samples, n_latent) Document topic distribution for X
+        """
+
+        mx_array = mx.nd.array(X,dtype='float32')
+        return self.model.encode_data(mx_array).asnumpy()
+    
+        
+
+
+class CovariateBowEstimator(BaseBowEstimator):
 
     def __init__(self, vocabulary, n_covars=0, *args, **kwargs):
         
@@ -609,7 +719,7 @@ class MetaBowEstimator(BaseBowEstimator):
         else:
             emb_size = self.embedding_size
         model = \
-            MetaDataBowVAEModel(n_covars=self.n_covars,
+            CovariateBowVAEModel(n_covars=self.n_covars,
                            vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
                            fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,

@@ -21,7 +21,7 @@ from pathlib import Path
 from tmnt.utils.random import seed_rng
 from tmnt.utils.log_utils import logging_config
 from tmnt.data_loading import load_vocab, file_to_data, load_dataset_bert
-from tmnt.estimator import BowEstimator, MetaBowEstimator, SeqBowEstimator
+from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator
 
 
 class BaseTrainer(object):
@@ -287,12 +287,12 @@ class BowVAETrainer(BaseTrainer):
             ctx (`mxnet.context.Context`): Mxnet compute context
         
         Returns:
-            Estimator (:class:`tmnt.estimator.BaseEstimator`): Either BowEstimator or MetaBowEstimator
+            Estimator (:class:`tmnt.estimator.BaseEstimator`): Either BowEstimator or CovariateBowEstimator
         """
         embedding_source = config.embedding.source
         vocab, _ = self._initialize_vocabulary(embedding_source)
         if self.c_args.use_labels_as_covars:
-            estimator = MetaBowEstimator.from_config(self.n_covars, config, vocab,
+            estimator = CovariateBowEstimator.from_config(self.n_covars, config, vocab,
                                                      pretrained_param_file=self.pretrained_param_file,
                                                      wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
         else:

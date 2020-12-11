@@ -37,7 +37,7 @@ class BowVAEModel(HybridBlock):
         enc_dr (float): Dropout after each encoder layer. (default = 0.1)
         wd_freqs (:class:`mxnet.ndarray.NDArray`): Tensor with word frequencies in training data to initialize bias terms.
         seed_mat (:class:`mxnet.ndarray.NDArray`): Tensor with seed terms for guided topic modeling loss
-        n_covars (int): Number of values for categorical co-variate (0 for non-MetaData BOW model)
+        n_covars (int): Number of values for categorical co-variate (0 for non-CovariateData BOW model)
         ctx (int): context device (default is mx.cpu())
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
@@ -249,17 +249,56 @@ class BowVAEModel(HybridBlock):
         y = F.softmax(dec_out, axis=1)
         iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, data, y, KL, batch_size)
-        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, y
+        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, None
 
 
-class MetaDataBowVAEModel(BowVAEModel):
+
+class LabeledBowVAEModel(BowVAEModel):
+    def __init__(self, n_labels, vocabulary, enc_dim, n_latent, embedding_size,
+                 fixed_embedding=False, latent_distrib='logistic_gaussian',
+                 coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=32.0, alpha=1.0,
+                 batch_size=None, n_encoding_layers=1,
+                 enc_dr=0.1, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
+        super(LabeledBowVAEModel, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
+                                             latent_distrib, 
+                                             coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
+                                             wd_freqs, seed_mat, 0, ctx)
+
+        self.n_labels = n_labels
+        with self.name_scope():
+            self.lab_decoder = gluon.nn.Dense(in_units=n_latent, units=n_labels, activation=None, use_bias=True)
+        self.lab_decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        self.lab_loss_fn = gluon.loss.SoftmaxCELoss()
+
+    def predict(self, data):
+        emb_out = self.embedding(data)
+        enc_out = self.encoder(emb_out)
+        mu_out  = self.latent_dist.get_mu_encoding(enc_out)
+        return self.lab_decoder(mu_out)
+    
+
+    def hybrid_forward(self, F, data, labels):
+        batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
+        emb_out = self.embedding(data)
+        enc_out = self.encoder(emb_out)
+        mu_out  = self.latent_dist.get_mu_encoding(enc_out)
+        z, KL   = self.latent_dist(enc_out, batch_size)
+        y = F.softmax(self.decoder(z), axis=1)
+        lab_loss = self.lab_loss_fn(self.lab_decoder(mu_out), labels)
+        iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
+            self.get_loss_terms(F, data, y, KL, batch_size)
+        iv_loss = iii_loss + lab_loss  ## just add the label loss
+        return iv_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, lab_loss
+
+
+class CovariateBowVAEModel(BowVAEModel):
 
     def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0,
                  batch_size=None, n_encoding_layers=1,
                  enc_dr=0.1, wd_freqs=None, seed_mat=None, covar_net_layers=1, ctx=mx.cpu()):
-        super(MetaDataBowVAEModel, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
+        super(CovariateBowVAEModel, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
                                              latent_distrib, 
                                              coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
                                              wd_freqs, seed_mat, n_covars, ctx)
@@ -359,7 +398,7 @@ class MetaDataBowVAEModel(BowVAEModel):
         y = F.softmax(dec_out + cov_dec_out, axis=1)
         iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, data, y, KL, batch_size)
-        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, y
+        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, None
 
         
 class CovariateModel(HybridBlock):

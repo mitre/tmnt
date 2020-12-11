@@ -11,7 +11,7 @@ import gluonnlp as nlp
 import io
 import os
 import scipy
-from tmnt.modeling import BowVAEModel, MetaDataBowVAEModel, BertBowVED
+from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, BertBowVED
 from tmnt.data_loading import DataIterLoader, file_to_data
 from tmnt.preprocess.tokenizer import BasicTokenizer
 from tmnt.preprocess.vectorizer import TMNTVectorizer
@@ -47,7 +47,7 @@ class BowVAEInferencer(BaseInferencer):
         self.vectorizer = TMNTVectorizer(initial_vocabulary=model.vocabulary)
         self.n_latent = model.n_latent
         self.model = model
-        if isinstance(model, MetaDataBowVAEModel):
+        if isinstance(model, CovariateBowVAEModel):
             self.covar_model = True
             self.n_covars = model.n_covars
             self.covar_net_layers = model.covar_net_layers
@@ -75,7 +75,7 @@ class BowVAEInferencer(BaseInferencer):
         if 'n_covars' in config:
             n_covars = config['n_covars']
             covar_net_layers = config.get('covar_net_layers')
-            model = MetaDataBowVAEModel(n_covars,
+            model = CovariateBowVAEModel(n_covars,
                                         vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
                                         n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
                                         covar_net_layers = covar_net_layers, ctx=ctx)

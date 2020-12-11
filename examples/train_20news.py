@@ -6,7 +6,7 @@ Simple example loading 20 news data, building a topic model
 and encoding strings. 
 """
 
-from tmnt.estimator import BowEstimator, MetaBowEstimator
+from tmnt.estimator import BowEstimator
 import numpy as np
 import gluonnlp as nlp
 import os
