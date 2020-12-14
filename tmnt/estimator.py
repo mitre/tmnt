@@ -344,9 +344,13 @@ class BaseBowEstimator(BaseEstimator):
         for i, (data,labels) in enumerate(dataloader):
             if labels is None:            
                 labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+                mask = None
+            else:
+                mask = labels >= 0.0
+                mask = mask.as_in_context(self.ctx)
             data = data.as_in_context(self.ctx)
             labels = labels.as_in_context(self.ctx)
-            _, kl_loss, rec_loss, _, _, _, _ = self._forward(self.model, data, labels)
+            _, kl_loss, rec_loss, _, _, _, _ = self._forward(self.model, data, labels, mask)
             if i == num_batches - 1:
                 total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
                 total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
@@ -441,14 +445,18 @@ class BaseBowEstimator(BaseEstimator):
             for i, (data, labels) in enumerate(train_dataloader):
                 if labels is None:
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+                    mask = None
+                else:
+                    mask = labels >= 0.0
+                    mask = mask.as_in_context(self.ctx)
                 labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
                 with autograd.record():
                     elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, lab_loss = \
-                        self._forward(self.model, data, labels)
+                        self._forward(self.model, data, labels, mask=mask)
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
-                trainer.step(data.shape[0])
+                trainer.step(1, ignore_stale_grad=True)
                 if not self.quiet:
                     elbo_losses.append(float(elbo_mean.asscalar()))
                     if lab_loss is not None:
@@ -503,7 +511,7 @@ class BowEstimator(BaseBowEstimator):
 
         return super().perplexity(X, None)
 
-    def _forward(self, model, data, labels):
+    def _forward(self, model, data, labels, mask):
         """
         Forward pass of BowVAE model given the supplied data
 
@@ -587,15 +595,16 @@ class BowEstimator(BaseBowEstimator):
 
 class LabeledBowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, n_labels,  *args, **kwargs):
+    def __init__(self, vocabulary, n_labels,  gamma, *args, **kwargs):
         super().__init__(vocabulary, *args, **kwargs)
-
+        self.gamma = gamma
         self.n_labels = n_labels
 
     @classmethod
-    def from_config(cls, n_labels, *args, **kwargs):
+    def from_config(cls, n_labels, gamma, *args, **kwargs):
         est = super().from_config(*args, **kwargs)
         est.n_labels = n_labels
+        est.gamma    = gamma
         return est
 
     def _get_model(self):
@@ -614,7 +623,7 @@ class LabeledBowEstimator(BaseBowEstimator):
         else:
             emb_size = self.embedding_size
         model = \
-            LabeledBowVAEModel(n_labels=self.n_labels,
+            LabeledBowVAEModel(n_labels=self.n_labels, gamma=self.gamma,
                            vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
                            fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
@@ -630,10 +639,10 @@ class LabeledBowEstimator(BaseBowEstimator):
         return config
     
 
-    def _forward(self, model, data, labels):
+    def _forward(self, model, data, labels, mask):
         self.train_data = data
         self.train_labels = labels
-        return model(data, labels)
+        return model(data, labels, mask)
 
 
     def validate(self, val_X, val_y):
@@ -643,6 +652,7 @@ class LabeledBowEstimator(BaseBowEstimator):
         tot = 0
         bs = min(val_X.shape[0], self.batch_size)
         num_std_batches = val_X.shape[0] // bs
+        last_batch_size = val_X.shape[0] % bs
         for i, (data, labels) in enumerate(val_loader):
             if i < num_std_batches - 1:
                 data = data.as_in_context(self.ctx)
@@ -650,7 +660,8 @@ class LabeledBowEstimator(BaseBowEstimator):
                 predictions = self.model.predict(data)
                 correct = mx.nd.argmax(predictions, axis=1) == labels
                 tot_correct += mx.nd.sum(correct).asscalar()
-                tot += data.shape[0]
+                tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0
+                
         print("Validation accuracy = {}".format(float(tot_correct) / float(tot)))
         return ppl, npmi, redundancy
             
@@ -735,7 +746,7 @@ class CovariateBowEstimator(BaseBowEstimator):
         return config
     
     
-    def _forward(self, model, data, labels):
+    def _forward(self, model, data, labels, mask):
         """
         Forward pass of BowVAE model given the supplied data
 

@@ -42,7 +42,7 @@ class BowVAEModel(HybridBlock):
     """
     def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
-                 kappa=100.0, alpha=1.0, batch_size=None, n_encoding_layers = 1, enc_dr=0.1,
+                 kappa=32.0, alpha=1.0, batch_size=None, n_encoding_layers = 1, enc_dr=0.1,
                  wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
         super(BowVAEModel, self).__init__()
         self.batch_size = batch_size
@@ -254,45 +254,68 @@ class BowVAEModel(HybridBlock):
 
 
 class LabeledBowVAEModel(BowVAEModel):
-    def __init__(self, n_labels, vocabulary, enc_dim, n_latent, embedding_size,
+    """Joint bag-of-words topic model and text classifier.
+    Optimizes standard VAE loss along with cross entropy over provided labels.
+    """
+    def __init__(self, n_labels, gamma, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=32.0, alpha=1.0,
                  batch_size=None, n_encoding_layers=1,
                  enc_dr=0.1, wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
         super(LabeledBowVAEModel, self).__init__(vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding,
-                                             latent_distrib, 
-                                             coherence_reg_penalty, kappa, alpha, 0.0, batch_size, n_encoding_layers, enc_dr,
-                                             wd_freqs, seed_mat, 0, ctx)
-
+                                                 latent_distrib, 
+                                                 coherence_reg_penalty, redundancy_reg_penalty,
+                                                 kappa, alpha, batch_size, n_encoding_layers, enc_dr,
+                                                 wd_freqs, seed_mat, 0, ctx)
         self.n_labels = n_labels
+        self.gamma    = gamma
         with self.name_scope():
             self.lab_decoder = gluon.nn.Dense(in_units=n_latent, units=n_labels, activation=None, use_bias=True)
+            self.lab_dr = gluon.nn.Dropout(enc_dr*2.0)
         self.lab_decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         self.lab_loss_fn = gluon.loss.SoftmaxCELoss()
 
     def predict(self, data):
+        """Predict the label given the input data (ignoring VAE reconstruction)
+        
+        Parameters:
+            data (tensor): input data tensor
+        Returns:
+            output vector (tensor): unnormalized outputs over label values
+        """
         emb_out = self.embedding(data)
         enc_out = self.encoder(emb_out)
         mu_out  = self.latent_dist.get_mu_encoding(enc_out)
         return self.lab_decoder(mu_out)
     
 
-    def hybrid_forward(self, F, data, labels):
+    def hybrid_forward(self, F, data, labels, mask=None):
+        """Inference with input data and labels for VAE and CE loss terms
+        Parameters:
+            data (tensor): input data tensor
+            labels (tensor): labels/categories associated with documents
+        Returns:
+            (tuple): Tuple of:
+                loss, KL term, reconstruction loss, entropies, coherence loss, redundancy loss, label CE loss
+        """
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
         enc_out = self.encoder(emb_out)
         mu_out  = self.latent_dist.get_mu_encoding(enc_out)
         z, KL   = self.latent_dist(enc_out, batch_size)
         y = F.softmax(self.decoder(z), axis=1)
-        lab_loss = self.lab_loss_fn(self.lab_decoder(mu_out), labels)
+        lab_loss = self.lab_loss_fn(self.lab_dr(self.lab_decoder(mu_out)), labels)
+        if mask is not None:
+            lab_loss = lab_loss * mask
         iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, data, y, KL, batch_size)
-        iv_loss = iii_loss + lab_loss  ## just add the label loss
+        iv_loss = iii_loss + lab_loss * self.gamma  ## just add the label loss
         return iv_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, lab_loss
 
 
 class CovariateBowVAEModel(BowVAEModel):
-
+    """Bag-of-words topic model with labels used as co-variates
+    """
     def __init__(self, n_covars, vocabulary, enc_dim, n_latent, embedding_size,
                  fixed_embedding=False, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0, kappa=100.0, alpha=1.0,

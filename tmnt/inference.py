@@ -11,9 +11,9 @@ import gluonnlp as nlp
 import io
 import os
 import scipy
+import umap
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, BertBowVED
 from tmnt.data_loading import DataIterLoader, file_to_data
-from tmnt.preprocess.tokenizer import BasicTokenizer
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
@@ -113,6 +113,21 @@ class BowVAEInferencer(BaseInferencer):
         d4 = list(map(lambda i: self.vocab.idx_to_token[i], range(len(self.vocab.idx_to_token))))
         d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
         return d
+
+
+    def get_umap_embeddings(self, data):
+        encs = self.encode_data(data, None)
+        encs2 = np.array([enc.asnumpy() for enc in encs])
+        um = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
+        return um.fit_transform(encs2)
+
+    def plot_to(self, embeddings, labels, f=None):
+        import matplotlib.pyplot as plt
+        plt.scatter(*embeddings.T, c=labels, s=0.8, alpha=0.9, cmap='coolwarm')
+        if f is None:
+            plt.show()
+        else:
+            plt.savefig(f)
 
 
     def export_full_model_inference_details(self, sp_vec_file, ofile):
