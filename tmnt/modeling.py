@@ -540,7 +540,7 @@ class DeepAveragingVAEModel(HybridBlock):
                 for u in dense_units:
                     self.mlp.add(gluon.nn.Dropout(emb_dr))
                     self.mlp.add(gluon.nn.Dense(units=u, use_bias=False, activation='relu'))
-                        if latent_distrib == 'logistic_gaussian':
+            if latent_distrib == 'logistic_gaussian':
                 self.latent_dist = LogisticGaussianDistribution(n_latent, ctx, alpha=alpha)
             elif latent_distrib == 'vmf':
                 self.latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
