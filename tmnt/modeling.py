@@ -518,6 +518,79 @@ class CoherenceRegularizer(HybridBlock):
 
 
 
+class DeepAveragingVAEModel(HybridBlock):
+    def __init__(self, vocabulary, n_latent, emb_in_dim, emb_out_dim, emb_dr, latent_distrib='logistic_gaussian',
+                 coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
+                 kappa=32.0, alpha=1.0, batch_size=None, 
+                 wd_freqs=None, seed_mat=None, ctx=mx.cpu()):
+
+        self.seq_length = seq_length
+        self.emb_dim = emb_out_dim
+        self.batch_size = batch_size
+        self.n_latent = n_latent
+        self.model_ctx = ctx
+        self.vocabulary = vocabulary
+        self.vocab_size = len(vocabulary)
+        with self.name_scope():
+            self.embedding = gluon.nn.Embedding(emb_in_dim, emb_out_dim)
+            self.emb_drop  = gluon.nn.Dropout(emb_dr)
+            self.pooler = gluon.nn.AvgPool2D((self.seq_length,1)) ## average pool over time/sequence            
+            self.mlp   = gluon.nn.HybridSequential()
+            with self.mlp.name_scope():
+                for u in dense_units:
+                    self.mlp.add(gluon.nn.Dropout(emb_dr))
+                    self.mlp.add(gluon.nn.Dense(units=u, use_bias=False, activation='relu'))
+                        if latent_distrib == 'logistic_gaussian':
+                self.latent_dist = LogisticGaussianDistribution(n_latent, ctx, alpha=alpha)
+            elif latent_distrib == 'vmf':
+                self.latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=self.model_ctx)
+            elif latent_distrib == 'gaussian':
+                self.latent_dist = GaussianDistribution(n_latent, ctx)
+            elif latent_distrib == 'gaussian_unitvar':
+                self.latent_dist = GaussianUnitVarDistribution(n_latent, ctx)
+            else:
+                raise Exception("Invalid distribution ==> {}".format(latent_distrib))
+            self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
+
+    def set_biases(self, wd_freqs):
+        """Set the biases to the log of the word frequencies.
+
+        Parameters:
+            wd_freqs (:class:`mxnet.ndarray.NDArray`): Word frequencies as determined from training data
+        """
+        freq_nd = wd_freqs + 1
+        total = freq_nd.sum()
+        log_freq = freq_nd.log() - freq_nd.sum().log()
+        bias_param = self.decoder.collect_params().get('bias')
+        bias_param.set_data(log_freq)
+        bias_param.grad_req = 'null'
+        self.out_bias = bias_param.data()
+
+
+    def get_loss_terms(self, F, data, y, KL, batch_size):
+        rr = data * F.log(y+1e-12)
+        recon_loss = -F.sparse.sum( rr, axis=1 )
+        i_loss = F.broadcast_plus(recon_loss, KL)
+        ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(F, i_loss)
+        iii_loss, entropies = self.add_seed_constraint_loss(F, ii_loss)
+        return iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss
+
+    def hybrid_forward(self, F, data, mask):
+        batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
+        emb_out = self.embedding(data)
+        mask    = F.expand_dims(mask, axis=2)
+        masked_emb = emb_out * mask
+        pooled = self.pooler(F.reshape(masked_emb, (-1,1,self.seq_length, self.emb_dim)))
+        encoded = self.mlp(pooled)
+        z, KL = self.latent_dist(emb_out, batch_size)
+        dec_out = self.decoder(z)
+        y = F.softmax(dec_out, axis=1)
+        iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
+            self.get_loss_terms(F, data, y, KL, batch_size)
+        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, None
+
+
+
 class BertBowVED(Block):
     def __init__(self, bert_base, bow_vocab, latent_distrib='vmf', 
                  n_latent=256, 

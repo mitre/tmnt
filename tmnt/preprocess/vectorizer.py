@@ -70,7 +70,6 @@ class TMNTVectorizer(object):
             self.vocab = vocab
         return vocab
     
-
     def _tr_json(self, tr_method, json_file):
         fp = io.open(json_file, 'r', encoding=self.encoding)
         gen = ( json.loads(l)[self.text_key] for l in fp )
