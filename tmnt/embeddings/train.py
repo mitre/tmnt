@@ -170,7 +170,7 @@ def train_embeddings(args, exp_folder):
     with io.open(os.path.join(exp_folder, 'vocab.json'), 'w') as f:
         js_vocab = vocab.to_json()
         f.write(js_vocab)
-    embedding.embedding.save_parameters(os.path.join(exp_folder, 'embedding.params'))
+    embedding.save_parameters(os.path.join(exp_folder, 'embedding.params'))
     if args.token_embedding:
         tok_embedding = nlp.embedding.TokenEmbedding(idx_to_vec=embedding.embedding.weight.data(),
                                                      idx_to_token=vocab.idx_to_token)

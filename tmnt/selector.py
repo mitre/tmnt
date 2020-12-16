@@ -5,13 +5,13 @@ Model selection using AutoGluon.
 """
 
 import pandas as pd
-import autogluon.core as ag
+import autogluon as ag
 import logging
 import datetime
 import os
 import json
 import io
-from autogluon.core.scheduler.reporter import FakeReporter
+from autogluon.scheduler.reporter import FakeReporter
 from tabulate import tabulate
 from tmnt.configuration import TMNTConfigBOW, TMNTConfigSeqBOW
 from tmnt.trainer import BowVAETrainer, SeqBowVEDTrainer

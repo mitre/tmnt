@@ -14,9 +14,9 @@ import datetime
 import time
 import copy
 import statistics
-import autogluon.core as ag
+import autogluon as ag
 
-from autogluon.core.scheduler.reporter import FakeReporter
+from autogluon.scheduler.reporter import FakeReporter
 from pathlib import Path
 from tmnt.utils.random import seed_rng
 from tmnt.utils.log_utils import logging_config
