@@ -110,6 +110,8 @@ class BaseBowEstimator(BaseEstimator):
         log_method (str): Method for logging. 'print' | 'log', optional (default='log')
         quiet (bool): Flag for whether to force minimal logging/ouput. optional (default=False)
         coherence_via_encoder (bool): Flag 
+        pretrained_param_file (str): Path to pre-trained parameter file to initialize weights
+        warm_start (bool): Subsequent calls to `fit` will use existing model weights rather than reinitializing
     """
     def __init__(self, vocabulary,
                  coherence_coefficient=8.0,
@@ -138,7 +140,8 @@ class BaseBowEstimator(BaseEstimator):
                  log_method='print',
                  quiet=False,
                  coherence_via_encoder=False,
-                 pretrained_param_file=None):
+                 pretrained_param_file=None,
+                 warm_start=False):
         
         super().__init__(log_method=log_method, quiet=quiet)
         self.reporter = reporter
@@ -157,7 +160,6 @@ class BaseBowEstimator(BaseEstimator):
         self.n_encoding_layers = num_enc_layers
         self.enc_dr = enc_dr
         self.epochs = epochs
-        self.vocab_cache = {}        
         self.vocabulary = vocabulary 
         self.ctx = ctx
         self.embedding_source = embedding_source
@@ -169,6 +171,7 @@ class BaseBowEstimator(BaseEstimator):
         self.model = None
         self.coherence_via_encoder = coherence_via_encoder
         self.pretrained_param_file = pretrained_param_file
+        self.warm_start = warm_start
 
     @classmethod
     def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
@@ -433,8 +436,10 @@ class BaseBowEstimator(BaseEstimator):
             y = mx.nd.array(y) if y is not None else None
             X = mx.nd.sparse.csr_matrix(X)
             train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
-        self.model = self._get_model()
-        self.model.set_biases(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
+
+        if self.model is None or not self.warm_start:
+            self.model = self._get_model()
+            self.model.set_biases(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
         
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
