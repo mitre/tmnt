@@ -294,3 +294,44 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
     return data_train, bert_base, vocab, csr_mat
 
 
+## loading for non-BERT seq2vec encoders with embeddings
+
+def _load_dataset_sequence(line_gen, max_len, tokenizer, vocab, ctx=mx.cpu()):
+    toked_lines = [tokenizer(line)[:max_len] for line in line_gen]
+    wd_ids = []
+    for tl in toked_lines:
+        wl = []
+        for w in tl:
+            try:
+                i = vocab(w)
+                al.append(i)
+            except Exception:
+                pass
+        wd_ids.append(wl)
+    lens = [len(line) for line in wd_ids]
+    for line_ids in wd_ids:
+        line_ids.extend([0] * (max_len - len(line_ids)))
+    return wd_ids, lens
+
+
+def prepare_dataset_sequence(content, max_len, labels=None, tokenizer=None, bow_vocab_size=1000, vectorizer=None, ctx=mx.cpu()):
+    tf_vectorizer = vectorizer or TMNTVectorizer(vocab_size = bow_vocab_size)
+    if tokenizer is None:
+        tokenizer = nlp.data.SacreMosesTokenizer()
+    X, _ = tf_vectorizer.transform(content) if vectorizer else tf_vectorizer.fit_transform(content)
+    vocab = tf_vectorizer.get_vocab()
+    x_ids, x_val_lens = _load_dataset_sequence(content, max_len, tokenizer, vocab, ctx)
+    if labels:
+        larr = mx.nd.array(labels, dtype='int32')
+    else:
+        larr = mx.nd.full(len(x_ids), -1)
+    data_train = gluon.data.ArrayDataset(
+        mx.nd.array(x_ids, dtype='int32'),
+        mx.nd.array(x_val_lens, dtype='int32'),
+        mx.nd.sparse.csr_matrix(X, dtype='float32').tostype('default'),
+        larr)
+    return data_train, tf_vectorizer.get_vocab(), X
+    
+    
+
+

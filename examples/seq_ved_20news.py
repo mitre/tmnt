@@ -6,7 +6,7 @@ Simple example loading 20 news data, building a topic model
 using a BERT pre-trained sequence to bag-of-words model.
 """
 
-from tmnt.estimator import BowEstimator, MetaBowEstimator, SeqBowEstimator
+from tmnt.estimator import BowEstimator, SeqBowEstimator
 import numpy as np
 import gluonnlp as nlp
 import os

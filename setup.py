@@ -22,7 +22,7 @@ if __name__ == '__main__':
     install_requires = [
        'numpy>=1.19.0,<1.20.0',
        'gluonnlp==0.9.1',
-       'autogluon>=0.0.15',
+       'autogluon==0.0.15',
        'mantichora==0.9.5',
        'pandas<2.0',
        'pyLDAvis==2.1.2',

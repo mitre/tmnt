@@ -65,8 +65,7 @@ class TMNTVectorizer(object):
         if self.vocab is not None:
             return self.vocab
         else:
-            vocab = nlp.Vocab({v: 1 for v in self.vectorizer.vocabulary_}, unknown_token=None, padding_token=None,
-                              bos_token=None, eos_token=None)
+            vocab = nlp.Vocab({v: 1 for v in self.vectorizer.vocabulary_}, unknown_token=None, eos_token=None, bos_token=None, padding_token=None)
             self.vocab = vocab
         return vocab
     

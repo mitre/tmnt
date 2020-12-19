@@ -22,7 +22,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED
+from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, DeepAveragingVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 import autogluon.core as ag
 
@@ -31,10 +31,53 @@ MAX_DESIGN_MATRIX = 250000000
 
 class BaseEstimator(object):
 
-    def __init__(self, log_method='log', quiet=False):
+    def __init__(self,
+                 log_method='log',
+                 quiet=False,
+                 coherence_coefficient=8.0,
+                 reporter=None,
+                 num_val_words=-1,
+                 wd_freqs=None,
+                 ctx=mx.cpu(),
+                 latent_distribution="vmf",
+                 optimizer="adam",
+                 lr = 0.005, 
+                 n_latent=20,
+                 kappa=64.0,
+                 alpha=1.0,
+                 coherence_reg_penalty=0.0,
+                 redundancy_reg_penalty=0.0,
+                 batch_size=128,
+                 seed_matrix=None,
+                 hybridize=False,
+                 epochs=40,
+                 coherence_via_encoder=False,
+                 pretrained_param_file=None,
+                 warm_start=False):
         self.log_method = log_method
         self.quiet = quiet
         self.model = None
+        self.coherence_coefficient = coherence_coefficient
+        self.reporter = reporter
+        self.num_val_words = num_val_words
+        self.wd_freqs = wd_freqs
+        self.ctx = ctx
+        self.latent_distrib = latent_distribution
+        self.optimizer = optimizer
+        self.lr = lr
+        self.n_latent = n_latent
+        self.kappa = kappa
+        self.alpha = alpha
+        self.coherence_reg_penalty = coherence_reg_penalty
+        self.redundancy_reg_penalty = redundancy_reg_penalty
+        self.batch_size = batch_size
+        self.seed_matrix = seed_matrix
+        self.hybridize = hybridize
+        self.epochs = epochs
+        self.coherence_via_encoder = coherence_via_encoder
+        self.pretrained_param_file = pretrained_param_file
+        self.warm_start = warm_start
+        
 
     def _output_status(self, status_string):
         if self.log_method == 'print':
@@ -114,64 +157,21 @@ class BaseBowEstimator(BaseEstimator):
         warm_start (bool): Subsequent calls to `fit` will use existing model weights rather than reinitializing
     """
     def __init__(self, vocabulary,
-                 coherence_coefficient=8.0,
-                 reporter=None,
-                 num_val_words=-1,
-                 wd_freqs=None,
-                 ctx=mx.cpu(),
-                 lr=0.005,
-                 latent_distribution="vmf",
-                 optimizer="adam",
-                 n_latent=20,
-                 kappa=64.0,
-                 alpha=1.0,
                  enc_hidden_dim=150,
-                 coherence_reg_penalty=0.0,
-                 redundancy_reg_penalty=0.0,
-                 batch_size=128,
                  embedding_source="random",
                  embedding_size=128,
                  fixed_embedding=False,
                  num_enc_layers=1,
-                 enc_dr=0.1,
-                 seed_matrix=None,
-                 hybridize=False,
-                 epochs=40,
-                 log_method='print',
-                 quiet=False,
-                 coherence_via_encoder=False,
-                 pretrained_param_file=None,
-                 warm_start=False):
-        
-        super().__init__(log_method=log_method, quiet=quiet)
-        self.reporter = reporter
-        self.coherence_coefficient = coherence_coefficient
-        self.lr = lr
-        self.latent_distrib = latent_distribution
-        self.optimizer = optimizer
-        self.n_latent = n_latent
-        self.kappa = kappa
-        self.alpha = alpha
+                 enc_dr=0.1, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.enc_hidden_dim = enc_hidden_dim
-        self.coherence_reg_penalty = coherence_reg_penalty
-        self.redundancy_reg_penalty = redundancy_reg_penalty 
-        self.batch_size = batch_size
         self.fixed_embedding = fixed_embedding
         self.n_encoding_layers = num_enc_layers
         self.enc_dr = enc_dr
-        self.epochs = epochs
         self.vocabulary = vocabulary 
-        self.ctx = ctx
         self.embedding_source = embedding_source
         self.embedding_size = embedding_size
-        self.seed_matrix = seed_matrix
         self.validate_each_epoch = False
-        self.wd_freqs = wd_freqs
-        self.num_val_words = num_val_words
-        self.model = None
-        self.coherence_via_encoder = coherence_via_encoder
-        self.pretrained_param_file = pretrained_param_file
-        self.warm_start = warm_start
 
     @classmethod
     def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
@@ -461,7 +461,7 @@ class BaseBowEstimator(BaseEstimator):
                         self._forward(self.model, data, labels, mask=mask)
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()
-                trainer.step(1, ignore_stale_grad=True)
+                trainer.step(1)
                 if not self.quiet:
                     elbo_losses.append(float(elbo_mean.asscalar()))
                     if lab_loss is not None:
@@ -548,12 +548,13 @@ class BowEstimator(BaseBowEstimator):
         else:
             emb_size = self.embedding_size
         model = \
-                BowVAEModel(self.vocabulary, self.enc_hidden_dim, self.n_latent, emb_size,
-                       fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
-                       coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
+                BowVAEModel(self.enc_hidden_dim, emb_size, n_encoding_layers=self.n_encoding_layers,
+                            enc_dr=self.enc_dr, fixed_embedding=self.fixed_embedding, vocabulary=self.vocabulary, n_latent=self.n_latent, 
+                            latent_distrib=self.latent_distrib, 
+                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                        kappa=self.kappa, alpha=self.alpha,
-                       batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
-                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+                       batch_size=self.batch_size, 
+                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, n_covars=0, ctx=self.ctx)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
@@ -595,7 +596,6 @@ class BowEstimator(BaseBowEstimator):
         """
 
         return super().fit(X, None)
-
 
 
 class LabeledBowEstimator(BaseBowEstimator):
@@ -699,7 +699,6 @@ class LabeledBowEstimator(BaseBowEstimator):
         return self.model.encode_data(mx_array).asnumpy()
     
         
-
 
 class CovariateBowEstimator(BaseBowEstimator):
 
@@ -838,32 +837,19 @@ class CovariateBowEstimator(BaseBowEstimator):
 
 class SeqBowEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random', coherence_coefficient=8.0, reporter=None, latent_distribution="vmf", n_latent=20, redundancy_reg_penalty=0.0, kappa=64.0, alpha=1.0, batch_size=32, kld=1.0, wd_freqs=None, warmup_ratio=0.1, optimizer="adam", epochs=3, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, ctx=mx.cpu(), log_interval=1, log_method='log', max_batches=-1):
-        super().__init__(log_method=log_method)
+    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random', warmup_ratio=0.1, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, log_interval=1, max_batches=-1, epochs=3, *args, **kwargs):
+        super(SeqBowEstimator, self).__init__(epochs=3, *args, **kwargs)
+        self.log_interval = log_interval
         self.bert_base = bert_base
         self.embedding_source = bow_embedding_source
-        self.coherence_coefficient = coherence_coefficient
-        self.reporter = reporter
         self.vocabulary = vocab
         self.bert_vocab = vocab
-        self.latent_distribution = latent_distribution
-        self.log_interval = log_interval
-        self.redundancy_reg_penalty = redundancy_reg_penalty
-        self.n_latent = n_latent
-        self.kappa = kappa
-        self.alpha = alpha
-        self.batch_size = batch_size
-        self.kld = kld
-        self.wd_freqs = wd_freqs
-        self.optimizer = optimizer
-        self.epochs = epochs
         self.gen_lr = gen_lr
         self.dec_lr = dec_lr
         self.min_lr = min_lr
         self.warmup_ratio = 0.1
         self.weight_decay = 0.00001
         self.offset_factor = 1.0
-        self.ctx = ctx
         self.validate_each_epoch = True
         self.max_batches = max_batches
 
@@ -913,7 +899,7 @@ class SeqBowEstimator(BaseEstimator):
         return model
 
     def _get_model(self):
-        model = BertBowVED(self.bert_base, self.vocabulary, self.latent_distribution, 
+        model = BertBowVED(self.bert_base, self.vocabulary, self.latent_distrib, 
                            n_latent=self.n_latent, 
                            kappa = self.kappa,
                            alpha = self.alpha,
@@ -1115,4 +1101,89 @@ class SeqBowEstimator(BaseEstimator):
                     self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=npmi,
                                   perplexity=ppl, redundancy=redundancy)
         return sc_obj, npmi, ppl, redundancy
+
+
+class DeepAveragedBowEstimator(BaseEstimator):
+
+    def __init__(self, vocabulary, n_labels, gamma, emb_dim, emb_dr, seq_length, *args, **kwargs):
+        super(DeepAveragedBowEstimator, self).__init__(*args, **kwargs)
+        self.vocabulary = vocabulary
+        self.n_labels = n_labels
+        self.gamma = gamma
+        self.emb_in_dim = len(vocabulary)
+        self.emb_out_dim = emb_dim
+        self.emb_dr = emb_dr
+        self.seq_length = seq_length
+        self.validate_each_epoch = False
+
+
+    def _get_model(self):
+        model = DeepAveragingVAEModel(self.n_labels, self.gamma, self.emb_in_dim, self.emb_out_dim , self.emb_dr, self.seq_length,
+                                      vocabulary=self.vocabulary, n_latent=self.n_latent, latent_distrib=self.latent_distrib,
+                                      batch_size=self.batch_size, wd_freqs=self.wd_freqs, ctx=self.ctx)
+        return model
+
+    def _forward(self, model, ids, lens, bow, labels, l_mask):
+        return model(ids, lens, bow, labels, l_mask)
+
+
+    def fit_with_validation(self, X, y, val_X, val_y):
+        seq_train, bow_train = X
+        model = self._get_model()
+        self.model = model
+
+        dataloader = mx.gluon.data.DataLoader(seq_train, batch_size=self.batch_size,
+                                              shuffle=True, last_batch='rollover')
+        if val_X is not None:
+            seq_val, bow_val = val_X
+            dataloader_val = mx.gluon.data.DataLoader(seq_val, batch_size=self.batch_size, last_batch='rollover',
+                                                       shuffle=False)
+
+        trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
+        sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
+        
+        for epoch in range(self.epochs):
+            ts_epoch = time.time()
+            elbo_losses = []
+            lab_losses  = []
+            for i, seqs in enumerate(dataloader):
+                ids, valid_len, output_bow, labels = seqs
+                if labels is None:
+                    labels = mx.nd.expand_dims(mx.nd.zeros(), 1)
+                    mask = None
+                else:
+                    mask = labels >= 0.0
+                    mask = mask.as_in_context(self.ctx)
+                ids    = ids.as_in_context(self.ctx)
+                labels = labels.as_in_context(self.ctx)
+                valid_len = valid_len.as_in_context(self.ctx)
+                output_bow = output_bow.as_in_context(self.ctx)
+                
+                with autograd.record():
+                    elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, lab_loss = \
+                        self._forward(self.model, ids, valid_len, output_bow, labels, mask)
+                    elbo_mean = elbo.mean()
+                elbo_mean.backward()
+                trainer.step(1)
+                if not self.quiet:
+                    elbo_losses.append(float(elbo_mean.asscalar()))
+                    if lab_loss is not None:
+                        lab_losses.append(float(lab_loss.mean().asscalar()))
+            if not self.quiet and not self.validate_each_epoch:
+                elbo_mean = np.mean(elbo_losses) if len(elbo_losses) > 0 else 0.0
+                lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
+                self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
+                                    .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
+            if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
+                ppl, npmi, redundancy = self.validate(val_X, val_y)
+                if self.reporter:
+                    obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
+                    b_obj = max(min(obj, 100.0), -100.0)
+                    sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                                        .format(epoch+1, sc_obj, ppl, npmi, redundancy))
+                    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
+                                  coherence=npmi, perplexity=ppl, redundancy=redundancy)
+        return sc_obj, npmi, ppl, redundancy
+
     
