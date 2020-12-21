@@ -98,6 +98,33 @@ class BaseEstimator(object):
         raise NotImplementedError()
 
 
+    def _npmi(self, X, y, k=10):
+        """
+        Calculate NPMI(Normalized Pointwise Mutual Information) for data X
+
+        Parameters:
+            X (array-like or sparse matrix): Document word matrix. shape [n_samples, vocab_size]
+            k (int): Threshold at which to compute npmi. optional (default=10)
+
+        Returns:
+            npmi (float): NPMI score.
+        """
+        sorted_ids = self.model.get_ordered_terms()
+        num_topics = min(self.n_latent, sorted_ids.shape[-1])
+        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t])] for t in range(self.n_latent)]
+        npmi_eval = EvaluateNPMI(top_k_words_per_topic)
+        npmi = npmi_eval.evaluate_csr_mat(X)
+        unique_term_ids = set()
+        unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
+        for i in range(num_topics):
+            topic_ids = list(top_k_words_per_topic[i][:unique_limit])
+            for j in range(len(topic_ids)):
+                unique_term_ids.add(topic_ids[j])
+        redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
+        return npmi, redundancy
+
+
+
     def fit(self, X, y):
         """
         Fit VAE model according to the given training data X with optional co-variates y.
@@ -299,30 +326,6 @@ class BaseBowEstimator(BaseEstimator):
         raise NotImplementedError()
 
 
-    def _npmi(self, X, y, k=10):
-        """
-        Calculate NPMI(Normalized Pointwise Mutual Information) for data X
-
-        Parameters:
-            X (array-like or sparse matrix): Document word matrix. shape [n_samples, vocab_size]
-            k (int): Threshold at which to compute npmi. optional (default=10)
-
-        Returns:
-            npmi (float): NPMI score.
-        """
-        sorted_ids = self.model.get_ordered_terms()
-        num_topics = min(self.n_latent, sorted_ids.shape[-1])
-        top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t])] for t in range(self.n_latent)]
-        npmi_eval = EvaluateNPMI(top_k_words_per_topic)
-        npmi = npmi_eval.evaluate_csr_mat(X)
-        unique_term_ids = set()
-        unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
-        for i in range(num_topics):
-            topic_ids = list(top_k_words_per_topic[i][:unique_limit])
-            for j in range(len(topic_ids)):
-                unique_term_ids.add(topic_ids[j])
-        redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
-        return npmi, redundancy
 
     def _npmi_with_dataloader(self, dataloader, k=10):
         sorted_ids = self.model.get_ordered_terms_encoder(dataloader) if self.coherence_via_encoder else self.model.get_ordered_terms()
@@ -1103,10 +1106,10 @@ class SeqBowEstimator(BaseEstimator):
         return sc_obj, npmi, ppl, redundancy
 
 
-class DeepAveragedBowEstimator(BaseEstimator):
+class DeepAveragingBowEstimator(BaseEstimator):
 
     def __init__(self, vocabulary, n_labels, gamma, emb_dim, emb_dr, seq_length, *args, **kwargs):
-        super(DeepAveragedBowEstimator, self).__init__(*args, **kwargs)
+        super(DeepAveragingBowEstimator, self).__init__(*args, **kwargs)
         self.vocabulary = vocabulary
         self.n_labels = n_labels
         self.gamma = gamma
@@ -1125,6 +1128,13 @@ class DeepAveragedBowEstimator(BaseEstimator):
 
     def _forward(self, model, ids, lens, bow, labels, l_mask):
         return model(ids, lens, bow, labels, l_mask)
+
+
+    #def _get_val_dataloader(self, val_X, val_y):
+        
+
+    #def validate(self, val_X, val_y):
+        
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
@@ -1175,15 +1185,18 @@ class DeepAveragedBowEstimator(BaseEstimator):
                 self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
-                ppl, npmi, redundancy = self.validate(val_X, val_y)
-                if self.reporter:
-                    obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
-                    b_obj = max(min(obj, 100.0), -100.0)
-                    sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                        .format(epoch+1, sc_obj, ppl, npmi, redundancy))
-                    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-                                  coherence=npmi, perplexity=ppl, redundancy=redundancy)
+                _, val_X_sp = val_X
+                npmi, redundancy = self._npmi(val_X_sp, None)
+                self._output_status("NPMI ==> {}".format(npmi))
+                #ppl, npmi, redundancy = self.validate(val_X, val_y)
+                #if self.reporter:
+                #    obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
+                #    b_obj = max(min(obj, 100.0), -100.0)
+                #    sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+                #    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                #                        .format(epoch+1, sc_obj, ppl, npmi, redundancy))
+                #    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
+                #                  coherence=npmi, perplexity=ppl, redundancy=redundancy)
         return sc_obj, npmi, ppl, redundancy
 
     

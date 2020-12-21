@@ -296,7 +296,7 @@ def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp
 
 ## loading for non-BERT seq2vec encoders with embeddings
 
-def _load_dataset_sequence(line_gen, max_len, tokenizer, vocab, ctx=mx.cpu()):
+def _load_dataset_sequence(line_gen, max_len, tokenizer, vocab):
     toked_lines = [tokenizer(line)[:max_len] for line in line_gen]
     wd_ids = []
     for tl in toked_lines:
@@ -304,7 +304,7 @@ def _load_dataset_sequence(line_gen, max_len, tokenizer, vocab, ctx=mx.cpu()):
         for w in tl:
             try:
                 i = vocab(w)
-                al.append(i)
+                wl.append(i)
             except Exception:
                 pass
         wd_ids.append(wl)
@@ -314,15 +314,28 @@ def _load_dataset_sequence(line_gen, max_len, tokenizer, vocab, ctx=mx.cpu()):
     return wd_ids, lens
 
 
+def _load_bow_identical_sequence(X, max_len):
+    from tmnt.classifier.load_data import _sv_to_seq
+    seqs = []
+    lens = []
+    for i in range(X.shape[0]):
+        seq, _ = _sv_to_seq(X[i])
+        slen = len(seq[:max_len])
+        lens.append(slen)
+        seqs.append(seq[:max_len] + ([0] * (max_len - slen)))
+    return seqs, lens
+
+
 def prepare_dataset_sequence(content, max_len, labels=None, tokenizer=None, bow_vocab_size=1000, vectorizer=None, ctx=mx.cpu()):
     tf_vectorizer = vectorizer or TMNTVectorizer(vocab_size = bow_vocab_size)
     if tokenizer is None:
         tokenizer = nlp.data.SacreMosesTokenizer()
     X, _ = tf_vectorizer.transform(content) if vectorizer else tf_vectorizer.fit_transform(content)
     vocab = tf_vectorizer.get_vocab()
-    x_ids, x_val_lens = _load_dataset_sequence(content, max_len, tokenizer, vocab, ctx)
-    if labels:
-        larr = mx.nd.array(labels, dtype='int32')
+    #x_ids, x_val_lens = _load_dataset_sequence(content, max_len, tokenizer, vocab)
+    x_ids, x_val_lens = _load_bow_identical_sequence(X, max_len)
+    if labels is not None:
+        larr = mx.nd.array(labels, dtype='float32')
     else:
         larr = mx.nd.full(len(x_ids), -1)
     data_train = gluon.data.ArrayDataset(

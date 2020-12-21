@@ -21,8 +21,10 @@ def load_tsv_to_array(fname):
 
 
 def _sv_to_seq(sv):
-    sv = sv.toarray().squeeze()
-    nzs = np.argwhere(sv > 0).squeeze()
+    sv = sv.toarray().squeeze(axis=0)
+    nzs = np.argwhere(sv > 0)
+    if nzs.sum() > 0:
+        nzs = nzs.squeeze(axis=1)
     li = []
     for i in range(nzs.shape[0]):
         v = sv[nzs[i]]

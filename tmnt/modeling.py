@@ -54,10 +54,6 @@ class BaseVAE(HybridBlock):
                 raise Exception("Invalid distribution ==> {}".format(latent_distrib))
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
             self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
-        ## Initialize and FIX decoder bias terms to corpus frequencies
-        if wd_freqs is not None:
-            self.set_biases(wd_freqs)
-
 
     def set_biases(self, wd_freqs):
         """Set the biases to the log of the word frequencies.
@@ -181,10 +177,6 @@ class BowVAEModel(BaseVAE):
         n_covars (int): Number of values for categorical co-variate (0 for non-CovariateData BOW model)
         ctx (int): context device (default is mx.cpu())
     """
-    #def __init__(self, vocabulary, enc_dim, n_latent, embedding_size, fixed_embedding=False, latent_distrib='logistic_gaussian',
-    #             coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
-    #             kappa=32.0, alpha=1.0, batch_size=None, n_encoding_layers = 1, enc_dr=0.1,
-    #             wd_freqs=None, seed_mat=None, n_covars=0, ctx=mx.cpu()):
     def __init__(self, enc_dim, embedding_size, n_encoding_layers, enc_dr, fixed_embedding, *args, **kwargs):
         super(BowVAEModel, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
@@ -192,7 +184,7 @@ class BowVAEModel(BaseVAE):
         self.enc_dr = enc_dr
         self.enc_dim = enc_dim
         if self.vocabulary.embedding:
-            assert vocabulary.embedding.idx_to_vec[0].size == embedding_size
+            assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
         self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
         
         with self.name_scope():
@@ -519,7 +511,7 @@ class CoherenceRegularizer(HybridBlock):
 
 
 class DeepAveragingVAEModel(BaseVAE):
-    def __init__(self, n_labels, gamma, emb_in_dim, emb_out_dim, emb_dr, seq_length, dense_units = [100, 100], *args, **kwargs):
+    def __init__(self, n_labels, gamma, emb_in_dim, emb_out_dim, emb_dr, seq_length, dense_units = [150], *args, **kwargs):
         super(DeepAveragingVAEModel, self).__init__(*args, **kwargs)
         self.n_labels = n_labels
         self.gamma = gamma
@@ -534,11 +526,11 @@ class DeepAveragingVAEModel(BaseVAE):
             with self.mlp.name_scope():
                 for u in dense_units:
                     self.mlp.add(gluon.nn.Dropout(emb_dr))
-                    self.mlp.add(gluon.nn.Dense(units=u, use_bias=False, activation='relu'))
+                    self.mlp.add(gluon.nn.Dense(units=u, use_bias=True, activation='relu'))
             if self.n_labels > 0:
                 self.lab_decoder = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
                 self.lab_dr = gluon.nn.Dropout(self.emb_dr*2.0)
-        self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        self.initialize(mx.init.Xavier(magnitude=2.34), ctx=self.model_ctx)
         self.latent_dist.post_init(self.model_ctx)
         self.lab_loss_fn = gluon.loss.SoftmaxCELoss()
                 
@@ -562,6 +554,7 @@ class DeepAveragingVAEModel(BaseVAE):
         iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, bow, y, KL, batch_size)
         iv_loss = iii_loss + lab_loss * self.gamma
+        #print("Lab loss sum = {}".format((lab_loss * self.gamma).sum().asscalar()))
         return iv_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, lab_loss
 
 
