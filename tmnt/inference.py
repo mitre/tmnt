@@ -75,13 +75,14 @@ class BowVAEInferencer(BaseInferencer):
         if 'n_covars' in config:
             n_covars = config['n_covars']
             covar_net_layers = config.get('covar_net_layers')
-            model = CovariateBowVAEModel(n_covars,
-                                        vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
-                                        n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,                                        
-                                        covar_net_layers = covar_net_layers, ctx=ctx)
+            model = CovariateBowVAEModel(covar_net_layers, 
+                                         enc_dim, emb_size, n_encoding_layers, enc_dr, False,
+                                         vocabulary=vocab, n_covars=n_covars, latent_distrib=lat_distrib,
+                                         n_latent=n_latent,
+                                         ctx=ctx)
         else:
-            model = BowVAEModel(vocab, enc_dim, n_latent, emb_size, latent_distrib=lat_distrib,
-                                n_encoding_layers=n_encoding_layers, enc_dr=enc_dr,
+            model = BowVAEModel(enc_dim, emb_size, n_encoding_layers, enc_dr, False,
+                                vocabulary=vocab, latent_distrib=lat_distrib, n_latent=n_latent,
                                 ctx=ctx)
         model.load_parameters(str(param_file), allow_missing=False)
         return cls(model, ctx)
