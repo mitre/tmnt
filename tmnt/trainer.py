@@ -191,32 +191,30 @@ class BowVAETrainer(BaseTrainer):
     Parameters:
         log_out_dir (str): String path to directory for outputting log file and potentially saved model information
         model_out_dir (str): Explicit string path to saved model information
-        c_args (`argparse.Namespace`): Command-line arguments
         vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
         wd_freqs (`mxnet.ndarray.NDArray`): Tensor representing term frequencies in training dataset used to 
             initialize decoder bias weights.
-        train_data (array-like or sparse matrix): Training input data tensor
-        test_data (array-like or sparse matrix): Testing/validation input data tensor
-        train_labels (array-like or sparse matrix): Labels associated with training inputs. Optional (default = None).
-        test_labels (array-like or sparse matrix): Labels associated with test inputs. Optional (default = None).
+        train_data_path (str): Training input path
+        test_data_path (str): Testing/validation input path
         use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
         val_each_epoch (bool): Perform validation (NPMI and perplexity) on the validation set after each epoch. Default = False.
         rng_seed (int): Seed for random number generator. Default = 1234
     """
-    def __init__(self, log_out_dir, model_out_dir, c_args, vocabulary, wd_freqs, train_data_path, 
-                 test_data_path, use_gpu=False, n_covars=None,
+    def __init__(self, log_out_dir, model_out_dir, vocabulary, wd_freqs, train_data_path, 
+                 test_data_path, pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False,
+                 use_gpu=False, n_covars=None,
                  val_each_epoch=True, rng_seed=1234):
         super().__init__(vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed)
         self.log_out_dir = log_out_dir
         self.model_out_dir = model_out_dir
-        self.c_args = c_args
         self.use_gpu = use_gpu
         self.wd_freqs = wd_freqs
         self.seed_matrix = None
-        self.pretrained_param_file = c_args.pretrained_param_file
+        self.pretrained_param_file = pretrained_param_file
         self.n_covars = n_covars
-        if c_args.topic_seed_file:
-            self.seed_matrix = get_seed_matrix_from_file(c_args.topic_seed_file, vocabulary, ctx)
+        self.use_labels_as_covars = use_labels_as_covars
+        if topic_seed_file:
+            self.seed_matrix = get_seed_matrix_from_file(topic_seed_file, vocabulary, ctx)
         
     @classmethod
     def from_arguments(cls, c_args, val_each_epoch=True):
@@ -260,7 +258,9 @@ class BowVAETrainer(BaseTrainer):
         n_covars = int(float(np.max(y)) + 1)
         if not os.path.exists(model_out_dir):
             os.mkdir(model_out_dir)
-        return cls(log_out_dir, model_out_dir, c_args, vocab, wd_freqs, c_args.tr_vec_file, c_args.val_vec_file, 
+        return cls(log_out_dir, model_out_dir, vocab, wd_freqs, c_args.tr_vec_file, c_args.val_vec_file,
+                   pretrained_param_file=c_args.pretrained_param_file, topic_seed_file=c_args.topic_seed_file,
+                   use_labels_as_covars=c_args.use_labels_as_covars,
                                 use_gpu=c_args.use_gpu, n_covars=n_covars, val_each_epoch=val_each_epoch)
 
 
@@ -291,7 +291,7 @@ class BowVAETrainer(BaseTrainer):
         """
         embedding_source = config.embedding.source
         vocab, _ = self._initialize_vocabulary(embedding_source)
-        if self.c_args.use_labels_as_covars:
+        if self.use_labels_as_covars:
             estimator = CovariateBowEstimator.from_config(self.n_covars, config, vocab,
                                                      pretrained_param_file=self.pretrained_param_file,
                                                      wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
