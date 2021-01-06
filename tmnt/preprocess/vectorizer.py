@@ -28,8 +28,9 @@ __all__ = ['TMNTVectorizer']
 
 class TMNTVectorizer(object):
 
-    def __init__(self, custom_stop_word_file=None, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1,
-                 json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None):
+    def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1,
+                 json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
+                 count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
         self.label_key = label_key
@@ -40,9 +41,9 @@ class TMNTVectorizer(object):
         self.vocab = initial_vocabulary
         self.file_pat = file_pat
         self.vocab_size = vocab_size if initial_vocabulary is None else len(initial_vocabulary)
-        self.vectorizer = CountVectorizer(max_df=0.95, min_df=2, max_features=self.vocab_size,
-                                          stop_words='english',
-                                          vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None))
+        self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
+                                          vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None),
+                                          **count_vectorizer_kwargs)
         self.label_map = {}
 
     @classmethod
@@ -65,7 +66,8 @@ class TMNTVectorizer(object):
         if self.vocab is not None:
             return self.vocab
         else:
-            vocab = nlp.Vocab({v: 1 for v in self.vectorizer.vocabulary_}, unknown_token=None, eos_token=None, bos_token=None, padding_token=None)
+            vocab = nlp.Vocab({v: 1 for v in self.vectorizer.vocabulary_},
+                              unknown_token=None, eos_token=None, bos_token=None, padding_token=None)
             self.vocab = vocab
         return vocab
     

@@ -274,15 +274,16 @@ class LabeledBowVAEModel(BowVAEModel):
     """Joint bag-of-words topic model and text classifier.
     Optimizes standard VAE loss along with cross entropy over provided labels.
     """
-    def __init__(self, n_labels, gamma, *args, **kwargs):
+    def __init__(self, n_labels, gamma, *args, multilabel=False, **kwargs):
         super(LabeledBowVAEModel, self).__init__(*args, **kwargs)
+        self.multilabel = multilabel
         self.n_labels = n_labels
         self.gamma    = gamma
         with self.name_scope():
             self.lab_decoder = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
             self.lab_dr = gluon.nn.Dropout(self.enc_dr*2.0)
         self.lab_decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-        self.lab_loss_fn = gluon.loss.SoftmaxCELoss()
+        self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
 
     def predict(self, data):
         """Predict the label given the input data (ignoring VAE reconstruction)

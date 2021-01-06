@@ -40,7 +40,7 @@ if __name__ == '__main__':
     if (args.tr_vec_file is None) or (args.tr_input is None):
         raise Exception("Training directory and output vector file must be provided")
     vectorizer = \
-        TMNTVectorizer(text_key=args.json_text_key, custom_stop_word_file=args.custom_stop_words,
+        TMNTVectorizer(text_key=args.json_text_key, 
                        label_key=args.json_label_key,
                        min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars,
                        file_pat=args.file_pat,

@@ -455,7 +455,10 @@ class BaseBowEstimator(BaseEstimator):
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
                     mask = None
                 else:
-                    mask = labels >= 0.0
+                    if len(labels.shape) > 1:
+                        mask = labels.sum(axis=1) >= 0.0
+                    else:
+                        mask = labels >= 0.0
                     mask = mask.as_in_context(self.ctx)
                 labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
@@ -603,8 +606,9 @@ class BowEstimator(BaseBowEstimator):
 
 class LabeledBowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, n_labels,  gamma, *args, **kwargs):
+    def __init__(self, vocabulary, n_labels,  gamma, *args, multilabel=False, **kwargs):
         super().__init__(vocabulary, *args, **kwargs)
+        self.multilabel = multilabel
         self.gamma = gamma
         self.n_labels = n_labels
 
@@ -631,7 +635,7 @@ class LabeledBowEstimator(BaseBowEstimator):
         else:
             emb_size = self.embedding_size
         model = \
-            LabeledBowVAEModel(n_labels=self.n_labels, gamma=self.gamma,
+            LabeledBowVAEModel(n_labels=self.n_labels, gamma=self.gamma, multilabel=self.multilabel,
                            vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
                            fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
@@ -1162,13 +1166,16 @@ class DeepAveragingBowEstimator(BaseEstimator):
                     labels = mx.nd.expand_dims(mx.nd.zeros(), 1)
                     mask = None
                 else:
-                    mask = labels >= 0.0
+                    if len(labels.shape) > 1:
+                        mask = labels.sum(axis=1) >= 0.0
+                    else:
+                        mask = labels >= 0.0
                     mask = mask.as_in_context(self.ctx)
                 ids    = ids.as_in_context(self.ctx)
                 labels = labels.as_in_context(self.ctx)
                 valid_len = valid_len.as_in_context(self.ctx)
                 output_bow = output_bow.as_in_context(self.ctx)
-                
+
                 with autograd.record():
                     elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, lab_loss = \
                         self._forward(self.model, ids, valid_len, output_bow, labels, mask)

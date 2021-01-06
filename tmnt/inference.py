@@ -116,10 +116,10 @@ class BowVAEInferencer(BaseInferencer):
         return d
 
 
-    def get_umap_embeddings(self, data):
+    def get_umap_embeddings(self, data, umap_metric='hellinger'):
         encs = self.encode_data(data, None)
         encs2 = np.array([enc.asnumpy() for enc in encs])
-        um = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
+        um = umap.UMAP(n_neighbors=4, min_dist=0.1, metric='euclidean')
         return um.fit_transform(encs2)
 
     def plot_to(self, embeddings, labels, f=None):
