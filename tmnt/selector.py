@@ -5,13 +5,13 @@ Model selection using AutoGluon.
 """
 
 import pandas as pd
-import autogluon as ag
+import autogluon.core as ag
 import logging
 import datetime
 import os
 import json
 import io
-from autogluon.scheduler.reporter import FakeReporter
+from autogluon.core.scheduler.reporter import FakeReporter
 from tabulate import tabulate
 from tmnt.configuration import TMNTConfigBOW, TMNTConfigSeqBOW
 from tmnt.trainer import BowVAETrainer, SeqBowVEDTrainer
@@ -138,7 +138,7 @@ class BaseSelector(object):
         out_pretty = os.path.join(self.log_dir, 'selection.table.txt')
         with io.open(out_pretty, 'w') as fp:
             fp.write(tabulate(results_df, headers='keys', tablefmt='pqsl'))
-        scheduler.shutdown()
+        ## scheduler.shutdown()
 
 
 def model_select_bow_vae(c_args):
