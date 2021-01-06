@@ -28,6 +28,21 @@ __all__ = ['TMNTVectorizer']
 
 class TMNTVectorizer(object):
 
+    """Utility vectorizer that wraps `sklearn.feature_extraction.text.CountVectorizer` for use
+    with TMNT dataset conventions.
+
+    Parameters:
+        text_key (str): Json key for text to use as document content
+        label_key (str): Json key to use for label/covariate
+        min_doc_size (int): Minimum number of tokens for inclusion in the dataset
+        json_out_dir (str): Output directory for resulting JSON files when using inline JSON processing
+        vocab_size (int): Number of vocabulary items (default=2000)
+        file_pat (str): File pattern for input json files (default = *.json)
+        encoding (str): Character encoding (default = 'utf-8')
+        initial_vocabulary (str): Use existing vocabulary rather than deriving one from the data
+        count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
+    """
+
     def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):

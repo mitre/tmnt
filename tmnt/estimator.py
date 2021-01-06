@@ -30,13 +30,42 @@ MAX_DESIGN_MATRIX = 250000000
 
 
 class BaseEstimator(object):
+    """Base class for all VAE-based estimators.
+    
+    Parameters:
+        log_method (str): Method for logging. 'print' | 'log', optional (default='log')
+        quiet (bool): Flag for whether to force minimal logging/ouput. optional (default=False)
+        coherence_coefficient (float): Weight to tradeoff influence of coherence vs perplexity in model 
+            selection objective (default = 8.0)
+        reporter (:class:`autogluon.core.scheduler.Reporter`): Callback reporter to include information for 
+            model selection via AutoGluon
+        wd_freqs (:class:`mxnet.ndarray.NDArray`): Word frequencies over vocabulary to initialize model biases
+        ctx (:class:`mxnet.context`): MXNet context for the estimator
+        latent_distribution (str): Latent distribution of the variational autoencoder.
+            'logistic_gaussian' | 'vmf' | 'gaussian' | 'gaussian_unitvar', optional (default="vmf")
+        optimizer (str): MXNet optimizer (default = "adam")
+        lr (float): Learning rate of training. (default=0.005)
+        n_latent (int): Size of the latent distribution. optional (default=20)
+        kappa (float): Distribution parameter for Von-Mises Fisher distribution, ignored if latent_distribution not 'vmf'. 
+            optional (default=64.0)
+        alpha (float): Prior parameter for Logistic Gaussian distribution, ignored if latent_distribution not 'logistic_gaussian'. 
+            optional (default=1.0)
+        coherence_reg_penalty (float): Regularization penalty for topic coherence. optional (default=0.0)
+        redundancy_reg_penalty (float): Regularization penalty for topic redundancy. optional (default=0.0)
+        batch_size (int): Batch training size. optional (default=128)
+        seed_matrix (mxnet matrix): Seed matrix for guided topic model. optional(default=None)
+        hybridize (bool): Hybridize underlying mxnet model. optional(default=False)
+        epochs (int): Number of training epochs. optional(default=40)
+        coherence_via_encoder (bool): Flag to use encoder to derive coherence scores (via gradient attribution)
+        pretrained_param_file (str): Path to pre-trained parameter file to initialize weights
+        warm_start (bool): Subsequent calls to `fit` will use existing model weights rather than reinitializing
+    """
 
     def __init__(self,
                  log_method='log',
                  quiet=False,
                  coherence_coefficient=8.0,
                  reporter=None,
-                 num_val_words=-1,
                  wd_freqs=None,
                  ctx=mx.cpu(),
                  latent_distribution="vmf",
@@ -59,7 +88,6 @@ class BaseEstimator(object):
         self.model = None
         self.coherence_coefficient = coherence_coefficient
         self.reporter = reporter
-        self.num_val_words = num_val_words
         self.wd_freqs = wd_freqs
         self.ctx = ctx
         self.latent_distrib = latent_distribution
@@ -77,6 +105,7 @@ class BaseEstimator(object):
         self.coherence_via_encoder = coherence_via_encoder
         self.pretrained_param_file = pretrained_param_file
         self.warm_start = warm_start
+        self.num_val_words = -1 ## will be set later for computing Perplexity on validation dataset
         
 
     def _output_status(self, status_string):
