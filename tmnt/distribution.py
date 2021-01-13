@@ -103,7 +103,6 @@ class GaussianUnitVarDistribution(BaseDistribution):
     def _get_kl_term(self, F, mu):
         return -0.5 * F.sum(1.0 + self.log_variance - mu*mu - self.variance, axis=1)
 
-
     def hybrid_forward(self, F, data, batch_size):
         """Generate a sample according to the unit variance Gaussian given the encoder outputs
         """

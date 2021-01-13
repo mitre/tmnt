@@ -22,7 +22,7 @@ class BaseVAE(HybridBlock):
 
     def __init__(self, vocabulary=None, n_latent=20, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
-                 kappa=32.0, alpha=1.0, batch_size=None, seed_mat=None,
+                 kappa=32.0, alpha=1.0, post_latent_dr=0.2, batch_size=None, seed_mat=None,
                  wd_freqs=None, n_covars=0, ctx=mx.cpu(), **kwargs):
         super(BaseVAE, self).__init__(**kwargs)        
         self.vocabulary = vocabulary
@@ -33,6 +33,7 @@ class BaseVAE(HybridBlock):
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.kappa = kappa
         self.alpha = alpha
+        self.post_latent_dr = post_latent_dr
         self.batch_size = batch_size
         self.seed_matrix = seed_mat
         self.wd_freqs = wd_freqs
@@ -269,7 +270,6 @@ class BowVAEModel(BaseVAE):
         return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, None
 
 
-
 class LabeledBowVAEModel(BowVAEModel):
     """Joint bag-of-words topic model and text classifier.
     Optimizes standard VAE loss along with cross entropy over provided labels.
@@ -319,7 +319,7 @@ class LabeledBowVAEModel(BowVAEModel):
             lab_loss = lab_loss * mask
         iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, data, y, KL, batch_size)
-        iv_loss = iii_loss + lab_loss * self.gamma  ## just add the label loss
+        iv_loss = iii_loss + lab_loss * self.gamma  
         return iv_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, lab_loss
 
 
@@ -599,7 +599,8 @@ class BertBowVED(Block):
             self.latent_dist.post_init(self.model_ctx)
             self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
             if self.vocabulary.embedding:
-                self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary), units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
+                self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary),
+                                                units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
                 self.embedding.initialize(mx.init.Xavier(), ctx=self.model_ctx)
                 emb = self.vocabulary.embedding.idx_to_vec.transpose()
                 emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
@@ -634,8 +635,8 @@ class BertBowVED(Block):
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j.asnumpy()
 
-    def __call__(self, toks, tok_types, valid_length, bow):
-        return super(BertBowVED, self).__call__(toks, tok_types, valid_length, bow)
+    def __call__(self, toks, tok_types, valid_length, bow, labels):
+        return super(BertBowVED, self).__call__(toks, tok_types, valid_length, bow, labels)
 
     def set_kl_weight(self, epoch, max_epochs):
         burn_in = int(max_epochs / 10)
@@ -659,7 +660,17 @@ class BertBowVED(Block):
         _, enc = self.encoder(toks, tok_types, valid_length)
         return self.latent_dist.get_mu_encoding(enc)
 
-    def forward(self, toks, tok_types, valid_length, bow):
+    def forward(self, toks, tok_types, valid_length, bow, labels):
+        """Forward pass for BERT-pretrained variational encoder-decoder.
+
+        Parameters:
+            tokens (tensor): Batches of token id sequences
+            tok_types (tensor): Types of tokens (sent1 or sent2) for BERT
+            valid_length (tensor): Lengths of each sequence
+        Returns:
+            (tuple): Tuple of:
+                loss, reconstruction loss, KL term, redundancy loss, reconstruction values, label CE loss[None]
+        """
         _, enc = self.encoder(toks, tok_types, valid_length)
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
@@ -669,7 +680,7 @@ class BertBowVED(Block):
         KL_loss = ( KL * self.kld_wt )
         loss = recon_loss + KL_loss
         ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
-        return ii_loss, recon_loss, KL_loss, redundancy_loss, y
+        return ii_loss, recon_loss, KL_loss, redundancy_loss, y, None
 
     def get_encoder_jacobian(dataloader, batch_size, sample_size):
         jacobians = np.zeros(shape=(model.n_latent, model.vocab_size))        
@@ -693,3 +704,50 @@ class BertBowVED(Block):
                 jacobians[i] += ss
         return jacobians
     
+
+class LabeledBertBowVED(BertBowVED):
+
+    def __init__(self, n_labels, gamma, *args, multilabel=False, **kwargs):
+        super(LabeledBertBowVED, self).__init__(*args, **kwargs)
+        self.multilabel = multilabel
+        self.n_labels = n_labels
+        self.gamma    = gamma
+        with self.name_scope():
+            self.lab_decoder = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
+            self.lab_dr = gluon.nn.Dropout(0.1)
+        self.lab_decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+        self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
+
+
+    def predict(self, toks, tok_types, valid_length):
+        _, enc = self.encoder(toks, tok_types, valid_length)
+        mu_out = self.latent_dist.get_mu_encoding(enc)
+        return self.lab_decoder(mu_out)
+        
+
+    def forward(self, toks, tok_types, valid_length, bow, labels, label_mask=None):
+        """Forward pass for BERT-pretrained variational encoder-decoder.
+
+        Parameters:
+            tokens (tensor): Batches of token id sequences
+            tok_types (tensor): Types of tokens (sent1 or sent2) for BERT
+            valid_length (tensor): Lengths of each sequence
+        Returns:
+            (tuple): Tuple of:
+                loss, reconstruction loss, KL term, redundancy loss, reconstruction values, label CE loss
+        """
+        _, enc = self.encoder(toks, tok_types, valid_length)
+        mu_out = self.latent_dist.get_mu_encoding(enc)
+        z, KL = self.latent_dist(enc, self.batch_size)
+        y = self.decoder(z)
+        y = mx.nd.softmax(y, axis=1)
+        rr = bow * mx.nd.log(y+1e-12)
+        lab_loss = self.lab_loss_fn(self.lab_dr(self.lab_decoder(mu_out)), labels)
+        if label_mask is not None:
+            lab_loss = lab_loss * label_mask
+        recon_loss = -mx.nd.sparse.sum( rr, axis=1 )
+        KL_loss = ( KL * self.kld_wt )
+        loss = recon_loss + KL_loss
+        ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
+        iii_loss = ii_loss + lab_loss * self.gamma
+        return iii_loss, recon_loss, KL_loss, redundancy_loss, y, lab_loss

@@ -22,7 +22,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, DeepAveragingVAEModel
+from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, LabeledBertBowVED, DeepAveragingVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 import autogluon.core as ag
 
@@ -347,13 +347,11 @@ class BaseBowEstimator(BaseEstimator):
 
     def _get_wd_freqs(self, X, max_sample_size=1000000):
         sample_size = min(max_sample_size, X.shape[0])
-        data = X[:sample_size] 
-        sums = data.sum(axis=0)
+        sums = X.sum(axis=0)
         return sums
 
     def _get_model(self):
         raise NotImplementedError()
-
 
 
     def _npmi_with_dataloader(self, dataloader, k=10):
@@ -702,7 +700,6 @@ class LabeledBowEstimator(BaseBowEstimator):
                 correct = mx.nd.argmax(predictions, axis=1) == labels
                 tot_correct += mx.nd.sum(correct).asscalar()
                 tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0
-                
         print("Validation accuracy = {}".format(float(tot_correct) / float(tot)))
         return ppl, npmi, redundancy
             
@@ -873,13 +870,14 @@ class CovariateBowEstimator(BaseBowEstimator):
 
 class SeqBowEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random', warmup_ratio=0.1, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, log_interval=1, max_batches=-1, epochs=3, *args, **kwargs):
+    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random',
+                 warmup_ratio=0.1, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, log_interval=1, max_batches=-1, epochs=3, *args, **kwargs):
         super(SeqBowEstimator, self).__init__(epochs=3, *args, **kwargs)
         self.log_interval = log_interval
         self.bert_base = bert_base
         self.embedding_source = bow_embedding_source
         self.vocabulary = vocab
-        self.bert_vocab = vocab
+        self.bert_vocab = bert_vocab
         self.gen_lr = gen_lr
         self.dec_lr = dec_lr
         self.min_lr = min_lr
@@ -1009,10 +1007,11 @@ class SeqBowEstimator(BaseEstimator):
         total_rec_loss = 0.0
         total_kl_loss  = 0.0
         for i, seqs in enumerate(dataloader):
-            input_ids, valid_length, type_ids, output_vocab = seqs
-            _, rec_loss, kl_loss, _, _ = self.model(input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-                                                                    valid_length.astype('float32').as_in_context(self.ctx),
-                                                                    output_vocab.as_in_context(self.ctx))
+            input_ids, valid_length, type_ids, output_vocab, labels = seqs
+            _, rec_loss, kl_loss, _, _, _ = self.model(input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+                                                    valid_length.astype('float32').as_in_context(self.ctx),
+                                                    output_vocab.as_in_context(self.ctx),
+                                                    labels.as_in_context(self.ctx))
             if i == num_batches - 1:
                 total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
                 total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
@@ -1027,7 +1026,7 @@ class SeqBowEstimator(BaseEstimator):
         return perplexity
 
 
-    def validate(self, model, bow_val_X, dataloader):
+    def validate(self, model, bow_val_X, val_y, dataloader):
         last_batch_size = bow_val_X.shape[0] % self.batch_size
         if last_batch_size > 0:
             num_batches = (bow_val_X.shape[0] // self.batch_size) + 1
@@ -1052,10 +1051,19 @@ class SeqBowEstimator(BaseEstimator):
         seq_train, bow_train = X
         model = self._get_model()
         self.model = model
+        ## merge y values into the dataset for X
+        if y is not None:
+            seq_train._data.append(mx.nd.array(y))
+        else:
+            seq_train._data.append(mx.nd.zeros(bow_train.shape[0]))
         dataloader = mx.gluon.data.DataLoader(seq_train, batch_size=self.batch_size,
                                               shuffle=True, last_batch='rollover')
         if val_X is not None:
             seq_val, bow_val = val_X
+            if val_y is not None:
+                seq_val._data.append(mx.nd.array(val_y))
+            else:
+                seq_val._data.append(mx.nd.zeros(bow_val.shape[0]))
             dataloader_val = mx.gluon.data.DataLoader(seq_val, batch_size=self.batch_size, last_batch='rollover',
                                                        shuffle=False)
 
@@ -1070,7 +1078,10 @@ class SeqBowEstimator(BaseEstimator):
         gen_trainer = gluon.Trainer(model.encoder.collect_params(), self.optimizer,
                                 {'learning_rate': self.gen_lr, 'epsilon': 1e-6, 'wd':self.weight_decay})
         lat_trainer = gluon.Trainer(model.latent_dist.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
-        dec_trainer = gluon.Trainer(model.decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})    
+        dec_trainer = gluon.Trainer(model.decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
+        lab_trainer = None
+        if isinstance(model, LabeledBertBowVED):
+            lab_trainer = gluon.Trainer(model.lab_decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
 
         # Do not apply weight decay on LayerNorm and bias terms
         for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
@@ -1086,6 +1097,7 @@ class SeqBowEstimator(BaseEstimator):
             step_recon_ls = 0
             step_kl_ls = 0
             step_red_ls = 0
+            step_lab_ls = 0
             if self.max_batches > 0 and step_num >= self.max_batches:
                 break
             for batch_id, seqs in enumerate(dataloader):
@@ -1097,11 +1109,11 @@ class SeqBowEstimator(BaseEstimator):
                     new_lr = max(lr - offset, self.min_lr)
                 gen_trainer.set_learning_rate(new_lr)
                 with mx.autograd.record():
-                    input_ids, valid_length, type_ids, output_vocab = seqs
-                    ls, recon_ls, kl_ls, redundancy_ls, predictions = \
+                    input_ids, valid_length, type_ids, output_vocab, labels = seqs
+                    ls, recon_ls, kl_ls, redundancy_ls, predictions, lab_loss = \
                         model(input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                               valid_length.astype('float32').as_in_context(self.ctx),
-                              output_vocab.as_in_context(self.ctx))
+                              output_vocab.as_in_context(self.ctx), labels.as_in_context(self.ctx))
                     ls = ls.mean()
                 ls.backward()
                 grads = [p.grad(self.ctx) for p in differentiable_params]
@@ -1109,25 +1121,30 @@ class SeqBowEstimator(BaseEstimator):
                 lat_trainer.step(1)
                 dec_trainer.step(1) # update decoder trainer associated weights
                 gen_trainer.step(1) # step of 1 since we averaged loss over batch
+                if lab_trainer:
+                    lab_trainer.step(1)
                 step_loss += ls.asscalar()
                 step_recon_ls += recon_ls.mean().asscalar()
                 step_kl_ls += kl_ls.mean().asscalar()
                 step_red_ls += redundancy_ls.mean().asscalar()
+                step_lab_ls += lab_loss.mean().asscalar() if lab_loss is not None else 0.0
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    self._output_status('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, kl_loss={:.4f}, red_loss={:.4f}, gen_lr={:.7f}'
+                    self._output_status(('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, ' \
+                                         'kl_loss={:.4f}, red_loss={:.4f}, gen_lr={:.7f}, lab_loss={:.4f}')
                                  .format(epoch_id, self.epochs, batch_id + 1, len(dataloader),
                                          step_loss / self.log_interval, step_recon_ls / self.log_interval,
                                          step_kl_ls / self.log_interval, step_red_ls / self.log_interval,
-                                         gen_trainer.learning_rate))
+                                         gen_trainer.learning_rate, step_lab_ls / self.log_interval))
                     step_loss = 0
                     step_recon_ls = 0
                     step_kl_ls = 0
+                    step_lab_ls = 0
                     _, _ = self._compute_coherence(model, 10, bow_train, log_terms=True)
                 if self.max_batches > 0 and step_num >= self.max_batches:
                     break
             if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
                 npmi, redundancy = self._compute_coherence(model, 10, bow_train, log_terms=True)
-                ppl = self.validate(model, bow_val, dataloader_val)
+                ppl = self.validate(model, bow_val, val_y, dataloader_val)
                 obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
                 b_obj = max(min(obj, 100.0), -100.0)
                 sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
@@ -1137,6 +1154,55 @@ class SeqBowEstimator(BaseEstimator):
                     self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=npmi,
                                   perplexity=ppl, redundancy=redundancy)
         return sc_obj, npmi, ppl, redundancy
+
+
+class LabeledSeqBowEstimator(SeqBowEstimator):
+
+    def __init__(self, n_labels, gamma, *args, multilabel=False, **kwargs):
+        super(LabeledSeqBowEstimator, self).__init__(*args, **kwargs)
+        self.multilabel = multilabel
+        self.gamma = gamma
+        self.n_labels = n_labels
+
+
+    @classmethod
+    def from_config(cls, n_labels, gamma, *args, **kwargs):
+        est = super().from_config(*args, **kwargs)
+        est.n_labels = n_labels
+        est.gamma    = gamma
+        return est
+
+
+    def _get_model(self):
+        model = LabeledBertBowVED(self.n_labels, self.gamma, self.bert_base, self.vocabulary, self.latent_distrib,
+                                  multilabel=self.multilabel,
+                           n_latent=self.n_latent, 
+                           kappa = self.kappa,
+                           alpha = self.alpha,
+                           batch_size = self.batch_size,
+                           kld=1.0, wd_freqs=self.wd_freqs,
+                           redundancy_reg_penalty=self.redundancy_reg_penalty,
+                           ctx=self.ctx)
+        return model
+
+
+    def validate(self, model, bow_val_X, val_y, dataloader):
+        ppl = super().validate(model, bow_val_X, val_y, dataloader)
+        tot_correct = 0
+        tot = 0
+        bs = min(bow_val_X.shape[0], self.batch_size)
+        num_std_batches = bow_val_X.shape[0] // bs
+        for i, seqs in enumerate(dataloader):
+            if i < num_std_batches - 1:
+                input_ids, valid_length, type_ids, output_vocab, labels = seqs
+                predictions = self.model.predict(input_ids.as_in_context(self.ctx),
+                                                 type_ids.as_in_context(self.ctx),
+                                                 valid_length.astype('float32').as_in_context(self.ctx))
+                correct = mx.nd.argmax(predictions, axis=1) == labels
+                tot_correct += mx.nd.sum(correct).asscalar()
+                tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
+        print("Validation accuracy = {}".format(float(tot_correct) / float(tot)))
+        return ppl
 
 
 class DeepAveragingBowEstimator(BaseEstimator):
