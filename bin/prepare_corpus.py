@@ -46,7 +46,8 @@ if __name__ == '__main__':
                        file_pat=args.file_pat,
                        vocab_size=args.vocab_size,
                        json_out_dir=args.json_out_dir,
-                       encoding=args.str_encoding)
+                       encoding=args.str_encoding,
+                       stop_word_file=args.custom_stop_words)
     tr_X, tr_y = \
         vectorizer.fit_transform_json_dir(args.tr_input) if os.path.isdir(args.tr_input) else vectorizer.fit_transform_json(args.tr_input)
     vectorizer.write_to_vec_file(tr_X, tr_y, args.tr_vec_file)
@@ -62,5 +63,15 @@ if __name__ == '__main__':
     if args.label_map:
         with io.open(args.label_map, 'w') as fp:
             fp.write(json.dumps(vectorizer.label_map, indent=4))
+    if args.full_vocab_histogram:
+        import numpy as np
+        i_to_t = vectorizer.get_vocab().idx_to_token
+        with io.open(args.full_vocab_histogram, 'w') as fp:
+            cnts = np.array(tr_X.sum(axis=0)).squeeze()
+            print("Shape cnts = {}".format(cnts.shape))
+            for i in list(np.argsort(cnts * -1)):
+                fp.write(i_to_t[i] + ' ' + str(cnts[i]) + '\n')
+            
+            
 
                                        

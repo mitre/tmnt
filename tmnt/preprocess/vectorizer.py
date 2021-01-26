@@ -42,12 +42,13 @@ class TMNTVectorizer(object):
         initial_vocabulary (str): Use existing vocabulary rather than deriving one from the data
         additional_feature_keys (list): List of strings for json keys that correspond to additional 
             features to use alongside vocabulary
+        stop_word_file (str): Path to a file containing stop words (newline separated)
         count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
     """
 
     def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
-                 additional_feature_keys=None,
+                 additional_feature_keys=None, stop_word_file=None,
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
@@ -60,16 +61,31 @@ class TMNTVectorizer(object):
         self.additional_feature_keys = additional_feature_keys
         self.file_pat = file_pat
         self.vocab_size = vocab_size if initial_vocabulary is None else len(initial_vocabulary)
+        self.cv_kwargs = self._update_count_vectorizer_args(count_vectorizer_kwargs, stop_word_file)
         self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
                                           vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None),
-                                          **count_vectorizer_kwargs)
+                                          **self.cv_kwargs)
         self.label_map = {}
+
+        
+    def _update_count_vectorizer_args(self, cv_kwargs, stop_word_file):
+        if stop_word_file:
+            stop_words = self._get_stop_word_set(stop_word_file)
+            cv_kwargs['stop_words'] = stop_words
+        return cv_kwargs
 
     @classmethod
     def from_vocab_file(cls, vocab_file):
         with io.open(vocab_file, 'r') as fp:
             voc_js = fp.read()
         return cls(initial_vocabulary=nlp.Vocab.from_json(voc_js))
+
+    def _get_stop_word_set(self, f):
+        wds = []
+        with io.open(f, 'r', encoding=self.encoding) as fp:
+            for w in fp:
+                wds.append(w)
+        return list(set(wds))
 
     def _get_update_label_index(self, v):
         if self.label_prefix > 0:
@@ -209,7 +225,7 @@ class TMNTVectorizer(object):
     def transform_json_dir(self, json_dir):
         X = self._tr_json_dir(self.vectorizer.transform, json_dir)
         y = self._get_ys_dir(json_dir)
-        return X, None
+        return X, y
 
     def fit_transform(self, str_list):
         return self.vectorizer.fit_transform(str_list), None

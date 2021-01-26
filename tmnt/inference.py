@@ -19,6 +19,7 @@ from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from sklearn.datasets import load_svmlight_file
 
+MAX_DESIGN_MATRIX = 250000000 
 
 class BaseInferencer(object):
     """Base inference object for text encoding with a trained topic model.
@@ -157,7 +158,12 @@ class BowVAEInferencer(BaseInferencer):
             data_to_iter = data_mat 
         else:
             data_to_iter = data_mat[:-last_batch_size]
-        infer_iter = DataIterLoader(mx.io.NDArrayIter(data_to_iter, covars,
+        x_size = data_to_iter.shape[0] * data_to_iter.shape[1]
+        if x_size > MAX_DESIGN_MATRIX:
+            logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
+            infer_iter = DataIterLoader(SparseMatrixDataIter(data_to_iter, covars, batch_size, last_batch_handle='discard', shuffle=False))
+        else:
+            infer_iter = DataIterLoader(mx.io.NDArrayIter(data_to_iter, covars,
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):

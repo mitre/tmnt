@@ -433,7 +433,7 @@ class BaseBowEstimator(BaseEstimator):
                 val_X = val_X[:50000]
                 val_y = val_y[:50000]
             npmi, redundancy = self._npmi(val_X, val_y)
-        return ppl, npmi, redundancy
+        return ppl, npmi, redundancy, None
     
 
     def initialize_with_pretrained(self):
@@ -506,7 +506,7 @@ class BaseBowEstimator(BaseEstimator):
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
                 
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
-                ppl, npmi, redundancy = self.validate(val_X, val_y)
+                ppl, npmi, redundancy, _ = self.validate(val_X, val_y)
                 if self.reporter:
                     obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
                     b_obj = max(min(obj, 100.0), -100.0)
@@ -685,7 +685,7 @@ class LabeledBowEstimator(BaseBowEstimator):
 
 
     def validate(self, val_X, val_y):
-        ppl, npmi, redundancy = super().validate(val_X, val_y)
+        ppl, npmi, redundancy, _ = super().validate(val_X, val_y)
         val_loader = self._get_val_dataloader(val_X, val_y)
         tot_correct = 0
         tot = 0
@@ -700,9 +700,8 @@ class LabeledBowEstimator(BaseBowEstimator):
                 correct = mx.nd.argmax(predictions, axis=1) == labels
                 tot_correct += mx.nd.sum(correct).asscalar()
                 tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0
-        print("Validation accuracy = {}".format(float(tot_correct) / float(tot)))
-        return ppl, npmi, redundancy
-            
+        acc = float(tot_correct) / float(tot)
+        return ppl, npmi, redundancy, acc
     
 
     def get_topic_vectors(self):
