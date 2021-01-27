@@ -28,6 +28,7 @@ parser.add_argument('--json_out_dir', type=str, help='Create a new JSON list fil
 parser.add_argument('--min_doc_length', type=int, help='Minimum document length (in tokens)', default=10)
 parser.add_argument('--custom_stop_words', type=str, help='Custom stop-word file (one word per line)', default=None)
 parser.add_argument('--label_prefix_chars', type=int, help='Use first N characters of label', default=-1)
+parser.add_argument('--label_min_cnt', type=int, help='Minimum label count (lower count labels mapped to -1)', default=1)
 parser.add_argument('--str_encoding', type=str, help='String/file encoding to use', default='utf-8')
 parser.add_argument('--log_dir', type=str, help='Logging directory', default='.')
 
@@ -47,6 +48,7 @@ if __name__ == '__main__':
                        vocab_size=args.vocab_size,
                        json_out_dir=args.json_out_dir,
                        encoding=args.str_encoding,
+                       label_min_cnt=args.label_min_cnt,
                        stop_word_file=args.custom_stop_words)
     tr_X, tr_y = \
         vectorizer.fit_transform_json_dir(args.tr_input) if os.path.isdir(args.tr_input) else vectorizer.fit_transform_json(args.tr_input)

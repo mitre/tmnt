@@ -19,7 +19,7 @@ Once Conda is installed, setup a new environment for TMNT as follows::
 
 Ensure the environment is activated::
 
-    conda activate TMNT 
+  conda activate TMNT 
 
 Pip Installation
 ++++++++++++++++
@@ -47,11 +47,11 @@ or via SSH::
 Installation proceeds with a local pip install::
 
   cd tmnt
-  pip install . 
+  pip install -e . 
 
 If using a GPU, replace the last line above with ::
   
-  USE_CUDA=1 pip install .
+  USE_CUDA=1 pip install -e .
 
   
 Testing the Installation

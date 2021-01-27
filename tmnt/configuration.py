@@ -87,6 +87,9 @@ class TMNTConfigBOW(BaseTMNTConfig):
         super().__init__(c_file)
 
     def get_configspace(self):
+        """Get a dictionary representing this config space based on the config file provided
+        during object creation.
+        """
         cd = self.cd
         sp_dict = {}
         sp_dict['epochs'] = int(cd['epochs'])

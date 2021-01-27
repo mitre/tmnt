@@ -277,7 +277,7 @@ class BowVAETrainer(BaseTrainer):
         """
         raise NotImplemented
 
-    def _get_vae_estimator(self, config, reporter, ctx):
+    def _get_estimator(self, config, reporter, ctx):
         """Take a model configuration - specified by a config file or as determined by model selection and 
         return a VAE topic model ready for training.
 
@@ -322,7 +322,7 @@ class BowVAETrainer(BaseTrainer):
         logging.debug("Evaluating with Config: {}".format(config))
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
-        vae_estimator = self._get_vae_estimator(config, reporter, ctx)
+        vae_estimator = self._get_estimator(config, reporter, ctx)
         X, y, _, _ = file_to_data(self.train_data_path, len(self.vocabulary))
         if self.test_data_path is None:
             vX, vy = None, None
@@ -343,6 +343,16 @@ class BowVAETrainer(BaseTrainer):
             estimator.write_model(model_dir)
         else:
             raise Exception("Model write failed, output directory not provided")
+
+
+class LabeledBowVAETrainer(BowVAETrainer):
+
+    def __init__(self, *args, **kwargs):
+        super(LabeledBowVAETrainer, self).__init__(*args, **kwargs)
+
+
+    def _get_estimator(self, config, reporter, ctx):
+        
 
 
 

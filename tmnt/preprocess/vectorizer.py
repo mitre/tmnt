@@ -13,6 +13,7 @@ from gluonnlp.data import Counter
 from multiprocessing import Pool, cpu_count
 from mantichora import mantichora
 from atpbar import atpbar
+import collections
 import threading
 import logging
 import threading
@@ -43,12 +44,13 @@ class TMNTVectorizer(object):
         additional_feature_keys (list): List of strings for json keys that correspond to additional 
             features to use alongside vocabulary
         stop_word_file (str): Path to a file containing stop words (newline separated)
+        label_min_cnt (int): Minimum number of occurrences of label; instance provided label id -1 if label occurs less than this value
         count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
     """
 
     def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
-                 additional_feature_keys=None, stop_word_file=None,
+                 additional_feature_keys=None, stop_word_file=None, label_min_cnt=1,
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
@@ -60,6 +62,7 @@ class TMNTVectorizer(object):
         self.vocab = initial_vocabulary
         self.additional_feature_keys = additional_feature_keys
         self.file_pat = file_pat
+        self.label_min_cnt = label_min_cnt
         self.vocab_size = vocab_size if initial_vocabulary is None else len(initial_vocabulary)
         self.cv_kwargs = self._update_count_vectorizer_args(count_vectorizer_kwargs, stop_word_file)
         self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
@@ -87,15 +90,6 @@ class TMNTVectorizer(object):
                 wds.append(w)
         return list(set(wds))
 
-    def _get_update_label_index(self, v):
-        if self.label_prefix > 0:
-            v = v[:self.label_prefix]
-        i = self.label_map.get(v)
-        if i is None:
-            i = len(self.label_map)
-            self.label_map[v] = i
-        return i
-    
     
     def get_vocab(self):
         if self.vocab is not None:
@@ -179,28 +173,47 @@ class TMNTVectorizer(object):
             fp.close()
         return rr
 
-    def _get_ys(self, json_file):
+    def _get_y_strs(self, json_file):
         if self.label_key is not None:
             ys = []
             with io.open(json_file, 'r', encoding=self.encoding) as fp:
                 for j in fp:
                     label_string = json.loads(j)[self.label_key]
-                    label_id = self._get_update_label_index(label_string)
-                    ys.append(label_id)
+                    ys.append(label_string)
             return ys
         else:
             return None
 
-    def _get_ys_dir(self, json_dir):
+    def _get_y_strs_dir(self, json_dir):
         if self.label_key is not None:
             fps = [ ff for ff in glob.glob(json_dir + '/' + self.file_pat) ]
             ys = []
             for f in fps:
-                yy = self._get_ys(f)
+                yy = self._get_y_strs(f)
                 ys.extend(yy)
             return ys
         else:
             return None
+
+    def _get_y_ids(self, y_strs):
+        lab_map = {}
+        def _update(s):
+            i = lab_map.get(s)
+            if i is None:
+                i = len(lab_map)
+                lab_map[s] = i
+            return i
+        
+        cnts = collections.Counter(y_strs)
+        y_ids = [ (_update(ys) if cnts[ys] >= self.label_min_cnt else -1) for ys in y_strs ]
+        self.label_map = lab_map
+        return y_ids
+
+    def _get_ys(self, json_file):
+        return self._get_y_ids(self._get_y_strs(json_file))
+
+    def _get_ys_dir(self, json_dir):
+        return self._get_y_ids(self._get_y_strs_dir(json_dir))
 
     def write_to_vec_file(self, X, y, vec_file):
         if y is None:
