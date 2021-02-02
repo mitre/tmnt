@@ -153,6 +153,15 @@ class BaseEstimator(object):
         return npmi, redundancy
 
 
+    def _get_objective_from_validation_result(self, val_result):
+        """
+        Get the final objective value from the various validation metrics.
+
+        Parameters:
+            val_result (dict): Dictionary of validation metrics calculated.        
+        """
+        raise NotImplementedError()
+    
 
     def fit(self, X, y):
         """
@@ -433,13 +442,23 @@ class BaseBowEstimator(BaseEstimator):
                 val_X = val_X[:50000]
                 val_y = val_y[:50000]
             npmi, redundancy = self._npmi(val_X, val_y)
-        return ppl, npmi, redundancy, None
+        return {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
     
 
     def initialize_with_pretrained(self):
         assert(self.pretrained_param_file is not None)
         self.model = self._get_model()
         self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
+
+
+    def _get_objective_from_validation_result(self, val_result):
+        npmi = val_result['npmi']
+        ppl  = val_result['ppl']
+        redundancy = val_result['redundancy']
+        obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
+        b_obj = max(min(obj, 100.0), -100.0)
+        sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+        return sc_obj
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
@@ -473,6 +492,7 @@ class BaseBowEstimator(BaseEstimator):
         
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
+        v_res = None
         for epoch in range(self.epochs):
             ts_epoch = time.time()
             elbo_losses = []
@@ -504,18 +524,15 @@ class BaseBowEstimator(BaseEstimator):
                 lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
                 self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
-                
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
-                ppl, npmi, redundancy, _ = self.validate(val_X, val_y)
+                v_res = self.validate(val_X, val_y)
+                sc_obj = self._get_objective_from_validation_result(v_res)
                 if self.reporter:
-                    obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
-                    b_obj = max(min(obj, 100.0), -100.0)
-                    sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
                     self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                        .format(epoch+1, sc_obj, ppl, npmi, redundancy))
+                                        .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
                     self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-                                  coherence=npmi, perplexity=ppl, redundancy=redundancy)
-        return sc_obj, npmi, ppl, redundancy
+                                  coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+        return sc_obj, v_res
 
                     
     def fit(self, X, y):
@@ -633,7 +650,7 @@ class BowEstimator(BaseBowEstimator):
 
 class LabeledBowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, n_labels,  gamma, *args, multilabel=False, **kwargs):
+    def __init__(self, vocabulary, *args, n_labels=0,  gamma=1.0, multilabel=False, **kwargs):
         super().__init__(vocabulary, *args, **kwargs)
         self.multilabel = multilabel
         self.gamma = gamma
@@ -643,7 +660,7 @@ class LabeledBowEstimator(BaseBowEstimator):
     def from_config(cls, n_labels, gamma, *args, **kwargs):
         est = super().from_config(*args, **kwargs)
         est.n_labels = n_labels
-        est.gamma    = gamma
+        est.gamma = gamma
         return est
 
     def _get_model(self):
@@ -684,8 +701,15 @@ class LabeledBowEstimator(BaseBowEstimator):
         return model(data, labels, mask)
 
 
+    def _get_objective_from_validation_result(self, v_res):
+        topic_obj = super()._get_objective_from_validation_result(v_res)
+        acc = v_res['accuracy']
+        logging.info("topic obj = {}, acc = {}".format(topic_obj, acc))
+        return topic_obj + self.gamma * acc
+
+
     def validate(self, val_X, val_y):
-        ppl, npmi, redundancy, _ = super().validate(val_X, val_y)
+        v_res = super().validate(val_X, val_y)
         val_loader = self._get_val_dataloader(val_X, val_y)
         tot_correct = 0
         tot = 0
@@ -701,7 +725,9 @@ class LabeledBowEstimator(BaseBowEstimator):
                 tot_correct += mx.nd.sum(correct).asscalar()
                 tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0
         acc = float(tot_correct) / float(tot)
-        return ppl, npmi, redundancy, acc
+        v_res['accuracy'] = acc
+        print("v_res = {}".format(v_res))
+        return v_res
     
 
     def get_topic_vectors(self):
@@ -726,7 +752,6 @@ class LabeledBowEstimator(BaseBowEstimator):
         Returns:
             (:class:`mxnet.ndarray.NDArray`) topic_distribution: shape=(n_samples, n_latent) Document topic distribution for X
         """
-
         mx_array = mx.nd.array(X,dtype='float32')
         return self.model.encode_data(mx_array).asnumpy()
     
@@ -838,6 +863,14 @@ class CovariateBowEstimator(BaseBowEstimator):
     def _npmi(self, X, y, k=10):
         return super()._npmi(X, y, k)
         #return self._npmi_per_covariate(X, y, k)
+
+    def _get_objective_from_validation_result(self, v_res):
+        return v_res['npmi']
+
+    def validate(self, X, y):
+        npmi, redundancy = self._npmi(X, y)
+        return {'npmi': npmi, 'redundancy': redundancy}
+
 
     def get_topic_vectors(self):
         """
@@ -1025,7 +1058,8 @@ class SeqBowEstimator(BaseEstimator):
         return perplexity
 
 
-    def validate(self, model, bow_val_X, val_y, dataloader):
+    def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
+        npmi, redundancy = self._compute_coherence(model, 10, bow_train, log_terms=True)
         last_batch_size = bow_val_X.shape[0] % self.batch_size
         if last_batch_size > 0:
             num_batches = (bow_val_X.shape[0] // self.batch_size) + 1
@@ -1034,8 +1068,9 @@ class SeqBowEstimator(BaseEstimator):
             last_batch_size = self.batch_size
         num_val_words = bow_val_X.sum()
         ppl = self._perplexity(dataloader, num_val_words, last_batch_size, num_batches)
-        return ppl
+        return {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
     
+
 
     def fit_with_validation(self, X, y, val_X, val_y):
         """
@@ -1046,6 +1081,11 @@ class SeqBowEstimator(BaseEstimator):
             y ({array-like, sparse matrix}): Training covariate matrix of shape (n_train_samples, n_covars)
             val_X ({array-like, sparse matrix}): Validation document word matrix of shape {n_samples, n_features)
             val_y ({array-like, sparse matrix}): Validation covariate matrix of shape (n_train_samples, n_covars)
+        Returns:
+            (tuple): Tuple containing:
+                - estimator (:class:`tmnt.estimator.BaseEstimator`) VAE model estimator
+                - objective (float): Resulting objective value
+                - result_details (dict): Estimator-specific metrics on validation data
         """
         seq_train, bow_train = X
         model = self._get_model()
@@ -1142,17 +1182,14 @@ class SeqBowEstimator(BaseEstimator):
                 if self.max_batches > 0 and step_num >= self.max_batches:
                     break
             if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
-                npmi, redundancy = self._compute_coherence(model, 10, bow_train, log_terms=True)
-                ppl = self.validate(model, bow_val, val_y, dataloader_val)
-                obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
-                b_obj = max(min(obj, 100.0), -100.0)
-                sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+                v_res  = self.validate(model, bow_val, val_y, dataloader_val)
+                sc_obj = self._get_objective_from_validation_result(v_res)
                 self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                    .format(epoch_id, sc_obj, ppl, npmi, redundancy))
+                                    .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
                 if self.reporter:
-                    self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=npmi,
-                                  perplexity=ppl, redundancy=redundancy)
-        return sc_obj, npmi, ppl, redundancy
+                    self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
+                                  perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+        return sc_obj, v_res
 
 
 class LabeledSeqBowEstimator(SeqBowEstimator):
@@ -1171,6 +1208,10 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
         est.gamma    = gamma
         return est
 
+    def _get_objective_from_validation_result(self, v_res):
+        topic_obj = super()._get_objective_from_validation_result(v_res)
+        acc = v_res['accuracy']
+        return topic_obj + self.gamma * acc
 
     def _get_model(self):
         model = LabeledBertBowVED(self.n_labels, self.gamma, self.bert_base, self.vocabulary, self.latent_distrib,
@@ -1186,7 +1227,7 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
 
 
     def validate(self, model, bow_val_X, val_y, dataloader):
-        ppl = super().validate(model, bow_val_X, val_y, dataloader)
+        v_res = super().validate(model, bow_val_X, val_y, dataloader)
         tot_correct = 0
         tot = 0
         bs = min(bow_val_X.shape[0], self.batch_size)
@@ -1200,8 +1241,10 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
                 correct = mx.nd.argmax(predictions, axis=1) == labels
                 tot_correct += mx.nd.sum(correct).asscalar()
                 tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
-        print("Validation accuracy = {}".format(float(tot_correct) / float(tot)))
-        return ppl
+        acc = float(tot_correct) / float(tot)
+        print("Validation accuracy = {}".format(acc))
+        v_res['accuracy'] = acc
+        return v_res
 
 
 class DeepAveragingBowEstimator(BaseEstimator):
@@ -1217,22 +1260,15 @@ class DeepAveragingBowEstimator(BaseEstimator):
         self.seq_length = seq_length
         self.validate_each_epoch = False
 
-
     def _get_model(self):
         model = DeepAveragingVAEModel(self.n_labels, self.gamma, self.emb_in_dim, self.emb_out_dim , self.emb_dr, self.seq_length,
                                       vocabulary=self.vocabulary, n_latent=self.n_latent, latent_distrib=self.latent_distrib,
                                       batch_size=self.batch_size, wd_freqs=self.wd_freqs, ctx=self.ctx)
         return model
+              
 
     def _forward(self, model, ids, lens, bow, labels, l_mask):
         return model(ids, lens, bow, labels, l_mask)
-
-
-    #def _get_val_dataloader(self, val_X, val_y):
-        
-
-    #def validate(self, val_X, val_y):
-        
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
@@ -1286,9 +1322,9 @@ class DeepAveragingBowEstimator(BaseEstimator):
                 self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
-                _, val_X_sp = val_X
-                npmi, redundancy = self._npmi(val_X_sp, None)
-                self._output_status("NPMI ==> {}".format(npmi))
+              _, val_X_sp = val_X
+              npmi, redundancy = self._npmi(val_X_sp, None)
+              self._output_status("NPMI ==> {}".format(npmi))
                 #ppl, npmi, redundancy = self.validate(val_X, val_y)
                 #if self.reporter:
                 #    obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
@@ -1298,6 +1334,7 @@ class DeepAveragingBowEstimator(BaseEstimator):
                 #                        .format(epoch+1, sc_obj, ppl, npmi, redundancy))
                 #    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
                 #                  coherence=npmi, perplexity=ppl, redundancy=redundancy)
-        return sc_obj, npmi, ppl, redundancy
+              
+        return sc_obj, {'npmi': npmi, 'ppl': ppl, 'redundancy': redundancy}
 
     

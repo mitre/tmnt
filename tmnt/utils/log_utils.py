@@ -7,6 +7,7 @@ import inspect
 
 __all__ = ['logging_config']
 
+CONFIGURED = False
 
 def logging_config(folder=None, name=None,
                    level=40,
@@ -27,6 +28,7 @@ def logging_config(folder=None, name=None,
     folder : str
         Folder that the logging file will be saved into.
     """
+    CONFIGURED = True
     if name is None:
         name = inspect.stack()[1][1].split('.')[0]
     if folder is None:

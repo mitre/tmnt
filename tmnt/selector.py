@@ -15,6 +15,7 @@ from autogluon.core.scheduler.reporter import FakeReporter
 from tabulate import tabulate
 from tmnt.configuration import TMNTConfigBOW, TMNTConfigSeqBOW
 from tmnt.trainer import BowVAETrainer, SeqBowVEDTrainer
+from pathlib import Path
 
 class BaseSelector(object):
     """Base model selector.
@@ -46,6 +47,7 @@ class BaseSelector(object):
         self.use_gpu = use_gpu
         self.num_final_evals = num_final_evals
         self.rng_seed = rng_seed
+        Path(self.log_dir).mkdir(parents=True, exist_ok=True)
 
 
     def _process_training_history(self, task_dicts, start_timestamp):

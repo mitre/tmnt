@@ -18,10 +18,11 @@ import autogluon.core as ag
 
 from autogluon.core.scheduler.reporter import FakeReporter
 from pathlib import Path
+from tmnt.utils import log_utils
 from tmnt.utils.random import seed_rng
 from tmnt.utils.log_utils import logging_config
 from tmnt.data_loading import load_vocab, file_to_data, load_dataset_bert
-from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator
+from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator, LabeledBowEstimator
 
 
 class BaseTrainer(object):
@@ -147,10 +148,10 @@ class BaseTrainer(object):
             for i in range(ntimes):
                 seed_rng(rng_seed) # update RNG
                 rng_seed += 1
-                model, obj, npmi, perplexity, redundancy = self.train_model(config, FakeReporter())
-                npmis.append(npmi)
-                perplexities.append(perplexity)
-                redundancies.append(redundancy)
+                model, obj, v_res = self.train_model(config, FakeReporter())
+                npmis.append(v_res['npmi'])
+                perplexities.append(v_res['ppl'])
+                redundancies.append(v_res['redundancy'])
                 objectives.append(obj)
                 if obj > best_obj:
                     best_obj = obj
@@ -173,7 +174,7 @@ class BaseTrainer(object):
                 logging.info("Final {} Objective      ==> {}".format(test_type, objectives[0]))            
             return best_model, best_obj
         else:
-            model, obj, _, _, _ = self.train_model(config, FakeReporter())
+            model, obj, _ = self.train_model(config, FakeReporter())
             return model, obj
 
         
@@ -205,6 +206,8 @@ class BowVAETrainer(BaseTrainer):
                  use_gpu=False, n_covars=None,
                  val_each_epoch=True, rng_seed=1234):
         super().__init__(vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed)
+        if not log_utils.CONFIGURED:
+            logging_config(folder=log_out_dir, name='tmnt', level=logging.INFO, console_level=logging.INFO)
         self.log_out_dir = log_out_dir
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
@@ -315,9 +318,7 @@ class BowVAETrainer(BaseTrainer):
             (tuple): Tuple containing:
                 - model (:class:`tmnt.estimator.BowEstimator`) VAE model estimator with trained parameters
                 - obj (float): scaled objective
-                - npmi (float): coherence on validation set
-                - perplexity (float): perplexity score on validation data
-                - redundancy (float): topic model redundancy of top 5 terms for each topic
+                - results_details (dict): Dictionary of estimator metrics on validation data
         """
         logging.debug("Evaluating with Config: {}".format(config))
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
@@ -328,8 +329,8 @@ class BowVAETrainer(BaseTrainer):
             vX, vy = None, None
         else:
             vX, vy, _, _ = file_to_data(self.test_data_path, len(self.vocabulary))
-        obj, npmi, perplexity, redundancy = vae_estimator.fit_with_validation(X, y, vX, vy)
-        return vae_estimator, obj, npmi, perplexity, redundancy
+        obj, v_res = vae_estimator.fit_with_validation(X, y, vX, vy)
+        return vae_estimator, obj, v_res
 
     def write_model(self, estimator, config):
         """Method to write an estimated model to disk along with configuration used to train the model and the vocabulary.
@@ -347,12 +348,22 @@ class BowVAETrainer(BaseTrainer):
 
 class LabeledBowVAETrainer(BowVAETrainer):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, n_labels, *args, **kwargs):
+        self.n_labels = n_labels
         super(LabeledBowVAETrainer, self).__init__(*args, **kwargs)
 
 
     def _get_estimator(self, config, reporter, ctx):
-        
+        embedding_source = config.embedding.source
+        #n_labels = config['num_labels']
+        n_labels = self.n_labels
+        gamma    = config.get('gamma') or 1.0
+        vocab, _ = self._initialize_vocabulary(embedding_source)
+        estimator = LabeledBowEstimator.from_config(n_labels, gamma, config, vocab,
+                                                     pretrained_param_file=self.pretrained_param_file,
+                                                     wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
+        estimator.validate_each_epoch = self.validate_each_epoch
+        return estimator
 
 
 
