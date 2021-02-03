@@ -1,5 +1,4 @@
 # coding: utf-8
-
 """
 Copyright (c) 2019-2020. The MITRE Corporation.
 
@@ -280,6 +279,21 @@ def prepare_bert(content, max_len, bow_vocab_size=1000, vectorizer=None, ctx=mx.
             mx.nd.array(x_segs, dtype='int32'),
             mx.nd.sparse.csr_matrix(X, dtype='float32').tostype('default'))
     return data_train, X, tf_vectorizer, bert_base, bert_vocab
+
+
+def prepare_bert_via_json(json_file, max_len, bow_vocab_size=1000, vectorizer=None, json_text_key="text", json_label_key=None, ctx=mx.cpu()):
+    with io.open(json_file, 'r', encoding='utf-8') as fp:
+        content = [json.loads(line)[json_text_key] for line in fp]
+        x_ids, x_val_lens, x_segs, bert_base, bert_vocab, _ = _load_dataset_bert(content, 0, max_len, ctx)
+        tf_vectorizer = vectorizer or TMNTVectorizer(text_key=json_text_key, label_key=json_label_key, vocab_size = bow_vocab_size)
+        X, y = tf_vectorizer.transform_json(json_file) if vectorizer else tf_vectorizer.fit_transform_json(json_file)
+        data_train = gluon.data.ArrayDataset(
+            mx.nd.array(x_ids, dtype='int32'),
+            mx.nd.array(x_val_lens, dtype='int32'),
+            mx.nd.array(x_segs, dtype='int32'),
+            mx.nd.sparse.csr_matrix(X, dtype='float32').tostype('default'))
+    return data_train, X, tf_vectorizer, bert_base, bert_vocab, y
+    
 
 
 def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp_vec", max_len=64, ctx=mx.cpu()):

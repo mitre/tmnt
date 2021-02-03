@@ -1131,6 +1131,7 @@ class SeqBowEstimator(BaseEstimator):
                 differentiable_params.append(p)
 
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
+        v_res = None
         for epoch_id in range(self.epochs):
             step_loss = 0
             step_recon_ls = 0
@@ -1182,7 +1183,7 @@ class SeqBowEstimator(BaseEstimator):
                 if self.max_batches > 0 and step_num >= self.max_batches:
                     break
             if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
-                v_res  = self.validate(model, bow_val, val_y, dataloader_val)
+                v_res  = self.validate(model, bow_train, bow_val, val_y, dataloader_val)
                 sc_obj = self._get_objective_from_validation_result(v_res)
                 self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
                                     .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
@@ -1226,8 +1227,9 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
         return model
 
 
-    def validate(self, model, bow_val_X, val_y, dataloader):
-        v_res = super().validate(model, bow_val_X, val_y, dataloader)
+    def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
+        #v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
+        v_res = {}
         tot_correct = 0
         tot = 0
         bs = min(bow_val_X.shape[0], self.batch_size)
@@ -1238,7 +1240,7 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
                 predictions = self.model.predict(input_ids.as_in_context(self.ctx),
                                                  type_ids.as_in_context(self.ctx),
                                                  valid_length.astype('float32').as_in_context(self.ctx))
-                correct = mx.nd.argmax(predictions, axis=1) == labels
+                correct = mx.nd.argmax(predictions, axis=1) == labels.squeeze()
                 tot_correct += mx.nd.sum(correct).asscalar()
                 tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
         acc = float(tot_correct) / float(tot)
