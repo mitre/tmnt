@@ -14,7 +14,7 @@ import umap
 from sklearn.datasets import fetch_20newsgroups, dump_svmlight_file
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.configuration import TMNTConfigBOW
-from tmnt.trainer import BowVAETrainer
+from tmnt.trainer import BowVAETrainer, LabeledBowVAETrainer
 from tmnt.selector import BaseSelector
 
 data, y = fetch_20newsgroups(shuffle=True, random_state=1,
@@ -33,3 +33,10 @@ selector = BaseSelector(tmnt_config, 8, 'random', 'fifo', 1, 4, False, 1, 1234, 
 
 trainer = BowVAETrainer('_exps', '_model_out', vocab, None, '_train.vec', '_test.vec')
 selector.select_model(trainer)
+
+n_labels = int(np.max(y)) + 1
+
+labeled_trainer = LabeledBowVAETrainer(n_labels, '_model_out', '_model_out', vocab, None, '_train.vec', '_test.vec')
+
+l_selector = BaseSelector(tmnt_config, 8, 'random', 'fifo', 1, 4, False, 1, 1234, '_model_out')
+l_selector.select_model(labeled_trainer)

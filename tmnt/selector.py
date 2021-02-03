@@ -24,20 +24,20 @@ class BaseSelector(object):
 
     Args:
         tmnt_config_space(`tmnt.configuration.TMNTConfigBase`): Object defining the search space for a TMNT topic model
-        iterations (int): Number of total model evaluations
-        searcher (str): Search algortihm used (random, bayesopt, skopt)
-        scheduler (str): Scheduler for search (fifo, hyperband)
-        brackets (int): Number of brackets (if using hyperband)
-        cpus_per_task (int): Number of cpus to evaluate each model (increase to limit concurrency)
-        use_gpu (bool): Whether to use GPUs when training each model
-        num_final_evals (int): Number of model refits and evaluations (with different random seeds) using the best found configuration
-        rng_seed (int): Random seed used for model selection evaluations
-        log_dir (str): Directory for output of model selection info
+        iterations (int): Number of total model evaluations (default = 12)
+        searcher (str): Search algortihm used (random, bayesopt, skopt) (default = random)
+        scheduler (str): Scheduler for search (fifo, hyperband) (default = fifo)
+        brackets (int): Number of brackets (if using hyperband) (default = 1)
+        cpus_per_task (int): Number of cpus to evaluate each model (increase to limit concurrency); (default = 2)
+        use_gpu (bool): Whether to use GPUs when training each model (default = False)
+        num_final_evals (int): Number of model refits and evaluations (with different random seeds) using the 
+            best found configuration (default = 1)
+        rng_seed (int): Random seed used for model selection evaluations (default = 1234)
+        log_dir (str): Directory for output of model selection info (default = ./_exps)
     """
     
-    def __init__(self, tmnt_config_space, iterations, searcher, scheduler, brackets, cpus_per_task, use_gpu,
-                 num_final_evals, rng_seed, log_dir):
-        self.log_dir = log_dir
+    def __init__(self, tmnt_config_space, iterations=12, searcher='random', scheduler='fifo', brackets=1, cpus_per_task=2, use_gpu=False,
+                 num_final_evals=1, rng_seed=1234, log_dir='_exps'):
         self.tmnt_config_space = tmnt_config_space
         self.iterations = iterations
         self.searcher = searcher
@@ -47,6 +47,7 @@ class BaseSelector(object):
         self.use_gpu = use_gpu
         self.num_final_evals = num_final_evals
         self.rng_seed = rng_seed
+        self.log_dir = log_dir
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
 
 
@@ -140,7 +141,6 @@ class BaseSelector(object):
         out_pretty = os.path.join(self.log_dir, 'selection.table.txt')
         with io.open(out_pretty, 'w') as fp:
             fp.write(tabulate(results_df, headers='keys', tablefmt='pqsl'))
-        ## scheduler.shutdown()
 
 
 def model_select_bow_vae(c_args):
