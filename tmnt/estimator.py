@@ -1195,10 +1195,18 @@ class SeqBowEstimator(BaseEstimator):
             if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
                 v_res  = self.validate(model, bow_train, bow_val, val_y, dataloader_val)
                 sc_obj = self._get_objective_from_validation_result(v_res)
-                self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                if 'accuracy' in v_res:
+                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
+                                    .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
+                else:
+                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
                                     .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
                 if self.reporter:
-                    self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
+                    if 'accuracy' in v_res:
+                        self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
+                                      perplexity=v_res['ppl'], redundancy=v_res['redundancy'], accuracy=v_res['accuracy'])
+                    else:
+                        self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
                                   perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
         return sc_obj, v_res
 
@@ -1254,7 +1262,6 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
                 tot_correct += mx.nd.sum(correct).asscalar()
                 tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
         acc = float(tot_correct) / float(tot)
-        print("Validation accuracy = {}".format(acc))
         v_res['accuracy'] = acc
         return v_res
 
