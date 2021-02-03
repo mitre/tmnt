@@ -1189,7 +1189,6 @@ class SeqBowEstimator(BaseEstimator):
                     step_recon_ls = 0
                     step_kl_ls = 0
                     step_lab_ls = 0
-                    _, _ = self._compute_coherence(model, 10, bow_train, log_terms=True)
                 if self.max_batches > 0 and step_num >= self.max_batches:
                     break
             if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
