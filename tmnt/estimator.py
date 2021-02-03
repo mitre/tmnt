@@ -1058,7 +1058,7 @@ class SeqBowEstimator(BaseEstimator):
         return perplexity
 
 
-    def _get_objective_from_validation_result(self, v_res):
+    def _get_objective_from_validation_result(self, val_result):
         npmi = val_result['npmi']
         ppl  = val_result['ppl']
         redundancy = val_result['redundancy']
@@ -1220,10 +1220,9 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
         return est
 
     def _get_objective_from_validation_result(self, v_res):
-        #topic_obj = super()._get_objective_from_validation_result(v_res)
+        topic_obj = super()._get_objective_from_validation_result(v_res)
         acc = v_res['accuracy']
-        #return topic_obj + self.gamma * acc
-        return acc
+        return topic_obj + self.gamma * acc
 
     def _get_model(self):
         model = LabeledBertBowVED(self.n_labels, self.gamma, self.bert_base, self.vocabulary, self.latent_distrib,
@@ -1239,7 +1238,7 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
 
 
     def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
-        #v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
+        v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
         v_res = {}
         tot_correct = 0
         tot = 0
