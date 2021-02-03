@@ -904,7 +904,7 @@ class SeqBowEstimator(BaseEstimator):
 
     def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random',
                  warmup_ratio=0.1, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, log_interval=1, max_batches=-1, epochs=3, *args, **kwargs):
-        super(SeqBowEstimator, self).__init__(epochs=3, *args, **kwargs)
+        super(SeqBowEstimator, self).__init__(epochs=epochs, *args, **kwargs)
         self.log_interval = log_interval
         self.bert_base = bert_base
         self.embedding_source = bow_embedding_source
@@ -1240,6 +1240,7 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
                 predictions = self.model.predict(input_ids.as_in_context(self.ctx),
                                                  type_ids.as_in_context(self.ctx),
                                                  valid_length.astype('float32').as_in_context(self.ctx))
+                labels = labels.as_in_context(self.ctx)
                 correct = mx.nd.argmax(predictions, axis=1) == labels.squeeze()
                 tot_correct += mx.nd.sum(correct).asscalar()
                 tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
