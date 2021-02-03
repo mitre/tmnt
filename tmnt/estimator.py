@@ -1239,7 +1239,6 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
 
     def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
         v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
-        v_res = {}
         tot_correct = 0
         tot = 0
         bs = min(bow_val_X.shape[0], self.batch_size)
