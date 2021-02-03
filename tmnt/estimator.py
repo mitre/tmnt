@@ -1058,6 +1058,16 @@ class SeqBowEstimator(BaseEstimator):
         return perplexity
 
 
+    def _get_objective_from_validation_result(self, v_res):
+        npmi = val_result['npmi']
+        ppl  = val_result['ppl']
+        redundancy = val_result['redundancy']
+        obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
+        b_obj = max(min(obj, 100.0), -100.0)
+        sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+        return sc_obj
+
+
     def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
         npmi, redundancy = self._compute_coherence(model, 10, bow_train, log_terms=True)
         last_batch_size = bow_val_X.shape[0] % self.batch_size
