@@ -713,7 +713,7 @@ class LabeledBertBowVED(BertBowVED):
         self.n_labels = n_labels
         self.gamma    = gamma
         with self.name_scope():
-            self.lab_decoder = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
+            self.lab_decoder = gluon.nn.Dense(units=self.n_labels, activation=None, use_bias=True)
             #self.lab_dr = gluon.nn.Dropout(0.0)
         self.lab_decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
