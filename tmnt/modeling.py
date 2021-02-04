@@ -721,8 +721,8 @@ class LabeledBertBowVED(BertBowVED):
 
     def predict(self, toks, tok_types, valid_length):
         _, enc = self.encoder(toks, tok_types, valid_length)
-        mu_out = self.latent_dist.get_mu_encoding(enc)
-        return self.lab_decoder(mu_out)
+        #mu_out = self.latent_dist.get_mu_encoding(enc)
+        return self.lab_decoder(enc)
         
 
     def forward(self, toks, tok_types, valid_length, bow, labels, label_mask=None):
