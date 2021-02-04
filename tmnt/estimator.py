@@ -1130,7 +1130,7 @@ class SeqBowEstimator(BaseEstimator):
         dec_trainer = gluon.Trainer(model.decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
         lab_trainer = None
         if isinstance(model, LabeledBertBowVED):
-            lab_trainer = gluon.Trainer(model.lab_decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
+            lab_trainer = gluon.Trainer(model.lab_decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6, 'wd':self.weight_decay})
 
         # Do not apply weight decay on LayerNorm and bias terms
         for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():

@@ -714,7 +714,7 @@ class LabeledBertBowVED(BertBowVED):
         self.gamma    = gamma
         with self.name_scope():
             self.lab_decoder = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
-            self.lab_dr = gluon.nn.Dropout(0.1)
+            #self.lab_dr = gluon.nn.Dropout(0.0)
         self.lab_decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
 
@@ -737,12 +737,13 @@ class LabeledBertBowVED(BertBowVED):
                 loss, reconstruction loss, KL term, redundancy loss, reconstruction values, label CE loss
         """
         _, enc = self.encoder(toks, tok_types, valid_length)
-        mu_out = self.latent_dist.get_mu_encoding(enc)
+        #mu_out = self.latent_dist.get_mu_encoding(enc)
         z, KL = self.latent_dist(enc, self.batch_size)
         y = self.decoder(z)
         y = mx.nd.softmax(y, axis=1)
         rr = bow * mx.nd.log(y+1e-12)
-        lab_loss = self.lab_loss_fn(self.lab_dr(self.lab_decoder(mu_out)), labels)
+        #lab_loss = self.lab_loss_fn(self.lab_decoder(mu_out), labels)
+        lab_loss = self.lab_loss_fn(self.lab_decoder(enc), labels)
         if label_mask is not None:
             lab_loss = lab_loss * label_mask
         recon_loss = -mx.nd.sparse.sum( rr, axis=1 )
