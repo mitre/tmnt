@@ -1213,11 +1213,12 @@ class SeqBowEstimator(BaseEstimator):
 
 class LabeledSeqBowEstimator(SeqBowEstimator):
 
-    def __init__(self, n_labels, gamma, *args, multilabel=False, **kwargs):
+    def __init__(self, n_labels, gamma, *args, igamma=1.0, multilabel=False, **kwargs):
         super(LabeledSeqBowEstimator, self).__init__(*args, **kwargs)
         self.multilabel = multilabel
         self.gamma = gamma
         self.n_labels = n_labels
+        self.igamma = igamma
 
 
     @classmethod
