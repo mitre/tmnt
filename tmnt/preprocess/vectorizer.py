@@ -65,6 +65,8 @@ class TMNTVectorizer(object):
         self.label_min_cnt = label_min_cnt
         self.vocab_size = vocab_size if initial_vocabulary is None else len(initial_vocabulary)
         self.cv_kwargs = self._update_count_vectorizer_args(count_vectorizer_kwargs, stop_word_file)
+        if not 'token_pattern' in self.cv_kwargs:
+            self.cv_kwargs['token_pattern'] = r'\b[A-Za-z][A-Za-z]+\b'
         self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
                                           vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None),
                                           **self.cv_kwargs)
@@ -174,26 +176,20 @@ class TMNTVectorizer(object):
         return rr
 
     def _get_y_strs(self, json_file):
-        if self.label_key is not None:
-            ys = []
-            with io.open(json_file, 'r', encoding=self.encoding) as fp:
-                for j in fp:
-                    label_string = json.loads(j)[self.label_key]
-                    ys.append(label_string)
-            return ys
-        else:
-            return None
+        ys = []
+        with io.open(json_file, 'r', encoding=self.encoding) as fp:
+            for j in fp:
+                label_string = json.loads(j)[self.label_key]
+                ys.append(label_string)
+        return ys
 
     def _get_y_strs_dir(self, json_dir):
-        if self.label_key is not None:
-            fps = [ ff for ff in glob.glob(json_dir + '/' + self.file_pat) ]
-            ys = []
-            for f in fps:
-                yy = self._get_y_strs(f)
-                ys.extend(yy)
-            return ys
-        else:
-            return None
+        fps = [ ff for ff in glob.glob(json_dir + '/' + self.file_pat) ]
+        ys = []
+        for f in fps:
+            yy = self._get_y_strs(f)
+            ys.extend(yy)
+        return ys
 
     def _get_y_ids(self, y_strs):
         lab_map = {}
@@ -210,10 +206,16 @@ class TMNTVectorizer(object):
         return y_ids
 
     def _get_ys(self, json_file):
-        return self._get_y_ids(self._get_y_strs(json_file))
+        if self.label_key is not None:
+            return self._get_y_ids(self._get_y_strs(json_file))
+        else:
+            return None
 
     def _get_ys_dir(self, json_dir):
-        return self._get_y_ids(self._get_y_strs_dir(json_dir))
+        if self.label_key is not None:
+            return self._get_y_ids(self._get_y_strs_dir(json_dir))
+        else:
+            return None
 
     def write_to_vec_file(self, X, y, vec_file):
         if y is None:

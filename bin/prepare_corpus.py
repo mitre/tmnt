@@ -70,7 +70,6 @@ if __name__ == '__main__':
         i_to_t = vectorizer.get_vocab().idx_to_token
         with io.open(args.full_vocab_histogram, 'w') as fp:
             cnts = np.array(tr_X.sum(axis=0)).squeeze()
-            print("Shape cnts = {}".format(cnts.shape))
             for i in list(np.argsort(cnts * -1)):
                 fp.write(i_to_t[i] + ' ' + str(cnts[i]) + '\n')
             
