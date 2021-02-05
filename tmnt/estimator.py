@@ -914,7 +914,7 @@ class SeqBowEstimator(BaseEstimator):
         self.dec_lr = dec_lr
         self.min_lr = min_lr
         self.warmup_ratio = 0.1
-        self.weight_decay = 0.00001
+        self.weight_decay = 0.01
         self.offset_factor = 1.0
         self.validate_each_epoch = True
         self.max_batches = max_batches
@@ -1240,7 +1240,7 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
                            kappa = self.kappa,
                            alpha = self.alpha,
                            batch_size = self.batch_size,
-                           kld=1.0, wd_freqs=self.wd_freqs,
+                                  kld=1.0, wd_freqs=self.wd_freqs, igamma = self.igamma,
                            redundancy_reg_penalty=self.redundancy_reg_penalty,
                            ctx=self.ctx)
         return model
