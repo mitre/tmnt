@@ -1124,25 +1124,28 @@ class SeqBowEstimator(BaseEstimator):
 
         lr = self.gen_lr
 
-        gen_trainer = gluon.Trainer(model.encoder.collect_params(), self.optimizer,
-                                {'learning_rate': self.gen_lr, 'epsilon': 1e-6, 'wd':self.weight_decay})
-        lat_trainer = gluon.Trainer(model.latent_dist.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
-        dec_trainer = gluon.Trainer(model.decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
-        lab_trainer = None
+        bert_params = model.encoder.collect_params()
         if isinstance(model, LabeledBertBowVED):
-            lab_trainer = gluon.Trainer(model.lab_decoder.collect_params(), 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6, 'wd':self.weight_decay})
+            bert_params.update(model.lab_decoder.collect_params())
+            
+        gen_trainer = gluon.Trainer(bert_params, self.optimizer,
+                                    {'learning_rate': self.gen_lr, 'epsilon': 1e-6, 'wd':self.weight_decay})
+        var_params = {**model.latent_dist.collect_params(), **model.decoder.collect_params()}
+        dec_trainer = gluon.Trainer(var_params, 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
 
         # Do not apply weight decay on LayerNorm and bias terms
+        all_model_params = model.collect_params()
+        
         for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
             v.wd_mult = 0.0
 
-        for p in model.encoder.collect_params().values():
-            if p.grad_req != 'null':
-                differentiable_params.append(p)
+        params = [p for p in all_model_params.values() if p.grad_req != 'null']
 
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         v_res = None
         for epoch_id in range(self.epochs):
+            all_model_params.zero_grad()
+            
             step_loss = 0
             step_recon_ls = 0
             step_kl_ls = 0
@@ -1165,14 +1168,10 @@ class SeqBowEstimator(BaseEstimator):
                               valid_length.astype('float32').as_in_context(self.ctx),
                               output_vocab.as_in_context(self.ctx), labels.as_in_context(self.ctx))
                     ls = ls.mean()
-                ls.backward()
-                grads = [p.grad(self.ctx) for p in differentiable_params]
-                gluon.utils.clip_global_norm(grads, 1)
-                lat_trainer.step(1)
-                dec_trainer.step(1) # update decoder trainer associated weights
-                gen_trainer.step(1) # step of 1 since we averaged loss over batch
-                if lab_trainer:
-                    lab_trainer.step(1)
+                    ls.backward()
+                nlp.utils.clip_grad_global_norm(params, 1)
+                dec_trainer.update(1)
+                gen_trainer.update(1) # step of 1 since we averaged loss over batch
                 step_loss += ls.asscalar()
                 step_recon_ls += recon_ls.mean().asscalar()
                 step_kl_ls += kl_ls.mean().asscalar()
@@ -1191,6 +1190,8 @@ class SeqBowEstimator(BaseEstimator):
                     step_lab_ls = 0
                 if self.max_batches > 0 and step_num >= self.max_batches:
                     break
+                
+            mx.nd.waitall()
             if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
                 v_res  = self.validate(model, bow_train, bow_val, val_y, dataloader_val)
                 sc_obj = self._get_objective_from_validation_result(v_res)

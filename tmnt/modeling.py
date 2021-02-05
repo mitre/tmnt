@@ -707,11 +707,12 @@ class BertBowVED(Block):
 
 class LabeledBertBowVED(BertBowVED):
 
-    def __init__(self, n_labels, gamma, *args, multilabel=False, **kwargs):
+    def __init__(self, n_labels, gamma, *args, igamma=1.0, multilabel=False, **kwargs):
         super(LabeledBertBowVED, self).__init__(*args, **kwargs)
         self.multilabel = multilabel
         self.n_labels = n_labels
         self.gamma    = gamma
+        self.igamma   = igamma
         with self.name_scope():
             self.lab_decoder = gluon.nn.Dense(units=self.n_labels, activation=None, use_bias=True)
             #self.lab_dr = gluon.nn.Dropout(0.0)
@@ -750,5 +751,5 @@ class LabeledBertBowVED(BertBowVED):
         KL_loss = ( KL * self.kld_wt )
         loss = recon_loss + KL_loss
         ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
-        iii_loss = ii_loss + lab_loss * self.gamma
+        iii_loss = ii_loss * self.igamma + lab_loss * self.gamma
         return iii_loss, recon_loss, KL_loss, redundancy_loss, y, lab_loss
