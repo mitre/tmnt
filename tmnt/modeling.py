@@ -753,3 +753,41 @@ class LabeledBertBowVED(BertBowVED):
         ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
         iii_loss = ii_loss * self.igamma + lab_loss * self.gamma
         return iii_loss, recon_loss, KL_loss, redundancy_loss, y, lab_loss
+
+
+class LabeledBert(Block):
+        def __init__(self,
+                 bert,
+                 num_classes=2,
+                 dropout=0.0,
+                 prefix=None,
+                 params=None):
+        super(BERTClassifier, self).__init__(prefix=prefix, params=params)
+        self.bert = bert
+        with self.name_scope():
+            self.classifier = nn.HybridSequential(prefix=prefix)
+            if dropout:
+                self.classifier.add(nn.Dropout(rate=dropout))
+            self.classifier.add(nn.Dense(units=num_classes))
+
+    def forward(self, inputs, token_types, valid_length=None):  # pylint: disable=arguments-differ
+        """Generate the unnormalized score for the given the input sequences.
+
+        Parameters
+        ----------
+        inputs : NDArray, shape (batch_size, seq_length)
+            Input words for the sequences.
+        token_types : NDArray, shape (batch_size, seq_length)
+            Token types for the sequences, used to indicate whether the word belongs to the
+            first sentence or the second one.
+        valid_length : NDArray or None, shape (batch_size)
+            Valid length of the sequence. This is used to mask the padded tokens.
+
+        Returns
+        -------
+        outputs : NDArray
+            Shape (batch_size, num_classes)
+        """
+        _, pooler_out = self.bert(inputs, token_types, valid_length)
+        return self.classifier(pooler_out)
+

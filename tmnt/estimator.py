@@ -1267,6 +1267,164 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
         return v_res
 
 
+class FullyLabeldSeqEstimator(SeqBowEstimator):
+
+    def __init__(self, bert_base, n_labels, *args, multilabel=False, **kwargs):
+        super(LabeledSeqBowEstimator, self).__init__(*args, **kwargs)
+        self.bert_base = bert_base
+        self.multilabel = multilabel
+        self.n_labels = n_labels
+        self.metric = mx.metric.Accuracy()
+
+
+    @classmethod
+    def from_config(cls, n_labels, gamma, *args, **kwargs):
+        est = super().from_config(*args, **kwargs)
+        est.n_labels = n_labels
+        est.gamma    = gamma
+        return est
+
+    def _get_model(self):
+        model = LabeledBert(self.bert_base, num_classes=self.n_labels)
+        return model
+
+    def fit_with_validation(train_data, dev_data):
+        """Training function."""
+        model = self._get_model()
+
+        all_model_params = model.collect_params()
+        optimizer_params = {'learning_rate': lr, 'epsilon': epsilon, 'wd': 0.01}
+        try:
+            trainer = gluon.Trainer(all_model_params, self.optimizer,
+                                    optimizer_params, update_on_kvstore=False)
+        except ValueError as e:
+            print(e)
+            warnings.warn(
+                'AdamW optimizer is not found. Please consider upgrading to '
+                'mxnet>=1.5.0. Now the original Adam optimizer is used instead.')
+            trainer = gluon.Trainer(all_model_params, 'adam',
+                                    optimizer_params, update_on_kvstore=False)
+        #if args.dtype == 'float16':
+        #    amp.init_trainer(trainer)
+
+        step_size = batch_size * accumulate if accumulate else batch_size
+        num_train_steps = int(num_train_examples / step_size * self.epochs)
+        warmup_ratio = self.warmup_ratio
+        num_warmup_steps = int(num_train_steps * warmup_ratio)
+        step_num = 0
+
+        # Do not apply weight decay on LayerNorm and bias terms
+        for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
+            v.wd_mult = 0.0
+        # Collect differentiable parameters
+        params = [p for p in all_model_params.values() if p.grad_req != 'null']
+
+        # Set grad_req if gradient accumulation is required
+        if accumulate and accumulate > 1:
+            for p in params:
+                p.grad_req = 'add'
+        # track best eval score
+        metric_history = []
+
+        tic = time.time()
+        for epoch_id in range(self.epochs):
+            if True: # not only_inference:
+                step_loss = 0
+                tic = time.time()
+                all_model_params.zero_grad()
+
+                for batch_id, seqs in enumerate(train_data):
+                    # learning rate schedule
+                    if step_num < num_warmup_steps:
+                        new_lr = lr * step_num / num_warmup_steps
+                    else:
+                        non_warmup_steps = step_num - num_warmup_steps
+                        offset = non_warmup_steps / (num_train_steps - num_warmup_steps)
+                        new_lr = lr - offset * lr
+                    trainer.set_learning_rate(new_lr)
+
+                    # forward and backward
+                    with mx.autograd.record():
+                        input_ids, valid_length, type_ids, label = seqs
+                        out = model(
+                            input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
+                            valid_length.astype('float32').as_in_context(ctx))
+                        ls = loss_function(out, label.as_in_context(ctx)).mean()
+                        #if args.dtype == 'float16':
+                        #    with amp.scale_loss(ls, trainer) as scaled_loss:
+                        #        mx.autograd.backward(scaled_loss)
+                        #else:
+                        ls.backward()
+
+                    # update
+                    if not accumulate or (batch_id + 1) % accumulate == 0:
+                        trainer.allreduce_grads()
+                        nlp.utils.clip_grad_global_norm(params, 1)
+                        trainer.update(accumulate if accumulate else 1)
+                        step_num += 1
+                        if accumulate and accumulate > 1:
+                            # set grad to zero for gradient accumulation
+                            all_model_params.zero_grad()
+
+                    step_loss += ls.asscalar()
+                    metric.update(labels=[label], preds=[out])
+                    if (batch_id + 1) % (self.log_interval) == 0:
+                        log_train(batch_id, len(train_data), metric, step_loss, args.log_interval,
+                                  epoch_id, trainer.learning_rate)
+                        step_loss = 0
+                mx.nd.waitall()
+
+            # inference on dev data
+            metric_nm, metric_val = evaluate(dev_data, metric, 'BASE')
+            metric_history.append((epoch_id, metric_nm, metric_val))
+
+            if False: # not only_inference
+                # save params
+                ckpt_name = 'model_bert_{0}_{1}.params'.format('classify_jsonl', epoch_id)
+                params_saved = os.path.join(output_dir, ckpt_name)
+
+                nlp.utils.save_parameters(model, params_saved)
+                logging.info('params saved in: %s', params_saved)
+                toc = time.time()
+                logging.info('Time cost=%.2fs', toc - tic)
+                tic = toc
+
+        if False: # not only_inference:
+            # we choose the best model based on metric[0],
+            # assuming higher score stands for better model quality
+            metric_history.sort(key=lambda x: x[2][0], reverse=True)
+            epoch_id, metric_nm, metric_val = metric_history[0]
+            ckpt_name = 'model_bert_{0}_{1}.params'.format('classify_jsonl', epoch_id)
+            params_saved = os.path.join(output_dir, ckpt_name)
+            nlp.utils.load_parameters(model, params_saved)
+            metric_str = 'Best model at epoch {}. Validation metrics:'.format(epoch_id)
+            metric_str += ','.join([i + ':%.4f' for i in metric_nm])
+            logging.info(metric_str, *metric_val)
+
+
+
+    def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
+        v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
+        tot_correct = 0
+        tot = 0
+        bs = min(bow_val_X.shape[0], self.batch_size)
+        num_std_batches = bow_val_X.shape[0] // bs
+        for i, seqs in enumerate(dataloader):
+            if i < num_std_batches - 1:
+                input_ids, valid_length, type_ids, output_vocab, labels = seqs
+                predictions = self.model.predict(input_ids.as_in_context(self.ctx),
+                                                 type_ids.as_in_context(self.ctx),
+                                                 valid_length.astype('float32').as_in_context(self.ctx))
+                labels = labels.as_in_context(self.ctx)
+                correct = mx.nd.argmax(predictions, axis=1) == labels.squeeze()
+                tot_correct += mx.nd.sum(correct).asscalar()
+                tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
+        acc = float(tot_correct) / float(tot)
+        v_res['accuracy'] = acc
+        return v_res
+
+
+
 class DeepAveragingBowEstimator(BaseEstimator):
 
     def __init__(self, vocabulary, n_labels, gamma, emb_dim, emb_dr, seq_length, *args, **kwargs):
