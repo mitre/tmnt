@@ -11,7 +11,8 @@ import os
 import numpy as np
 import gluonnlp as nlp
 import logging
-from mxnet.gluon.block import HybridBlock, Block
+from mxnet.gluon import HybridBlock, Block
+from mxnet.gluon import nn
 
 from tmnt.distribution import LogisticGaussianDistribution
 from tmnt.distribution import GaussianDistribution
@@ -754,15 +755,15 @@ class LabeledBertBowVED(BertBowVED):
         iii_loss = ii_loss * self.igamma + lab_loss * self.gamma
         return iii_loss, recon_loss, KL_loss, redundancy_loss, y, lab_loss
 
-
+    
 class LabeledBert(Block):
-        def __init__(self,
+    def __init__(self,
                  bert,
                  num_classes=2,
                  dropout=0.0,
                  prefix=None,
                  params=None):
-        super(BERTClassifier, self).__init__(prefix=prefix, params=params)
+        super(LabeledBert, self).__init__(prefix=prefix, params=params)
         self.bert = bert
         with self.name_scope():
             self.classifier = nn.HybridSequential(prefix=prefix)

@@ -22,7 +22,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, LabeledBertBowVED, DeepAveragingVAEModel
+from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, LabeledBertBowVED, DeepAveragingVAEModel, LabeledBert
 from tmnt.eval_npmi import EvaluateNPMI
 import autogluon.core as ag
 
@@ -1267,14 +1267,16 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
         return v_res
 
 
-class FullyLabeldSeqEstimator(SeqBowEstimator):
+class FullyLabeledSeqEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, n_labels, *args, multilabel=False, **kwargs):
-        super(LabeledSeqBowEstimator, self).__init__(*args, **kwargs)
+    def __init__(self, bert_base, n_labels, *args, log_interval=5, warmup_ratio=0.1, multilabel=False, **kwargs):
+        super(FullyLabeledSeqEstimator, self).__init__(*args, **kwargs)
         self.bert_base = bert_base
         self.multilabel = multilabel
         self.n_labels = n_labels
         self.metric = mx.metric.Accuracy()
+        self.warmup_ratio = warmup_ratio
+        self.log_interval = log_interval
 
 
     @classmethod
@@ -1286,14 +1288,30 @@ class FullyLabeldSeqEstimator(SeqBowEstimator):
 
     def _get_model(self):
         model = LabeledBert(self.bert_base, num_classes=self.n_labels)
+        model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
         return model
 
-    def fit_with_validation(train_data, dev_data):
+    def log_train(self, batch_id, batch_num, metric, step_loss, log_interval, epoch_id, learning_rate):
+        """Generate and print out the log message for training. """
+        metric_nm, metric_val = metric.get()
+        if not isinstance(metric_nm, list):
+            metric_nm, metric_val = [metric_nm], [metric_val]
+
+        #train_str = '[Epoch %d Batch %d/%d] loss=%.4f, lr=%.7f, metrics:' + \
+        #            ','.join([i + ':%.4f' for i in metric_nm])
+        print("Epoch {} Batch {}/{} loss={}, lr={}, metrics: {}"
+              .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, learning_rate, *metric_val))
+        #logging.info(train_str, epoch_id + 1, batch_id + 1, batch_num,
+        #             step_loss / log_interval, learning_rate, *metric_val)
+
+
+    def fit_with_validation(self, train_data, dev_data, num_train_examples):
         """Training function."""
         model = self._get_model()
+        accumulate = False
 
         all_model_params = model.collect_params()
-        optimizer_params = {'learning_rate': lr, 'epsilon': epsilon, 'wd': 0.01}
+        optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.01}
         try:
             trainer = gluon.Trainer(all_model_params, self.optimizer,
                                     optimizer_params, update_on_kvstore=False)
@@ -1307,7 +1325,7 @@ class FullyLabeldSeqEstimator(SeqBowEstimator):
         #if args.dtype == 'float16':
         #    amp.init_trainer(trainer)
 
-        step_size = batch_size * accumulate if accumulate else batch_size
+        step_size = self.batch_size * accumulate if accumulate else self.batch_size
         num_train_steps = int(num_train_examples / step_size * self.epochs)
         warmup_ratio = self.warmup_ratio
         num_warmup_steps = int(num_train_steps * warmup_ratio)
@@ -1326,6 +1344,8 @@ class FullyLabeldSeqEstimator(SeqBowEstimator):
         # track best eval score
         metric_history = []
 
+        loss_function = gluon.loss.SoftmaxCELoss()
+
         tic = time.time()
         for epoch_id in range(self.epochs):
             if True: # not only_inference:
@@ -1336,20 +1356,20 @@ class FullyLabeldSeqEstimator(SeqBowEstimator):
                 for batch_id, seqs in enumerate(train_data):
                     # learning rate schedule
                     if step_num < num_warmup_steps:
-                        new_lr = lr * step_num / num_warmup_steps
+                        new_lr = self.lr * step_num / num_warmup_steps
                     else:
                         non_warmup_steps = step_num - num_warmup_steps
                         offset = non_warmup_steps / (num_train_steps - num_warmup_steps)
-                        new_lr = lr - offset * lr
+                        new_lr = self.lr - offset * self.lr
                     trainer.set_learning_rate(new_lr)
 
                     # forward and backward
                     with mx.autograd.record():
                         input_ids, valid_length, type_ids, label = seqs
                         out = model(
-                            input_ids.as_in_context(ctx), type_ids.as_in_context(ctx),
-                            valid_length.astype('float32').as_in_context(ctx))
-                        ls = loss_function(out, label.as_in_context(ctx)).mean()
+                            input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+                            valid_length.astype('float32').as_in_context(self.ctx))
+                        ls = loss_function(out, label.as_in_context(self.ctx)).mean()
                         #if args.dtype == 'float16':
                         #    with amp.scale_loss(ls, trainer) as scaled_loss:
                         #        mx.autograd.backward(scaled_loss)
@@ -1367,16 +1387,16 @@ class FullyLabeldSeqEstimator(SeqBowEstimator):
                             all_model_params.zero_grad()
 
                     step_loss += ls.asscalar()
-                    metric.update(labels=[label], preds=[out])
+                    self.metric.update(labels=[label], preds=[out])
                     if (batch_id + 1) % (self.log_interval) == 0:
-                        log_train(batch_id, len(train_data), metric, step_loss, args.log_interval,
+                        self.log_train(batch_id, len(train_data), self.metric, step_loss, self.log_interval,
                                   epoch_id, trainer.learning_rate)
                         step_loss = 0
                 mx.nd.waitall()
 
             # inference on dev data
-            metric_nm, metric_val = evaluate(dev_data, metric, 'BASE')
-            metric_history.append((epoch_id, metric_nm, metric_val))
+            #metric_nm, metric_val = evaluate(dev_data, metric, 'BASE')
+            #metric_history.append((epoch_id, metric_nm, metric_val))
 
             if False: # not only_inference
                 # save params
