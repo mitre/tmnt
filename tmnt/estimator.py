@@ -1399,7 +1399,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                 mx.nd.waitall()
 
             # inference on dev data
-            vres, metric_nm, metric_val = self.validate(dev_data, metric, 'BASE')
+            vres, metric_nm, metric_val = self.validate(model, dev_data)
             metric_history.append((epoch_id, metric_nm, metric_val))
 
             if False: # not only_inference
@@ -1426,9 +1426,9 @@ class FullyLabeledSeqEstimator(BaseEstimator):
             logging.info(metric_str, *metric_val)
 
 
-    def validate(self, model, dataloader, metric):
+    def validate(self, model, dataloader):
         #v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
-        metric.reset()
+        self.metric.reset()
         step_loss = 0
         tic = time.time()
         for batch_id, seqs in enumerate(loader_dev):
