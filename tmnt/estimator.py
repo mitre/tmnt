@@ -1438,11 +1438,11 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                 valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
             ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
             step_loss += ls.asscalar()
-            metric.update([label], [out])
+            self.metric.update([label], [out])
             if (batch_id + 1) % (self.log_interval) == 0:
-                self.log_eval(batch_id, len(dataloader), metric, step_loss, self.log_interval)
+                self.log_eval(batch_id, len(dataloader), self.metric, step_loss, self.log_interval)
                 step_loss = 0
-        metric_nm, metric_val = metric.get()
+        metric_nm, metric_val = self.metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
         metric_str = 'validation metrics:' + ','.join([i + ':%.4f' for i in metric_nm])
