@@ -1289,6 +1289,8 @@ class FullyLabeledSeqEstimator(BaseEstimator):
     def _get_model(self):
         model = LabeledBert(self.bert_base, num_classes=self.n_labels)
         model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
+        model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
+        #model.initialize_bias_terms(self.wd_freqs) ### XXX - TODO
         return model
 
     def log_train(self, batch_id, batch_num, metric, step_loss, log_interval, epoch_id, learning_rate):
@@ -1365,16 +1367,17 @@ class FullyLabeledSeqEstimator(BaseEstimator):
 
                     # forward and backward
                     with mx.autograd.record():
-                        input_ids, valid_length, type_ids, label = seqs
-                        out = model(
+                        input_ids, valid_length, type_ids, bow, label = seqs
+                        rec_ls, out = model(
                             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-                            valid_length.astype('float32').as_in_context(self.ctx))
+                            valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
                         ls = loss_function(out, label.as_in_context(self.ctx)).mean()
+                        total_ls = ls + 0.000001 * rec_ls.mean()
                         #if args.dtype == 'float16':
                         #    with amp.scale_loss(ls, trainer) as scaled_loss:
                         #        mx.autograd.backward(scaled_loss)
                         #else:
-                        ls.backward()
+                        total_ls.backward()
 
                     # update
                     if not accumulate or (batch_id + 1) % accumulate == 0:

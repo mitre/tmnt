@@ -607,7 +607,6 @@ class BertBowVED(Block):
                 emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
                 emb_norm = emb / emb_norm_val
                 self.embedding.collect_params().setattr('grad_req', 'null')
-                                                
         if wd_freqs is not None:
             freq_nd = wd_freqs + 1
             total = freq_nd.sum()
@@ -761,34 +760,34 @@ class LabeledBert(Block):
                  bert,
                  num_classes=2,
                  dropout=0.0,
+                 bow_vocab_size=2000,
                  prefix=None,
                  params=None):
         super(LabeledBert, self).__init__(prefix=prefix, params=params)
         self.bert = bert
         with self.name_scope():
             self.classifier = nn.HybridSequential(prefix=prefix)
+            self.decoder = nn.Dense(units=bow_vocab_size)
             if dropout:
                 self.classifier.add(nn.Dropout(rate=dropout))
             self.classifier.add(nn.Dense(units=num_classes))
 
-    def forward(self, inputs, token_types, valid_length=None):  # pylint: disable=arguments-differ
-        """Generate the unnormalized score for the given the input sequences.
+    def initialize_bias_terms(self, wd_freqs):
+        if wd_freqs is not None:
+            freq_nd = wd_freqs + 1
+            total = freq_nd.sum()
+            log_freq = freq_nd.log() - freq_nd.sum().log()
+            bias_param = self.decoder.collect_params().get('bias')
+            bias_param.set_data(log_freq)
+            bias_param.grad_req = 'null'
+            self.out_bias = bias_param.data()
 
-        Parameters
-        ----------
-        inputs : NDArray, shape (batch_size, seq_length)
-            Input words for the sequences.
-        token_types : NDArray, shape (batch_size, seq_length)
-            Token types for the sequences, used to indicate whether the word belongs to the
-            first sentence or the second one.
-        valid_length : NDArray or None, shape (batch_size)
-            Valid length of the sequence. This is used to mask the padded tokens.
 
-        Returns
-        -------
-        outputs : NDArray
-            Shape (batch_size, num_classes)
-        """
+    def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
         _, pooler_out = self.bert(inputs, token_types, valid_length)
-        return self.classifier(pooler_out)
+        rec_loss = 0.0
+        if bow is not None:
+            y = mx.nd.softmax(self.decoder(pooler_out), axis=1)
+            rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12) )
+        return rec_loss, self.classifier(pooler_out)
 
