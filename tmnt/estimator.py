@@ -1277,6 +1277,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         self.metric = mx.metric.Accuracy()
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
+        self.loss_function = gluon.loss.SoftmaxCELoss()
 
     @classmethod
     def from_config(cls, n_labels, gamma, *args, **kwargs):
@@ -1346,9 +1347,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                 p.grad_req = 'add'
         # track best eval score
         metric_history = []
-
-        loss_function = gluon.loss.SoftmaxCELoss()
-
+        
         tic = time.time()
         for epoch_id in range(self.epochs):
             if True: # not only_inference:
@@ -1372,7 +1371,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                         rec_ls, out = model(
                             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
-                        ls = loss_function(out, label.as_in_context(self.ctx)).mean()
+                        ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
                         total_ls = ls # + 0.000001 * rec_ls.mean()
                         #if args.dtype == 'float16':
                         #    with amp.scale_loss(ls, trainer) as scaled_loss:
@@ -1437,7 +1436,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
             rec_ls, out = model(
                 input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                 valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
-            ls = loss_function(out, label.as_in_context(ctx)).mean()
+            ls = self.loss_function(out, label.as_in_context(ctx)).mean()
             step_loss += ls.asscalar()
             metric.update([label], [out])
             if (batch_id + 1) % (args.log_interval) == 0:
