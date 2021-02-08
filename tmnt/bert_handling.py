@@ -254,5 +254,5 @@ def get_bert_datasets(class_labels, train_file, dev_file, model_name, dataset, b
     bert_tokenizer = BERTTokenizer(vocabulary, lower=do_lower_case)
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
         bert_tokenizer, class_labels, train_file, dev_file, batch_size, dev_bs, max_len, pad)
-    return train_data, test_data, num_train_examples, bert
+    return train_data, dev_data, num_train_examples, bert
         
