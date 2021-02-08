@@ -1269,7 +1269,7 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
 
 class FullyLabeledSeqEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, n_labels, *args, log_interval=5, warmup_ratio=0.1, multilabel=False, **kwargs):
+    def __init__(self, bert_base, n_labels, *args, log_interval=5, warmup_ratio=0.1, mix_val=0.0, multilabel=False, **kwargs):
         super(FullyLabeledSeqEstimator, self).__init__(*args, **kwargs)
         self.bert_base = bert_base
         self.multilabel = multilabel
@@ -1278,6 +1278,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
         self.loss_function = gluon.loss.SoftmaxCELoss()
+        self.mix_val = mix_val
 
     @classmethod
     def from_config(cls, n_labels, gamma, *args, **kwargs):
@@ -1372,7 +1373,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
                         ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
-                        total_ls = ls # + 0.000001 * rec_ls.mean()
+                        total_ls = ls + self.mix_val * rec_ls.mean()
                         #if args.dtype == 'float16':
                         #    with amp.scale_loss(ls, trainer) as scaled_loss:
                         #        mx.autograd.backward(scaled_loss)
@@ -1447,7 +1448,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
         metric_str = 'validation metrics:' + ','.join([i + ':%.4f' for i in metric_nm])
-        logging.info(metric_str, *metric_val)
+        self._output_status("Validation metric: {:.6}".format(metric_val[0]))
         v_res['accuracy'] = metric_val
         return v_res, metric_nm, metric_val
 
