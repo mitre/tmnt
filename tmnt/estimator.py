@@ -1294,13 +1294,13 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         #model.initialize_bias_terms(self.wd_freqs) ### XXX - TODO
         return model
 
-    def log_train(self, batch_id, batch_num, metric, step_loss, log_interval, epoch_id, learning_rate):
+    def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, log_interval, epoch_id, learning_rate):
         """Generate and print out the log message for training. """
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Epoch {} Batch {}/{} loss={}, lr={:.10f}, metrics: {:.10f}"
-              .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, learning_rate, *metric_val))
+        self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), lr={:.10f}, metrics: {:.10f}"
+              .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, learning_rate, *metric_val))
 
     def log_eval(self, batch_id, batch_num, metric, step_loss, log_interval):
         metric_nm, metric_val = metric.get()
@@ -1353,6 +1353,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         for epoch_id in range(self.epochs):
             if True: # not only_inference:
                 step_loss = 0
+                rec_loss  = 0
                 tic = time.time()
                 all_model_params.zero_grad()
 
@@ -1374,7 +1375,6 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
                         ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
                         total_ls = ls + self.mix_val * rec_ls.mean()
-                        self._output_status("rec_ls = {}, classification loss = {}".format(rec_ls, total_ls))
                         #if args.dtype == 'float16':
                         #    with amp.scale_loss(ls, trainer) as scaled_loss:
                         #        mx.autograd.backward(scaled_loss)
@@ -1392,9 +1392,10 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                             all_model_params.zero_grad()
 
                     step_loss += ls.asscalar()
+                    rec_loss  += rec_ls.asscalar()
                     self.metric.update(labels=[label], preds=[out])
                     if (batch_id + 1) % (self.log_interval) == 0:
-                        self.log_train(batch_id, len(train_data), self.metric, step_loss, self.log_interval,
+                        self.log_train(batch_id, len(train_data), self.metric, step_loss, rec_loss, self.log_interval,
                                   epoch_id, trainer.learning_rate)
                         step_loss = 0
                 mx.nd.waitall()
