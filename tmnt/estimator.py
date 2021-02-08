@@ -1428,6 +1428,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
 
     def validate(self, model, dataloader):
         #v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
+        v_res = {}
         self.metric.reset()
         step_loss = 0
         tic = time.time()
@@ -1447,6 +1448,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
             metric_nm, metric_val = [metric_nm], [metric_val]
         metric_str = 'validation metrics:' + ','.join([i + ':%.4f' for i in metric_nm])
         logging.info(metric_str, *metric_val)
+        v_res['accuracy'] = metric_val
         return v_res, metric_nm, metric_val
 
 
