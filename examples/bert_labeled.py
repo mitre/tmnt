@@ -24,7 +24,7 @@ tr_dataset, dev_dataset, num_examples, bert_base = get_bert_datasets(class_label
 
 print("num_examples = {}".format(num_examples))
 
-estimator = FullyLabeledSeqEstimator(bert_base, len(class_labels), ctx=mx.cpu(), log_interval=1)
+estimator = FullyLabeledSeqEstimator(bert_base, len(class_labels), optimizer='bertadam', batch_size=batch_size, ctx=mx.cpu(), log_interval=10)
 
 estimator.fit_with_validation(tr_dataset, dev_dataset, num_examples)
 

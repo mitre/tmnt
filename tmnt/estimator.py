@@ -1297,7 +1297,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Epoch {} Batch {}/{} loss={}, lr={}, metrics: {}"
+        self._output_status("Epoch {} Batch {}/{} loss={}, lr={:.4f}, metrics: {:.4f}"
               .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, learning_rate, *metric_val))
 
 
@@ -1307,7 +1307,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         accumulate = False
 
         all_model_params = model.collect_params()
-        optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.01}
+        optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.02}
         try:
             trainer = gluon.Trainer(all_model_params, self.optimizer,
                                     optimizer_params, update_on_kvstore=False)
