@@ -1278,7 +1278,6 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
 
-
     @classmethod
     def from_config(cls, n_labels, gamma, *args, **kwargs):
         est = super().from_config(*args, **kwargs)
@@ -1298,13 +1297,8 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
-
-        #train_str = '[Epoch %d Batch %d/%d] loss=%.4f, lr=%.7f, metrics:' + \
-        #            ','.join([i + ':%.4f' for i in metric_nm])
-        print("Epoch {} Batch {}/{} loss={}, lr={}, metrics: {}"
+        self._output_status("Epoch {} Batch {}/{} loss={}, lr={}, metrics: {}"
               .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, learning_rate, *metric_val))
-        #logging.info(train_str, epoch_id + 1, batch_id + 1, batch_num,
-        #             step_loss / log_interval, learning_rate, *metric_val)
 
 
     def fit_with_validation(self, train_data, dev_data, num_train_examples):
@@ -1372,7 +1366,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
                         ls = loss_function(out, label.as_in_context(self.ctx)).mean()
-                        total_ls = ls + 0.000001 * rec_ls.mean()
+                        total_ls = ls # + 0.000001 * rec_ls.mean()
                         #if args.dtype == 'float16':
                         #    with amp.scale_loss(ls, trainer) as scaled_loss:
                         #        mx.autograd.backward(scaled_loss)
@@ -1383,7 +1377,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                     if not accumulate or (batch_id + 1) % accumulate == 0:
                         trainer.allreduce_grads()
                         nlp.utils.clip_grad_global_norm(params, 1)
-                        trainer.update(accumulate if accumulate else 1)
+                        trainer.update(accumulate if accumulate else 1, ignore_stale_grad=True)
                         step_num += 1
                         if accumulate and accumulate > 1:
                             # set grad to zero for gradient accumulation
@@ -1425,25 +1419,29 @@ class FullyLabeledSeqEstimator(BaseEstimator):
             logging.info(metric_str, *metric_val)
 
 
+    def validate(self, model, dataloader, metric):
+        #v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
+        metric.reset()
+        step_loss = 0
+        tic = time.time()
+        for batch_id, seqs in enumerate(loader_dev):
+            input_ids, valid_len, type_ids, bow, label = seqs
+            out = model(
+                input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+                valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+            ls = loss_function(out, label.as_in_context(ctx)).mean()
+            step_loss += ls.asscalar()
+            metric.update([label], [out])
+            if (batch_id + 1) % (args.log_interval) == 0:
+                log_eval(batch_id, len(loader_dev), metric, step_loss, args.log_interval)
+                step_loss = 0
 
-    def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
-        v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
-        tot_correct = 0
-        tot = 0
-        bs = min(bow_val_X.shape[0], self.batch_size)
-        num_std_batches = bow_val_X.shape[0] // bs
-        for i, seqs in enumerate(dataloader):
-            if i < num_std_batches - 1:
-                input_ids, valid_length, type_ids, output_vocab, labels = seqs
-                predictions = self.model.predict(input_ids.as_in_context(self.ctx),
-                                                 type_ids.as_in_context(self.ctx),
-                                                 valid_length.astype('float32').as_in_context(self.ctx))
-                labels = labels.as_in_context(self.ctx)
-                correct = mx.nd.argmax(predictions, axis=1) == labels.squeeze()
-                tot_correct += mx.nd.sum(correct).asscalar()
-                tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
-        acc = float(tot_correct) / float(tot)
-        v_res['accuracy'] = acc
+        metric_nm, metric_val = metric.get()
+        if not isinstance(metric_nm, list):
+            metric_nm, metric_val = [metric_nm], [metric_val]
+        metric_str = 'validation metrics:' + ','.join([i + ':%.4f' for i in metric_nm])
+        logging.info(metric_str, *metric_val)
+
         return v_res
 
 
