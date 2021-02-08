@@ -1431,7 +1431,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         self.metric.reset()
         step_loss = 0
         tic = time.time()
-        for batch_id, seqs in enumerate(loader_dev):
+        for batch_id, seqs in enumerate(dataloader):
             input_ids, valid_len, type_ids, bow, label = seqs
             rec_ls, out = model(
                 input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
@@ -1440,7 +1440,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
             step_loss += ls.asscalar()
             metric.update([label], [out])
             if (batch_id + 1) % (args.log_interval) == 0:
-                self.log_eval(batch_id, len(loader_dev), metric, step_loss, args.log_interval)
+                self.log_eval(batch_id, len(dataloader), metric, step_loss, args.log_interval)
                 step_loss = 0
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
