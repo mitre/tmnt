@@ -1297,14 +1297,14 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Epoch {} Batch {}/{} loss={}, lr={:%.4f}, metrics: {:%.4f}"
+        self._output_status("Epoch {} Batch {}/{} loss={}, lr={:.10f}, metrics: {:.10f}"
               .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, learning_rate, *metric_val))
 
     def log_eval(self, batch_id, batch_num, metric, step_loss, log_interval):
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Batch {}/{} loss={}, metrics: {:%.4f}"
+        self._output_status("Batch {}/{} loss={}, metrics: {:.10f}"
               .format(batch_id+1, batch_num, step_loss/log_interval, *metric_val))
 
 
