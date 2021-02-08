@@ -225,7 +225,7 @@ def preprocess_data(tokenizer, class_labels, train_json_file, dev_json_file, bat
             data_dev,
             batch_size=dev_batch_size,
             num_workers=4,
-            shuffle=True,
+            shuffle=False,
             batchify_fn=batchify_fn)
 
     #test_json_file = os.path.join(input_dir, 'test.jsonl')

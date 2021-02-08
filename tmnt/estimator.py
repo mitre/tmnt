@@ -1399,8 +1399,9 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                 mx.nd.waitall()
 
             # inference on dev data
-            vres, metric_nm, metric_val = self.validate(model, dev_data)
-            metric_history.append((epoch_id, metric_nm, metric_val))
+            if dev_data is not None:
+                vres, metric_nm, metric_val = self.validate(model, dev_data)
+                metric_history.append((epoch_id, metric_nm, metric_val))
 
             if False: # not only_inference
                 # save params
