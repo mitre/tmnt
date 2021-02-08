@@ -1297,8 +1297,15 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Epoch {} Batch {}/{} loss={}, lr={:.4f}, metrics: {:.4f}"
+        self._output_status("Epoch {} Batch {}/{} loss={}, lr={:%.4f}, metrics: {:%.4f}"
               .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, learning_rate, *metric_val))
+
+    def log_eval(self, batch_id, batch_num, metric, step_loss, log_interval):
+        metric_nm, metric_val = metric.get()
+        if not isinstance(metric_nm, list):
+            metric_nm, metric_val = [metric_nm], [metric_val]
+        self._output_status("Batch {}/{} loss={}, metrics: {:%.4f}"
+              .format(batch_id+1, batch_num, step_loss/log_interval, *metric_val))
 
 
     def fit_with_validation(self, train_data, dev_data, num_train_examples):
@@ -1392,8 +1399,8 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                 mx.nd.waitall()
 
             # inference on dev data
-            #metric_nm, metric_val = evaluate(dev_data, metric, 'BASE')
-            #metric_history.append((epoch_id, metric_nm, metric_val))
+            vres, metric_nm, metric_val = self.validate(dev_data, metric, 'BASE')
+            metric_history.append((epoch_id, metric_nm, metric_val))
 
             if False: # not only_inference
                 # save params
@@ -1426,23 +1433,21 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         tic = time.time()
         for batch_id, seqs in enumerate(loader_dev):
             input_ids, valid_len, type_ids, bow, label = seqs
-            out = model(
+            rec_ls, out = model(
                 input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                 valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
             ls = loss_function(out, label.as_in_context(ctx)).mean()
             step_loss += ls.asscalar()
             metric.update([label], [out])
             if (batch_id + 1) % (args.log_interval) == 0:
-                log_eval(batch_id, len(loader_dev), metric, step_loss, args.log_interval)
+                self.log_eval(batch_id, len(loader_dev), metric, step_loss, args.log_interval)
                 step_loss = 0
-
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
         metric_str = 'validation metrics:' + ','.join([i + ':%.4f' for i in metric_nm])
         logging.info(metric_str, *metric_val)
-
-        return v_res
+        return v_res, metric_nm, metric_val
 
 
 
