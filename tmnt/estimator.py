@@ -1374,6 +1374,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
                         ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
                         total_ls = ls + self.mix_val * rec_ls.mean()
+                        self._output_status("rec_ls = {}, classification loss = {}".format(rec_ls, total_ls))
                         #if args.dtype == 'float16':
                         #    with amp.scale_loss(ls, trainer) as scaled_loss:
                         #        mx.autograd.backward(scaled_loss)
