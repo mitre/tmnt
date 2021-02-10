@@ -1298,7 +1298,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         model = LabeledBert(self.bert_base, num_classes=self.n_labels)
         model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
-        model.intermediate.initialize(init=mx.init.Xavier(), ctx=self.ctx)
+        model.intermediate.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
         #model.initialize_bias_terms(self.wd_freqs) ### XXX - TODO
         return model
 
