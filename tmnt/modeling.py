@@ -794,5 +794,5 @@ class LabeledBert(Block):
             y = mx.nd.softmax(self.decoder(enc), axis=1)
             rec_loss = -( bow * mx.nd.log(y+1e-12) )
             elbo = rec_loss # + KL_loss
-        return elbo, self.classifier(enc)
+        return elbo, self.classifier(pooler_out)
 
