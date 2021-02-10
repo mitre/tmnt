@@ -767,8 +767,8 @@ class LabeledBert(Block):
         self.bert = bert
         with self.name_scope():
             self.classifier = nn.HybridSequential(prefix=prefix)
-            self.decoder = nn.Dense(units=bow_vocab_size)
-            self.intermediate = nn.Dense(units=600, bias=False)
+            self.decoder = nn.Dense(units=bow_vocab_size, use_bias=True)
+            self.intermediate = nn.Dense(units=600, use_bias=False)
             if dropout:
                 self.classifier.add(nn.Dropout(rate=dropout))
             self.classifier.add(nn.Dense(units=num_classes))
