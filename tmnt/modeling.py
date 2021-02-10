@@ -768,6 +768,7 @@ class LabeledBert(Block):
         with self.name_scope():
             self.classifier = nn.HybridSequential(prefix=prefix)
             self.decoder = nn.Dense(units=bow_vocab_size)
+            self.intermediate = nn.Dense(units=20, activation='tanh')
             if dropout:
                 self.classifier.add(nn.Dropout(rate=dropout))
             self.classifier.add(nn.Dense(units=num_classes))
@@ -785,9 +786,13 @@ class LabeledBert(Block):
 
     def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
         _, pooler_out = self.bert(inputs, token_types, valid_length)
-        rec_loss = 0.0
+        enc = self.intermediate(pooler_out)
+        elbo = 0.0
         if bow is not None:
-            y = mx.nd.softmax(self.decoder(pooler_out), axis=1)
+            #z, KL = self.latent_dist(enc, self.batch_size)
+            #KL_loss = ( KL * self.kld_wt )
+            y = mx.nd.softmax(self.decoder(enc), axis=1)
             rec_loss = -( bow * mx.nd.log(y+1e-12) )
-        return rec_loss, self.classifier(pooler_out)
+            elbo = rec_loss # + KL_loss
+        return elbo, self.classifier(enc)
 
