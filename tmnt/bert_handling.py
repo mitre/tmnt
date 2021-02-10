@@ -18,7 +18,6 @@ import json
 import collections
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 
-
 from gluonnlp.data import BERTSentenceTransform
 
 class JsonlDataset(SimpleDataset):

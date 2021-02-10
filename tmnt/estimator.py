@@ -1269,7 +1269,13 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
 
 class FullyLabeledSeqEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, n_labels, *args, log_interval=5, warmup_ratio=0.1, mix_val=0.0, multilabel=False, **kwargs):
+    def __init__(self, bert_base, n_labels, *args,
+                 log_interval=5,
+                 warmup_ratio=0.1,
+                 mix_val=0.0,
+                 multilabel=False,
+                 decoder_lr = 0.01,
+                 **kwargs):
         super(FullyLabeledSeqEstimator, self).__init__(*args, **kwargs)
         self.bert_base = bert_base
         self.multilabel = multilabel
@@ -1279,6 +1285,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         self.log_interval = log_interval
         self.loss_function = gluon.loss.SoftmaxCELoss()
         self.mix_val = mix_val
+        self.decoder_lr = decoder_lr
 
     @classmethod
     def from_config(cls, n_labels, gamma, *args, **kwargs):
@@ -1317,16 +1324,19 @@ class FullyLabeledSeqEstimator(BaseEstimator):
 
         all_model_params = model.collect_params()
         optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.02}
+        non_decoder_params = {**model.bert.collect_params(), **model.classifier.collect_params()}
+        decoder_params     = model.decoder.collect_params()
         try:
-            trainer = gluon.Trainer(all_model_params, self.optimizer,
+            trainer = gluon.Trainer(non_decoder_params, self.optimizer,
                                     optimizer_params, update_on_kvstore=False)
         except ValueError as e:
             print(e)
             warnings.warn(
                 'AdamW optimizer is not found. Please consider upgrading to '
                 'mxnet>=1.5.0. Now the original Adam optimizer is used instead.')
-            trainer = gluon.Trainer(all_model_params, 'adam',
+            trainer = gluon.Trainer(non_decoder_params, 'adam',
                                     optimizer_params, update_on_kvstore=False)
+        dec_trainer = gluon.Trainer(decoder_params, 'adam', {'learning_rate': self.decoder_lr, 'epsilon': 1e-6, 'wd': 0.02})
         #if args.dtype == 'float16':
         #    amp.init_trainer(trainer)
 
@@ -1361,11 +1371,14 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                     # learning rate schedule
                     if step_num < num_warmup_steps:
                         new_lr = self.lr * step_num / num_warmup_steps
+                        dec_lr = self.decoder_lr * step_num / num_warmup_steps
                     else:
                         non_warmup_steps = step_num - num_warmup_steps
                         offset = non_warmup_steps / (num_train_steps - num_warmup_steps)
                         new_lr = self.lr - offset * self.lr
+                        dec_lr = self.decoder_lr - offset * self.decoder_lr
                     trainer.set_learning_rate(new_lr)
+                    dec_trainer.set_learning_rate(dec_lr)
 
                     # forward and backward
                     with mx.autograd.record():
@@ -1384,15 +1397,17 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                     # update
                     if not accumulate or (batch_id + 1) % accumulate == 0:
                         trainer.allreduce_grads()
+                        dec_trainer.allreduce_grads()
                         nlp.utils.clip_grad_global_norm(params, 1)
                         trainer.update(accumulate if accumulate else 1, ignore_stale_grad=True)
+                        dec_trainer.update(accumulate if accumulate else 1)
                         step_num += 1
                         if accumulate and accumulate > 1:
                             # set grad to zero for gradient accumulation
                             all_model_params.zero_grad()
 
                     step_loss += ls.asscalar()
-                    rec_loss  += rec_ls.asscalar()
+                    rec_loss  += rec_ls.mean().asscalar()
                     self.metric.update(labels=[label], preds=[out])
                     if (batch_id + 1) % (self.log_interval) == 0:
                         self.log_train(batch_id, len(train_data), self.metric, step_loss, rec_loss, self.log_interval,

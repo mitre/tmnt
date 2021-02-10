@@ -788,6 +788,6 @@ class LabeledBert(Block):
         rec_loss = 0.0
         if bow is not None:
             y = mx.nd.softmax(self.decoder(pooler_out), axis=1)
-            rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12) )
+            rec_loss = -( bow * mx.nd.log(y+1e-12) )
         return rec_loss, self.classifier(pooler_out)
 
