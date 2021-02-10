@@ -1325,8 +1325,8 @@ class FullyLabeledSeqEstimator(BaseEstimator):
 
         all_model_params = model.collect_params()
         optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.02}
-        non_decoder_params = {**model.bert.collect_params(), **model.classifier.collect_params(), **model.intermediate.collect_params()}
-        decoder_params     = model.decoder.collect_params()
+        non_decoder_params = {**model.bert.collect_params()}
+        decoder_params     = {**model.decoder.collect_params(), **model.classifier.collect_params(), **model.intermediate.collect_params()}
         try:
             trainer = gluon.Trainer(non_decoder_params, self.optimizer,
                                     optimizer_params, update_on_kvstore=False)
