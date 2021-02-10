@@ -768,7 +768,7 @@ class LabeledBert(Block):
         with self.name_scope():
             self.classifier = nn.HybridSequential(prefix=prefix)
             self.decoder = nn.Dense(units=bow_vocab_size)
-            self.intermediate = nn.Dense(units=20, activation='tanh')
+            self.intermediate = nn.Dense(units=20, activation='relu')
             if dropout:
                 self.classifier.add(nn.Dropout(rate=dropout))
             self.classifier.add(nn.Dense(units=num_classes))
@@ -794,5 +794,5 @@ class LabeledBert(Block):
             y = mx.nd.softmax(self.decoder(enc), axis=1)
             rec_loss = -( bow * mx.nd.log(y+1e-12) )
             elbo = rec_loss # + KL_loss
-        return elbo, self.classifier(pooler_out)
+        return elbo, self.classifier(enc)
 
