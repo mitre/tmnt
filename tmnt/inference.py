@@ -162,6 +162,7 @@ class BowVAEInferencer(BaseInferencer):
             data_to_iter = data_mat[:-last_batch_size]
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
+            covars = mx.nd.array(covars, dtype='float32')
             infer_iter = DataIterLoader(SparseMatrixDataIter(data_to_iter, covars, batch_size, last_batch_handle='discard', shuffle=False))
         else:
             infer_iter = DataIterLoader(mx.io.NDArrayIter(data_to_iter, covars,
