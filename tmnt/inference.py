@@ -147,7 +147,8 @@ class BowVAEInferencer(BaseInferencer):
         return self.encode_data(X, None, use_probs=use_probs)
 
     def encode_data(self, data_mat, labels, use_probs=False):
-        if isinstance(data_mat, scipy.sparse.csr.csr_matrix):
+        x_size = data_mat.shape[0] * data_mat.shape[1]
+        if x_size <= MAX_DESIGN_MATRIX and isinstance(data_mat, scipy.sparse.csr.csr_matrix):
             data_mat = mx.nd.sparse.csr_matrix(data_mat, dtype='float32')
         elif isinstance(data_mat, mx.nd.NDArray):
             data_mat = mx.nd.array(data_mat, dtype='float32')
@@ -159,7 +160,6 @@ class BowVAEInferencer(BaseInferencer):
             data_to_iter = data_mat 
         else:
             data_to_iter = data_mat[:-last_batch_size]
-        x_size = data_to_iter.shape[0] * data_to_iter.shape[1]
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
             infer_iter = DataIterLoader(SparseMatrixDataIter(data_to_iter, covars, batch_size, last_batch_handle='discard', shuffle=False))
