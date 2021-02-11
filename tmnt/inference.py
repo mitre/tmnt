@@ -13,7 +13,7 @@ import os
 import scipy
 import umap
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, BertBowVED
-from tmnt.data_loading import DataIterLoader, file_to_data
+from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
