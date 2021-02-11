@@ -132,7 +132,6 @@ class BowVAEInferencer(BaseInferencer):
         else:
             plt.savefig(f)
 
-
     def export_full_model_inference_details(self, sp_vec_file, ofile):
         d = self.get_pyldavis_details(sp_vec_file)
         with io.open(ofile, 'w') as fp:
@@ -162,7 +161,8 @@ class BowVAEInferencer(BaseInferencer):
             data_to_iter = data_mat[:-last_batch_size]
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
-            covars = mx.nd.array(covars, dtype='float32')
+            if covars is None:
+                covars = mx.nd.zeros(data_to_iter.shape[0])
             infer_iter = DataIterLoader(SparseMatrixDataIter(data_to_iter, covars, batch_size, last_batch_handle='discard', shuffle=False))
         else:
             infer_iter = DataIterLoader(mx.io.NDArrayIter(data_to_iter, covars,
@@ -181,14 +181,14 @@ class BowVAEInferencer(BaseInferencer):
             encodings.extend(encs)
         ## handle the last batch explicitly as NDArrayIter doesn't do that for us
         if last_batch_size > 0:
-            data = data_mat[-last_batch_size:].as_in_context(self.ctx)
+            last_data = mx.nd.sparse.csr_matrix(data_mat[-last_batch_size:], dtype='float32')
+            data = last_data.as_in_context(self.ctx)
             if self.covar_model and labels is not None:
                 labels = mx.nd.one_hot(mx.nd.array(labels[-last_batch_size:], dtype='int'), self.n_covars).as_in_context(self.ctx)
                 encs = self.model.encode_data_with_covariates(data, labels)
             else:
                 encs = self.model.encode_data(data)
             if use_probs:
-                #norm = mx.nd.norm(encs, axis=1, keepdims=True)
                 e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
                 encs = mx.nd.softmax(e1 ** 0.5)
             encodings.extend(encs)
