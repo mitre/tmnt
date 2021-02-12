@@ -1293,7 +1293,6 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         self.loss_function = gluon.loss.SoftmaxCELoss()
         self.mix_val = mix_val
         self.decoder_lr = decoder_lr
-        self.max_batches = max_batches
         self._bow_matrix = None
 
 
@@ -1452,8 +1451,6 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                                   epoch_id, trainer.learning_rate)
                         step_loss = 0
                         elbo_loss  = 0
-                    if batch_id > self.max_batches:
-                        break
                 mx.nd.waitall()
 
             # inference on dev data
