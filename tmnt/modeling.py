@@ -758,24 +758,34 @@ class LabeledBertBowVED(BertBowVED):
 class LabeledBert(Block):
     def __init__(self,
                  bert,
+                 latent_dist,
                  num_classes=2,
                  dropout=0.0,
                  bow_vocab_size=2000,
-                 prefix=None,
-                 params=None):
+                 n_latent=256, 
+                 kappa = 100.0,
+                 alpha = 1.0,
+                 batch_size=16, kld=0.1, wd_freqs=None,
+                 redundancy_reg_penalty=0.0,
+                 prefix=None, params=None):
         super(LabeledBert, self).__init__(prefix=prefix, params=params)
+        self.n_latent = n_latent
         self.bert = bert
+        self.latent_dist = latent_dist
+        self.kld_wt = kld
+        self.has_classifier = num_classes >= 2
+        self.bow_vocab_size = bow_vocab_size
         with self.name_scope():
-            self.classifier = nn.HybridSequential(prefix=prefix)
-            self.decoder = nn.Dense(units=bow_vocab_size, use_bias=True)
-            self.intermediate = nn.Dense(units=20, use_bias=False)
-            if dropout:
-                self.classifier.add(nn.Dropout(rate=dropout))
-            self.classifier.add(nn.Dense(units=num_classes))
+            self.decoder = nn.Dense(in_units=n_latent, units=bow_vocab_size, use_bias=True)
+            if self.has_classifier:
+                self.classifier = nn.HybridSequential(prefix=prefix)
+                if dropout:
+                    self.classifier.add(nn.Dropout(rate=dropout))
+                self.classifier.add(nn.Dense(units=num_classes))
 
     def initialize_bias_terms(self, wd_freqs):
         if wd_freqs is not None:
-            freq_nd = wd_freqs + 1
+            freq_nd = wd_freqs + 1 # simple smoothing
             total = freq_nd.sum()
             log_freq = freq_nd.log() - freq_nd.sum().log()
             bias_param = self.decoder.collect_params().get('bias')
@@ -785,14 +795,36 @@ class LabeledBert(Block):
 
 
     def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
-        _, pooler_out = self.bert(inputs, token_types, valid_length)
-        enc = self.intermediate(pooler_out)
+        _, enc = self.bert(inputs, token_types, valid_length)
         elbo = 0.0
         if bow is not None:
-            #z, KL = self.latent_dist(enc, self.batch_size)
-            #KL_loss = ( KL * self.kld_wt )
-            y = mx.nd.softmax(self.decoder(enc), axis=1)
-            rec_loss = -( bow * mx.nd.log(y+1e-12) )
-            elbo = rec_loss # + KL_loss
-        return elbo, self.classifier(enc)
+            bow = bow.squeeze()
+            z, KL = self.latent_dist(enc, inputs.shape[0])
+            KL_loss = (KL * self.kld_wt)
+            y = mx.nd.softmax(self.decoder(z), axis=1)
+            rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
+            elbo = rec_loss + KL_loss
+        classifier_outputs = self.classifier(enc) if self.has_classifier else None
+        return elbo, rec_loss, KL_loss, classifier_outputs
+
+    def get_top_k_terms(self, k, ctx=mx.cpu()):
+        """
+        Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
+        probability increases the most for a unit increase in a given topic score/probability
+        are those most associated with the topic. This is just the topic-term weights for a 
+        linear decoder - but code here will work with arbitrary decoder.
+        """
+        z = mx.nd.ones(shape=(1, self.n_latent), ctx=ctx)
+        jacobian = mx.nd.zeros(shape=(self.bow_vocab_size, self.n_latent), ctx=ctx)
+        z.attach_grad()        
+        for i in range(self.bow_vocab_size):
+            with mx.autograd.record():
+                y = self.decoder(z)
+                yi = y[0][i]
+            yi.backward()
+            jacobian[i] = z.grad
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
+        return sorted_j.asnumpy()
+
+
 
