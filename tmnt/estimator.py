@@ -1458,7 +1458,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
 
             # inference on dev data
             if dev_data is not None:
-                vres, metric_nm, metric_val = self.validate(model, dev_data)
+                v_res, metric_nm, metric_val = self.validate(model, dev_data)
                 metric_history.append((epoch_id, metric_nm, metric_val))
                 sc_obj = self._get_objective_from_validation_result(v_res)
                 if 'accuracy' in v_res:
