@@ -1488,7 +1488,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
 
     def _compute_coherence(self, model, k, test_data, log_terms=False):
         num_topics = model.n_latent
-        sorted_ids = model.get_top_k_terms(k)
+        sorted_ids = model.get_top_k_terms(k, ctx=self.ctx)
         num_topics = min(num_topics, sorted_ids.shape[-1])
         top_k_words_per_topic = [[ int(i) for i in list(sorted_ids[:k, t])] for t in range(num_topics)]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic)
