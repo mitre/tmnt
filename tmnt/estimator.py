@@ -1509,7 +1509,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
             
     
     def validate(self, model, dataloader):
-        bow_matrix = self._bow_matrix if self._bow_matrix else self._get_bow_matrix(dataloader, cache=True)
+        bow_matrix = self._bow_matrix if self._bow_matrix is not None else self._get_bow_matrix(dataloader, cache=True)
         num_words = bow_matrix.sum().asscalar()
         npmi, redundancy = self._compute_coherence(model, 10, bow_matrix, log_terms=True)
         self.metric.reset()
@@ -1549,7 +1549,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
             if not isinstance(metric_nm, list):
                 metric_nm, metric_val = [metric_nm], [metric_val]
             self._output_status("Validation metric: {:.6}".format(metric_val[0]))
-            v_res['accuracy'] = metric_val
+            v_res['accuracy'] = metric_val[0]
         return v_res, metric_nm, metric_val
 
 
