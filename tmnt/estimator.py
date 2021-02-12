@@ -1510,7 +1510,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
     
     def validate(self, model, dataloader):
         bow_matrix = self._bow_matrix if self._bow_matrix else self._get_bow_matrix(dataloader, cache=True)
-        num_words = bow_matrix.sum()
+        num_words = bow_matrix.sum().asscalar()
         npmi, redundancy = self._compute_coherence(model, 10, bow_matrix, log_terms=True)
         self.metric.reset()
         step_loss = 0
