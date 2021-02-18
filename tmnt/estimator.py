@@ -526,6 +526,7 @@ class BaseBowEstimator(BaseEstimator):
                 lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
                 self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
+            mx.nd.waitall()
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 v_res = self.validate(val_X, val_y)
                 sc_obj = self._get_objective_from_validation_result(v_res)
@@ -534,6 +535,7 @@ class BaseBowEstimator(BaseEstimator):
                                         .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
                     self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
                                   coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+        mx.nd.waitall()
         return sc_obj, v_res
 
                     
@@ -1231,6 +1233,40 @@ class LabeledSeqBowEstimator(SeqBowEstimator):
         est.gamma    = gamma
         return est
 
+    def write_model(self, model_dir, suf=''):
+        pfile = os.path.join(model_dir, ('model.params' + suf))
+        conf_file = os.path.join(model_dir, ('model.config' + suf))
+        vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
+        self.model.save_parameters(pfile)
+        config = self._get_config()
+        specs = json.dumps(config, sort_keys=True, indent=4)
+        with open(conf_file, 'w') as f:
+            f.write(specs)
+        with open(vocab_file, 'w') as f:
+            f.write(self.vocabulary.to_json())
+
+
+    def _get_config(self):
+        config = {}
+        config['gen_lr'] = self.gen_lr
+        config['min_lr'] = self.min_lr
+        config['dec_lr'] = self.dec_lr
+        config['optimizer'] = self.optimizer
+        config['n_latent'] = self.n_latent
+        config['batch_size'] = self.batch_size
+        if self.latent_distrib == 'vmf':
+            config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}
+        elif self.latent_distrib == 'logistic_gaussian':
+            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.alpha}
+        else:
+            config['latent_distribution'] = {'dist_type':'gaussian'}
+        config['epochs'] = self.epochs
+        config['embedding_source'] = self.embedding_source
+        config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
+        config['warmup_ratio'] = self.warmup_ratio
+        return config
+
+
     def _get_objective_from_validation_result(self, v_res):
         topic_obj = super()._get_objective_from_validation_result(v_res)
         acc = v_res['accuracy']
@@ -1281,6 +1317,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                  multilabel=False,
                  decoder_lr = 0.01,
                  max_batches = 2,
+                 checkpoint_dir = None,
                  **kwargs):
         super(FullyLabeledSeqEstimator, self).__init__(*args, **kwargs)
         self.bert_base = bert_base
@@ -1471,16 +1508,8 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                     else:
                         self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
                                   perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
-
-            if False: # not only_inference
-                # save params
-                ckpt_name = 'model_bert_{0}_{1}.params'.format('classify_jsonl', epoch_id)
-                params_saved = os.path.join(output_dir, ckpt_name)
-                nlp.utils.save_parameters(model, params_saved)
-                logging.info('params saved in: %s', params_saved)
-                toc = time.time()
-                logging.info('Time cost=%.2fs', toc - tic)
-                tic = toc
+            if checkpoint_dir:
+                self.write_model(checkpoint_dir, suf=str(epoch_id))
         return sc_obj, v_res
 
     def _compute_coherence(self, model, k, test_data, log_terms=False):

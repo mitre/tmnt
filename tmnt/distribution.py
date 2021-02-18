@@ -307,6 +307,5 @@ class HyperSphericalDistribution(BaseDistribution):
         proj_mu_v  = F.broadcast_mul(mu, rescaled)        # shape =  (batch_size, n_latent)
         o_vec      = rv.squeeze() - proj_mu_v
         o_norm     = F.norm(o_vec, axis=1, keepdims=True)
-        #print("Shape mu_1 = {}, shape rv = {}, shape rescaled_1 = {}".format(mu_1.shape, rv.shape, rescaled_1.shape))                
         return F.broadcast_div(o_vec, o_norm)
     

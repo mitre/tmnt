@@ -13,7 +13,7 @@ from mxnet.gluon import Block, nn
 import gluonnlp as nlp
 from gluonnlp.model import get_model
 from gluonnlp.data import BERTTokenizer
-from gluonnlp.data.dataset import SimpleDataset
+from gluonnlp.data.dataset import SimpleDataset, Dataset
 import json
 import collections
 from tmnt.preprocess.vectorizer import TMNTVectorizer
@@ -58,6 +58,39 @@ class JsonlDataset(SimpleDataset):
         for s in samples:
             m_samples.append((s[self._txt_key], s[self._label_key]))
         return m_samples
+
+class UnevenArrayDataset(Dataset):
+    """A dataset that combines multiple dataset-like objects, e.g.
+    Datasets, lists, arrays, etc. but does NOT require lengths to be the same.
+
+    The i-th sample is defined as `(x1[i % len(x1)], x2[i % len(x2)], ...)`.
+
+    Parameters
+    ----------
+    *args : one or more dataset-like objects
+        The data arrays.
+    """
+    def __init__(self, *args):
+        assert len(args) > 0, "Needs at least 1 arrays"
+        self._sub_lengths = [len(a) for a in args]
+        self._length = max(self._sub_lengths) # length is equal to maximum subdataset length
+        self._data = []
+        for i, data in enumerate(args):
+            if isinstance(data, mx.nd.NDArray) and len(data.shape) == 1:
+                data = data.asnumpy()
+            self._data.append(data)
+
+    def __getitem__(self, idx):
+        if idx >= self._length:
+            raise StopIteration
+        if len(self._data) == 1:
+            return self._data[0][idx]
+        else:
+            return tuple(data[idx % data_len] for data,data_len in zip(self._data, self._sub_lengths))
+
+    def __len__(self):
+        return self._length
+    
 
 
 class BERTDatasetTransform(object):
@@ -240,6 +273,56 @@ def preprocess_data(tokenizer, class_labels, train_json_file, dev_json_file, bat
     return loader_train, loader_dev, loader_test, len(data_train)
 
 
+def preprocess_data_metriclearn(tokenizer, class_labels, train_a_json_file, train_b_json_file, batch_size, max_len, pad=False):
+    """Train/eval Data preparation function."""
+    pool = multiprocessing.Pool()
+
+    vectorizer = get_vectorizer(train_a_json_file, "sentence", "label0")
+
+    # transformation for data train and dev
+    label_dtype = 'float32' # if not task.class_labels else 'int32'
+    bow_count_dtype = 'float32'
+    trans = BERTDatasetTransform(tokenizer, max_len,
+                                 class_labels=class_labels,
+                                 label_alias=None,
+                                 pad=pad, pair=False,
+                                 has_label=True,
+                                 vectorizer=vectorizer)
+
+    # data train
+    train_a_ds = JsonlDataset(train_a_json_file, txt_key="sentence", label_key="label0")
+    a_data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_a_ds))
+
+    # data train
+    train_b_ds = JsonlDataset(train_b_json_file, txt_key="sentence", label_key="label0")
+    b_data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_b_ds))
+
+    joined_data_train = UnevenArrayDataset(a_data_train, b_data_train)
+    joined_len = joined_data_train.transform( lambda a, b: a[1] + b[1], lazy=False ) ## a[1] and b[1] and lengths, bucket by sum
+    batchify_fn = nlp.data.batchify.Tuple(
+        ## tuple for a_data
+        nlp.data.batchify.Tuple(
+            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)),
+        ## tuple for b_data
+        nlp.data.batchify.Tuple(
+            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
+    batch_sampler = nlp.data.sampler.FixedBucketSampler(
+        joined_len,
+        batch_size=batch_size,
+        num_buckets=10,
+        ratio=0,
+        shuffle=True)
+    loader_train = gluon.data.DataLoader(
+        dataset=joined_data_train,
+        num_workers=4,
+        batch_sampler=batch_sampler,
+        batchify_fn=batchify_fn)
+    return loader_train, len(joined_data_train)
+    
+
+
 def get_bert_datasets(class_labels, train_file, dev_file, model_name, dataset, batch_size, dev_bs, max_len, pad, ctx):
     bert, vocabulary = get_model(
         name=model_name,
@@ -254,4 +337,12 @@ def get_bert_datasets(class_labels, train_file, dev_file, model_name, dataset, b
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
         bert_tokenizer, class_labels, train_file, dev_file, batch_size, dev_bs, max_len, pad)
     return train_data, dev_data, num_train_examples, bert
+
+############
+# Handle dataloading for Smoothed Deep Metric Loss with parallel batching
+############
+
+## 
+
+
         
