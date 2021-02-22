@@ -10,6 +10,7 @@ parser = get_base_argparser()
 parser.description = 'Automated model selection for TMNT Topic Models'
 parser.add_argument('--config_space', type=str, help='YAML configuration file that specifies the configuration space for model selection')
 parser.add_argument('--iterations',type=int, help='Maximum number of full model training epochs to carry out as part of search', default=16)
+parser.add_argument('--search_time', type=int, help='Maximum search time in seconds', default=30)
 parser.add_argument('--coherence_coefficient', type=float, help='Weight applied to coherence (NPMI) term of objective function', default=1.0)
 parser.add_argument('--brackets', type=int, help='Number of hyberband brackets', default=1)
 parser.add_argument('--searcher', type=str, help='Autogluon search method (random, bayesopt)', default='random')

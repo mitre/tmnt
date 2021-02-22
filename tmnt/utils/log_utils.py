@@ -9,6 +9,20 @@ __all__ = ['logging_config']
 
 CONFIGURED = False
 
+def get_level(ll):
+    log_level = ll
+    if ll.lower() == 'info':
+        log_level = logging.INFO
+    elif ll.lower() == 'debug':
+        log_level = logging.DEBUG
+    elif ll.lower() == 'error':
+        log_level = logging.ERROR
+    elif ll.lower() == 'warning':
+        log_level = logging.WARNING
+    else:
+        log_level = logging.INFO
+    return log_level
+
 def logging_config(folder=None, name=None,
                    level=40,
                    console_level=40,
@@ -28,7 +42,9 @@ def logging_config(folder=None, name=None,
     folder : str
         Folder that the logging file will be saved into.
     """
+    global CONFIGURED
     CONFIGURED = True
+    
     if name is None:
         name = inspect.stack()[1][1].split('.')[0]
     if folder is None:
@@ -40,10 +56,12 @@ def logging_config(folder=None, name=None,
         logging.root.removeHandler(handler)
     logging.root.handlers = []
     logpath = os.path.join(folder, name + '.log')
-    logging.root.setLevel(level)
+    log_level = get_level(level)
+    console_level = get_level(console_level)
+    logging.root.setLevel(log_level)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
     logfile = logging.FileHandler(logpath)
-    logfile.setLevel(level)
+    logfile.setLevel(log_level)
     logfile.setFormatter(formatter)
     logging.root.addHandler(logfile)
     if not no_console:

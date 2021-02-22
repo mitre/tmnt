@@ -805,6 +805,7 @@ class LabeledBert(Block):
             rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
             elbo = rec_loss + KL_loss
         classifier_outputs = self.classifier(enc) if self.has_classifier else None
+        
         return elbo, rec_loss, KL_loss, classifier_outputs
 
     def get_top_k_terms(self, k, ctx=mx.cpu()):

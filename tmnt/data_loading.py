@@ -208,8 +208,6 @@ def file_to_data(sp_file, voc_size, batch_size=1000):
     return X, y, wd_freqs, total_words
     
 
-trans_table = str.maketrans(dict.fromkeys(string.punctuation))
-
 def get_single_vec(els_sp):
     pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp ] )
     inds, vs = zip(*pairs)

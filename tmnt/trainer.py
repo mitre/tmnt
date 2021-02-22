@@ -207,7 +207,7 @@ class BowVAETrainer(BaseTrainer):
                  val_each_epoch=True, rng_seed=1234):
         super().__init__(vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed)
         if not log_utils.CONFIGURED:
-            logging_config(folder=log_out_dir, name='tmnt', level=logging.INFO, console_level=logging.INFO)
+            logging_config(folder=log_out_dir, name='tmnt', level='info', console_level='info')
         self.log_out_dir = log_out_dir
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
@@ -232,19 +232,8 @@ class BowVAETrainer(BaseTrainer):
             os.path.join(c_args.save_dir,
                          "train_{}_{}_{}_{}_{}_{}_{}"
                          .format(i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond))
-        ll = c_args.log_level
-        log_level = logging.INFO
-        if ll.lower() == 'info':
-            log_level = logging.INFO
-        elif ll.lower() == 'debug':
-            log_level = logging.DEBUG
-        elif ll.lower() == 'error':
-            log_level = logging.ERROR
-        elif ll.lower() == 'warning':
-            log_level = logging.WARNING
-        else:
-            log_level = logging.INFO
-        logging_config(folder=log_out_dir, name='tmnt', level=log_level, console_level=log_level)
+        if not log_utils.CONFIGURED:
+            logging_config(folder=log_out_dir, name='tmnt', level=c_args.log_level, console_level=c_args.log_level)
         logging.info(c_args)
         seed_rng(c_args.seed)
         if c_args.vocab_file and c_args.tr_vec_file:
@@ -399,7 +388,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,
                                                             i_dt.minute,i_dt.second)
         print("Set logging config to {}".format(train_out_dir))
-        logging_config(folder=train_out_dir, name='train_trans_vae', level=logging.INFO, no_console=False)
+        logging_config(folder=train_out_dir, name='train_trans_vae', level=args.log_level, console_level=args.log_level, no_console=False)
         logging.info(args)
         bow_vocab = load_vocab(args.bow_vocab_file)
         trainer = cls(
