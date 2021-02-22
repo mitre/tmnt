@@ -11,6 +11,8 @@ import datetime
 import os
 import json
 import io
+import dask
+import dask.distributed
 from autogluon.core.scheduler.reporter import FakeReporter
 from tabulate import tabulate
 from tmnt.configuration import TMNTConfigBOW, TMNTConfigSeqBOW
@@ -146,6 +148,11 @@ class BaseSelector(object):
 
 
 def model_select_bow_vae(c_args):
+    logging_config(folder=c_args.save_dir, name='tmnt', level=c_args.log_level, console_level=c_args.log_level)
+    ## dask config overrides
+    dask.config.config['distributed']['worker']['use-file-locking'] = False
+    dask.config.config['distributed']['comm']['timeouts']['connect'] = '90s'
+    ##
     tmnt_config = TMNTConfigBOW(c_args.config_space).get_configspace()
     trainer = BowVAETrainer.from_arguments(c_args, val_each_epoch = (not (c_args.searcher == 'random')))
     selector = BaseSelector(tmnt_config,
