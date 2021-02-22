@@ -232,6 +232,9 @@ class BowVAETrainer(BaseTrainer):
             os.path.join(c_args.save_dir,
                          "train_{}_{}_{}_{}_{}_{}_{}"
                          .format(i_dt.year,i_dt.month,i_dt.day,i_dt.hour,i_dt.minute,i_dt.second,i_dt.microsecond))
+        if not os.path.exists(log_out_dir):
+            lpath = Path(log_out_dir)
+            lpath.mkdir(parents=True, exist_ok=True)
         if not log_utils.CONFIGURED:
             logging_config(folder=log_out_dir, name='tmnt', level=c_args.log_level, console_level=c_args.log_level)
         logging.info(c_args)
