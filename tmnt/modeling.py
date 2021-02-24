@@ -766,7 +766,7 @@ class LabeledBert(Block):
                  kappa = 100.0,
                  alpha = 1.0,
                  batch_size=16, kld=0.1, wd_freqs=None,
-                 redundancy_reg_penalty=0.0,
+                 redundancy_reg_penalty=0.0, pre_trained_embedding = None,
                  prefix=None, params=None):
         super(LabeledBert, self).__init__(prefix=prefix, params=params)
         self.n_latent = n_latent
@@ -775,13 +775,23 @@ class LabeledBert(Block):
         self.kld_wt = kld
         self.has_classifier = num_classes >= 2
         self.bow_vocab_size = bow_vocab_size
+        self.redundancy_reg_penalty = redundancy_reg_penalty
         with self.name_scope():
             self.decoder = nn.Dense(in_units=n_latent, units=bow_vocab_size, use_bias=True)
+            self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)            
             if self.has_classifier:
                 self.classifier = nn.HybridSequential(prefix=prefix)
                 if dropout:
                     self.classifier.add(nn.Dropout(rate=dropout))
                 self.classifier.add(nn.Dense(units=num_classes))
+
+                
+    def get_redundancy_penalty(self):
+        w = self.decoder.params.get('weight').data()
+        emb = self.embedding.params.get('weight').data() if self.embedding is not None else w
+        _, redundancy_loss = self.coherence_regularization(w, emb)
+        return redundancy_loss
+
 
     def initialize_bias_terms(self, wd_freqs):
         if wd_freqs is not None:
@@ -796,7 +806,7 @@ class LabeledBert(Block):
 
     def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
         _, enc = self.bert(inputs, token_types, valid_length)
-        elbo = 0.0
+        elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
             bow = bow.squeeze()
             z, KL = self.latent_dist(enc, inputs.shape[0])
@@ -805,7 +815,8 @@ class LabeledBert(Block):
             rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
             elbo = rec_loss + KL_loss
         classifier_outputs = self.classifier(enc) if self.has_classifier else None
-        
+        redundancy_loss = self.get_redundancy_penalty()
+        elbo += redundancy_loss
         return elbo, rec_loss, KL_loss, classifier_outputs
 
     def get_top_k_terms(self, k, ctx=mx.cpu()):

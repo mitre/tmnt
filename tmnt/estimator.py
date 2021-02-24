@@ -649,7 +649,6 @@ class BowEstimator(BaseBowEstimator):
         Returns:
             (`BowVAE`): Self
         """
-
         return super().fit(X, None)
 
 
