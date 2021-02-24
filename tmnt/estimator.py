@@ -1486,7 +1486,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                     if self.has_classifier:
                         self.metric.update(labels=[label], preds=[out])
                     if (batch_id + 1) % (self.log_interval) == 0:
-                        self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, self.log_interval,
+                        self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, self.log_interval,
                                   epoch_id, trainer.learning_rate)
                         step_loss = 0
                         elbo_loss = 0
