@@ -1319,6 +1319,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                  checkpoint_dir = None,
                  **kwargs):
         super(FullyLabeledSeqEstimator, self).__init__(*args, **kwargs)
+        self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
         self.has_classifier = n_labels >= 2
         self.multilabel = multilabel
@@ -1510,8 +1511,8 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                     else:
                         self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
                                   perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
-            if checkpoint_dir:
-                self.write_model(checkpoint_dir, suf=str(epoch_id))
+            if self.checkpoint_dir:
+                self.write_model(self.checkpoint_dir, suf=str(epoch_id))
         return sc_obj, v_res
 
     def _compute_coherence(self, model, k, test_data, log_terms=False):
