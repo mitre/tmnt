@@ -1351,13 +1351,13 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         return model
 
-    def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, log_interval, epoch_id, learning_rate):
+    def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, red_loss, log_interval, epoch_id, learning_rate):
         """Generate and print out the log message for training. """
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
         self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), lr={:.10f}, metrics: {:.10f}"
-              .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, learning_rate, *metric_val))
+              .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, red_loss/log_interval, learning_rate, *metric_val))
 
     def log_eval(self, batch_id, batch_num, metric, step_loss, rec_loss, log_interval):
         metric_nm, metric_val = metric.get()
@@ -1434,7 +1434,8 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         for epoch_id in range(self.epochs):
             if True: # not only_inference:
                 step_loss = 0
-                elbo_loss  = 0
+                elbo_loss = 0
+                red_loss  = 0
                 tic = time.time()
                 all_model_params.zero_grad()
 
@@ -1454,7 +1455,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                     # forward and backward
                     with mx.autograd.record():
                         input_ids, valid_length, type_ids, bow, label = seqs
-                        elbo_ls, rec_ls, kl_ls, out = model(
+                        elbo_ls, rec_ls, kl_ls, red_ls, out = model(
                             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
                         if self.has_classifier:
@@ -1478,15 +1479,17 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                         if accumulate and accumulate > 1:
                             # set grad to zero for gradient accumulation
                             all_model_params.zero_grad()
-                    step_loss += total_ls.asscalar()
-                    elbo_loss  += elbo_ls.mean().asscalar()
+                    step_loss += total_ls.mean().asscalar()
+                    elbo_loss += elbo_ls.mean().asscalar()
+                    red_loss  += red_ls.mean().asscalar()
                     if self.has_classifier:
                         self.metric.update(labels=[label], preds=[out])
                     if (batch_id + 1) % (self.log_interval) == 0:
                         self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, self.log_interval,
                                   epoch_id, trainer.learning_rate)
                         step_loss = 0
-                        elbo_loss  = 0
+                        elbo_loss = 0
+                        red_loss  = 0
                 mx.nd.waitall()
 
             # inference on dev data
@@ -1545,7 +1548,7 @@ class FullyLabeledSeqEstimator(BaseEstimator):
         tic = time.time()
         for batch_id, seqs in enumerate(dataloader):
             input_ids, valid_len, type_ids, bow, label = seqs
-            elbo_ls, rec_ls, kl_ls, out = model(
+            elbo_ls, rec_ls, kl_ls, red_ls, out = model(
                 input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                 valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
             if self.has_classifier:
@@ -1555,13 +1558,14 @@ class FullyLabeledSeqEstimator(BaseEstimator):
                 total_ls = elbo_ls.mean()
             total_rec_loss += rec_ls.sum().asscalar()
             total_kl_loss  += kl_ls.sum().asscalar()
-            step_loss += total_ls.asscalar()
+            step_loss += total_ls.mean().asscalar()
             elbo_loss  += elbo_ls.mean().asscalar()
             if self.has_classifier:
                 self.metric.update([label], [out])
             if (batch_id + 1) % (self.log_interval) == 0:
                 self.log_eval(batch_id, len(dataloader), self.metric, step_loss, elbo_loss, self.log_interval)
                 step_loss = 0
+                elbo_loss = 0
         likelihood = (total_rec_loss + total_kl_loss) / num_words
         if likelihood < 709.0:
             perplexity = math.exp(likelihood)
