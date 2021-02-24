@@ -777,6 +777,7 @@ class LabeledBert(Block):
         self.bow_vocab_size = bow_vocab_size
         self.redundancy_reg_penalty = redundancy_reg_penalty
         with self.name_scope():
+            self.embedding = None
             self.decoder = nn.Dense(in_units=n_latent, units=bow_vocab_size, use_bias=True)
             self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)            
             if self.has_classifier:
@@ -784,6 +785,8 @@ class LabeledBert(Block):
                 if dropout:
                     self.classifier.add(nn.Dropout(rate=dropout))
                 self.classifier.add(nn.Dense(units=num_classes))
+            if pre_trained_embedding is not None:
+                self.embedding = nn.Dense(in_units = len(pre_trained_embedding.idx_to_vec), units = pre_trained_embedding.idx_to_vec[0].size, use_bias=False)
 
                 
     def get_redundancy_penalty(self):
