@@ -791,7 +791,7 @@ class LabeledBert(Block):
                 
     def get_redundancy_penalty(self):
         w = self.decoder.params.get('weight').data()
-        emb = self.embedding.params.get('weight').data() if self.embedding is not None else w
+        emb = self.embedding.params.get('weight').data() if self.embedding is not None else w.transpose()
         _, redundancy_loss = self.coherence_regularization(w, emb)
         return redundancy_loss
 
