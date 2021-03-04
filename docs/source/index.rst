@@ -30,7 +30,8 @@ Table of Contents
    :caption: Guide
    :maxdepth: 3
 	      
-   getting_started/quickstart	     
+   getting_started/quickstart
+   getting_started/prepare_corpus
    model_training/training   
    model_selection/model_selection
    options/command_options

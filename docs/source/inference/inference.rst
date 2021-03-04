@@ -19,17 +19,17 @@ an algorithm for `doc2vec` where the vector representation can be interpreted as
 topic distribution.
 
 To use a trained model in this fashion within a larger application
-the ``tmnt.models.bow.runtime`` module provides a simple API to encode documents.
+the ``tmnt.inference`` module provides a simple API to encode documents.
 Below is an example::
 
   python 
   >>> from tmnt.inference import BowVAEInferencer
   >>> infer = BowVAEInferencer.from_saved(model_dir = '_model_dir')
-  >>> encodings = infer.encode_batch(['Greater Armenia would stretch from Karabakh, to the
+  >>> encodings = infer.encode_texts(['Greater Armenia would stretch from Karabakh, to the
         Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.',
         'I have two pairs of headphones I\'d like to sell.  These are excellent, and both in great condition'])
 
-The resulting ``encodings`` is an ``NDArray`` with shape ``(N,K)`` where ``N`` is the number of texts/documents encoded and ``K`` is the number of topics.
+The resulting ``encodings`` is a ``list`` of ``NDArray`` objects with shape ``(,K)`` where ``K`` is the number of topics.
 
 You can use the method ``mx.nd.argsort`` to get the order of components (i.e. topics) in ascending probability, e.g.::
 
