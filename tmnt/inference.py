@@ -141,11 +141,11 @@ class BowVAEInferencer(BaseInferencer):
         data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab))
         return self.encode_data(data_mat, labels, use_probs=use_probs), labels
 
-    def encode_texts(self, texts, use_probs=False):
+    def encode_texts(self, texts, use_probs=False, include_bn=False):
         X, _ = self.vectorizer.transform(texts)
-        return self.encode_data(X, None, use_probs=use_probs)
+        return self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
 
-    def encode_data(self, data_mat, labels, use_probs=False):
+    def encode_data(self, data_mat, labels, use_probs=False, include_bn=False):
         x_size = data_mat.shape[0] * data_mat.shape[1]
         if x_size <= MAX_DESIGN_MATRIX and isinstance(data_mat, scipy.sparse.csr.csr_matrix):
             data_mat = mx.nd.sparse.csr_matrix(data_mat, dtype='float32')
@@ -172,9 +172,9 @@ class BowVAEInferencer(BaseInferencer):
             data = data.as_in_context(self.ctx)
             if self.covar_model and labels is not None:
                 labels = labels.as_in_context(self.ctx)
-                encs = self.model.encode_data_with_covariates(data, labels)
+                encs = self.model.encode_data_with_covariates(data, labels, include_bn=include_bn)
             else:
-                encs = self.model.encode_data(data)
+                encs = self.model.encode_data(data, include_bn=include_bn)
             if use_probs:
                 e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
                 encs = mx.nd.softmax(e1 ** 0.5)

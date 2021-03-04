@@ -15,6 +15,7 @@ import os
 import psutil
 import mxnet as mx
 import numpy as np
+import scipy.sparse as sp
 import json
 from mxnet import autograd
 from mxnet import gluon
@@ -22,8 +23,9 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, LabeledBertBowVED, DeepAveragingVAEModel
+from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, LabeledBertBowVED, DeepAveragingVAEModel, LabeledBert
 from tmnt.eval_npmi import EvaluateNPMI
+from tmnt.distribution import HyperSphericalDistribution
 import autogluon.core as ag
 
 MAX_DESIGN_MATRIX = 250000000 
@@ -222,6 +224,7 @@ class BaseBowEstimator(BaseEstimator):
         warm_start (bool): Subsequent calls to `fit` will use existing model weights rather than reinitializing
     """
     def __init__(self, vocabulary,
+                 validate_each_epoch=False,
                  enc_hidden_dim=150,
                  embedding_source="random",
                  embedding_size=128,
@@ -236,10 +239,12 @@ class BaseBowEstimator(BaseEstimator):
         self.vocabulary = vocabulary 
         self.embedding_source = embedding_source
         self.embedding_size = embedding_size
-        self.validate_each_epoch = False
+        self.validate_each_epoch = validate_each_epoch
 
     @classmethod
-    def from_config(cls, config, vocabulary, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
+    def from_config(cls, config, vocabulary,
+                    coherence_via_encoder=False,
+                    validate_each_epoch=False, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
         """
         Create an estimator from a configuration file/object rather than by keyword arguments
         
@@ -301,15 +306,16 @@ class BaseBowEstimator(BaseEstimator):
         elif latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
         model = \
-                cls(vocabulary, coherence_coefficient=8.0, reporter=reporter, wd_freqs=wd_freqs,
-                             ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
-                             n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
-                             coherence_reg_penalty=coherence_reg_penalty,
-                             redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
-                             embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
-                             num_enc_layers=n_encoding_layers, enc_dr=enc_dr, 
-                             epochs=epochs, log_method='log', coherence_via_encoder=False,
-                             pretrained_param_file = pretrained_param_file)
+                cls(vocabulary, validate_each_epoch=validate_each_epoch,
+                    coherence_coefficient=8.0, reporter=reporter, wd_freqs=wd_freqs,
+                    ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
+                    n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
+                    coherence_reg_penalty=coherence_reg_penalty,
+                    redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
+                    embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
+                    num_enc_layers=n_encoding_layers, enc_dr=enc_dr, 
+                    epochs=epochs, log_method='log', coherence_via_encoder=coherence_via_encoder,
+                    pretrained_param_file = pretrained_param_file)
         return model
 
 
@@ -524,21 +530,22 @@ class BaseBowEstimator(BaseEstimator):
                 lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
                 self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
+            mx.nd.waitall()
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 v_res = self.validate(val_X, val_y)
                 sc_obj = self._get_objective_from_validation_result(v_res)
-                if self.reporter:
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
                                         .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
+                if self.reporter:
                     self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
                                   coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+        mx.nd.waitall()
         return sc_obj, v_res
 
                     
     def fit(self, X, y):
         self.fit_with_validation(X, y, None, None)
         return self
-
 
 
 class BowEstimator(BaseBowEstimator):
@@ -563,7 +570,6 @@ class BowEstimator(BaseBowEstimator):
         Returns:
            (float): Perplexity score.
         """
-
         return super().perplexity(X, None)
 
     def _forward(self, model, data, labels, mask):
@@ -615,7 +621,8 @@ class BowEstimator(BaseBowEstimator):
         Get topic vectors of the fitted model.
 
         Returns:
-            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
+            topic_vectors (:class:`NDArray`): Topic word distribution. 
+                topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
         """
 
         return self.model.get_topic_vectors() 
@@ -644,7 +651,6 @@ class BowEstimator(BaseBowEstimator):
         Returns:
             (`BowVAE`): Self
         """
-
         return super().fit(X, None)
 
 
@@ -755,7 +761,6 @@ class LabeledBowEstimator(BaseBowEstimator):
         mx_array = mx.nd.array(X,dtype='float32')
         return self.model.encode_data(mx_array).asnumpy()
     
-        
 
 class CovariateBowEstimator(BaseBowEstimator):
 
@@ -837,7 +842,6 @@ class CovariateBowEstimator(BaseBowEstimator):
         Returns:
             (dict): Dictionary of npmi scores for each covariate.
         """
-
         X_train = X.toarray()
         y_train = y
         covars = np.unique(y_train, axis=0)
@@ -898,164 +902,78 @@ class CovariateBowEstimator(BaseBowEstimator):
         x_mxnet, y_mxnet = mx.nd.array(X, dtype=np.float32), mx.nd.array(y, dtype=np.float32)
         return self.model.encode_data_with_covariates(x_mxnet, y_mxnet).asnumpy()
     
-    
 
 class SeqBowEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, bert_vocab, vocab, bow_embedding_source='random',
-                 warmup_ratio=0.1, gen_lr=0.000001, dec_lr=0.01, min_lr=0.00000005, log_interval=1, max_batches=-1, epochs=3, *args, **kwargs):
-        super(SeqBowEstimator, self).__init__(epochs=epochs, *args, **kwargs)
-        self.log_interval = log_interval
+    def __init__(self, bert_base, *args,
+                 n_labels = 0,
+                 n_latent = 20,
+                 log_interval=5,
+                 warmup_ratio=0.1,
+                 mix_val=0.0,
+                 multilabel=False,
+                 decoder_lr = 0.01,
+                 max_batches = 2,
+                 checkpoint_dir = None,
+                 **kwargs):
+        super(FullyLabeledSeqEstimator, self).__init__(*args, **kwargs)
+        self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
-        self.embedding_source = bow_embedding_source
-        self.vocabulary = vocab
-        self.bert_vocab = bert_vocab
-        self.gen_lr = gen_lr
-        self.dec_lr = dec_lr
-        self.min_lr = min_lr
-        self.warmup_ratio = 0.1
-        self.weight_decay = 0.01
-        self.offset_factor = 1.0
-        self.validate_each_epoch = True
-        self.max_batches = max_batches
+        self.has_classifier = n_labels >= 2
+        self.multilabel = multilabel
+        self.n_labels = n_labels
+        self.metric = mx.metric.Accuracy()
+        self.warmup_ratio = warmup_ratio
+        self.log_interval = log_interval
+        self.loss_function = gluon.loss.SoftmaxCELoss()
+        self.mix_val = mix_val
+        self.decoder_lr = decoder_lr
+        self._bow_matrix = None
+
 
     @classmethod
-    def from_config(cls, config, vocab, reporter, wd_freqs, log_interval=1, ctx=mx.cpu()):
-        gen_lr = config.gen_lr
-        dec_lr = config.dec_lr
-        min_lr = config.min_lr
-        optimizer = config.optimizer
-        n_latent = int(config.n_latent)
-        batch_size = int(config.batch_size)
-        epochs = int(config.epochs)
-        ldist_def = config.latent_distribution
-        kappa = 0.0
-        alpha = 1.0
-        latent_distrib = ldist_def.dist_type
-        embedding_source = config.embedding_source
-        redundancy_reg_penalty = config.redundancy_reg_penalty
-        warmup_ratio = config.warmup_ratio
-        if latent_distrib == 'vmf':
-            kappa = ldist_def.kappa
-        elif latent_distrib == 'logistic_gaussian':
-            alpha = ldist_def.alpha
-        bert_base, bert_vocab = nlp.model.get_model('bert_12_768_12',  
-                                             dataset_name='book_corpus_wiki_en_uncased',
-                                             pretrained=True, ctx=ctx, use_pooler=True,
-                                             use_decoder=False, use_classifier=False)
-        model = cls(bert_base, bert_vocab, vocab,
-                    bow_embedding_source=embedding_source,
-                          coherence_coefficient=8.0,
-                          reporter=reporter,
-                          latent_distribution=latent_distrib,
-                          n_latent=n_latent,
-                          redundancy_reg_penalty=redundancy_reg_penalty,
-                          kappa = kappa,
-                    alpha=alpha,
-                          batch_size=batch_size,
-                          kld=1.0, wd_freqs=wd_freqs, 
-                          warmup_ratio = warmup_ratio,
-                          optimizer = optimizer,
-                          epochs = epochs,
-                          gen_lr = gen_lr,
-                          dec_lr = dec_lr,
-                          min_lr = min_lr,
-                          ctx=ctx,
-                          log_interval=log_interval)
+    def from_config(cls, n_labels, gamma, *args, **kwargs):
+        est = super().from_config(*args, **kwargs)
+        est.n_labels = n_labels
+        est.gamma    = gamma
+        return est
+
+    def _get_model(self, train_data):
+        latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
+        model = LabeledBert(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent)
+        model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
+        model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
+        model.latent_dist.post_init(self.ctx)
+        if model.has_classifier:
+            model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
+        tr_bow_matrix = self._get_bow_matrix(train_data)
+        model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         return model
 
-    def _get_model(self):
-        model = BertBowVED(self.bert_base, self.vocabulary, self.latent_distrib, 
-                           n_latent=self.n_latent, 
-                           kappa = self.kappa,
-                           alpha = self.alpha,
-                           batch_size = self.batch_size,
-                           kld=1.0, wd_freqs=self.wd_freqs,
-                           redundancy_reg_penalty=self.redundancy_reg_penalty,
-                           ctx=self.ctx)
-        return model
+    def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, red_loss, class_loss, log_interval, epoch_id, learning_rate):
+        """Generate and print out the log message for training. """
+        metric_nm, metric_val = metric.get()
+        if not isinstance(metric_nm, list):
+            metric_nm, metric_val = [metric_nm], [metric_val]
+        self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), (red_loss = {}), (class_loss = {}) lr={:.10f}, metrics: {:.10f}"
+              .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, red_loss/log_interval,
+                      class_loss/log_interval, learning_rate, *metric_val))
 
+    def log_eval(self, batch_id, batch_num, metric, step_loss, rec_loss, log_interval):
+        metric_nm, metric_val = metric.get()
+        if not isinstance(metric_nm, list):
+            metric_nm, metric_val = [metric_nm], [metric_val]
+        self._output_status("Batch {}/{} loss={} (rec_loss = {}), metrics: {:.10f}"
+              .format(batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, *metric_val))
 
-    def _get_config(self):
-        config = {}
-        config['gen_lr'] = self.gen_lr
-        config['min_lr'] = self.min_lr
-        config['dec_lr'] = self.dec_lr
-        config['optimizer'] = self.optimizer
-        config['n_latent'] = self.n_latent
-        config['batch_size'] = self.batch_size
-        if self.latent_distrib == 'vmf':
-            config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}
-        elif self.latent_distrib == 'logistic_gaussian':
-            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.alpha}
-        else:
-            config['latent_distribution'] = {'dist_type':'gaussian'}
-        config['epochs'] = self.epochs
-        config['embedding_source'] = self.embedding_source
-        config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
-        config['warmup_ratio'] = self.warmup_ratio
-        return config
-
-
-    def write_model(self, model_dir, suf=''):
-        pfile = os.path.join(model_dir, ('model.params' + suf))
-        conf_file = os.path.join(model_dir, ('model.config' + suf))
-        vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
-        self.model.save_parameters(pfile)
-        config = self._get_config()
-        specs = json.dumps(config, sort_keys=True, indent=4)
-        with open(conf_file, 'w') as f:
-            f.write(specs)
-        with open(vocab_file, 'w') as f:
-            f.write(self.vocabulary.to_json())
-
-
-    def fit(self, X, y):
-        raise NotImplementedError()
-
-    def _compute_coherence(self, model, k, test_data, log_terms=False):
-        num_topics = model.n_latent
-        sorted_ids = model.get_top_k_terms(k)
-        num_topics = min(num_topics, sorted_ids.shape[-1])
-        top_k_words_per_topic = [[ int(i) for i in list(sorted_ids[:k, t])] for t in range(num_topics)]
-        npmi_eval = EvaluateNPMI(top_k_words_per_topic)
-        npmi = npmi_eval.evaluate_csr_mat(test_data)
-        unique_term_ids = set()
-        unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
-        for i in range(num_topics):
-            topic_ids = list(top_k_words_per_topic[i][:unique_limit])
-            for j in range(len(topic_ids)):
-                unique_term_ids.add(topic_ids[j])
-        redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2.0
-        logging.info("Test Coherence: {}".format(npmi))
-        if log_terms:
-            top_k_tokens = [list(map(lambda x: self.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
-            for i in range(num_topics):
-                logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
-        return npmi, redundancy
-
-    
-    def _perplexity(self, dataloader, num_words, last_batch_size, num_batches):
-        total_rec_loss = 0.0
-        total_kl_loss  = 0.0
-        for i, seqs in enumerate(dataloader):
-            input_ids, valid_length, type_ids, output_vocab, labels = seqs
-            _, rec_loss, kl_loss, _, _, _ = self.model(input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-                                                    valid_length.astype('float32').as_in_context(self.ctx),
-                                                    output_vocab.as_in_context(self.ctx),
-                                                    labels.as_in_context(self.ctx))
-            if i == num_batches - 1:
-                total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
-                total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
-            else:
-                total_rec_loss += rec_loss.sum().asscalar()
-                total_kl_loss  += kl_loss.sum().asscalar()
-        ll = (total_rec_loss + total_kl_loss) / num_words
-        if ll < 709.0:
-            perplexity = math.exp(ll)
-        else:
-            perplexity = 1e300
-        return perplexity
+    def _get_bow_matrix(self, dataloader, cache=False):
+        bow_matrix = []
+        for _, seqs in enumerate(dataloader):
+            bow_matrix.extend(list(seqs[3].squeeze()))
+        bow_matrix = mx.nd.stack(*bow_matrix)
+        if cache:
+            self._bow_matrix = bow_matrix
+        return bow_matrix
 
 
     def _get_objective_from_validation_result(self, val_result):
@@ -1068,132 +986,112 @@ class SeqBowEstimator(BaseEstimator):
         return sc_obj
 
 
-    def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
-        npmi, redundancy = self._compute_coherence(model, 10, bow_train, log_terms=True)
-        last_batch_size = bow_val_X.shape[0] % self.batch_size
-        if last_batch_size > 0:
-            num_batches = (bow_val_X.shape[0] // self.batch_size) + 1
-        else:
-            num_batches = bow_val_X.shape[0] // self.batch_size
-            last_batch_size = self.batch_size
-        num_val_words = bow_val_X.sum()
-        ppl = self._perplexity(dataloader, num_val_words, last_batch_size, num_batches)
-        return {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
-    
+    def fit_with_validation(self, train_data, dev_data, num_train_examples):
+        """Training function."""
+        model = self._get_model(train_data)
+        accumulate = False
 
+        all_model_params = model.collect_params()
+        optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.02}
+        non_decoder_params = {**model.bert.collect_params()}
+        decoder_params     = {**model.decoder.collect_params(), **model.latent_dist.collect_params()}
+        if self.has_classifier:
+            decoder_params.update(model.classifier.collect_params())
 
-    def fit_with_validation(self, X, y, val_X, val_y):
-        """
-        Estimate a topic model by fine-tuning pre-trained BERT encoder.
-        
-        Parameters:
-            X ({array-like, sparse matrix}): Training document word matrix of shape {n_samples, n_features)
-            y ({array-like, sparse matrix}): Training covariate matrix of shape (n_train_samples, n_covars)
-            val_X ({array-like, sparse matrix}): Validation document word matrix of shape {n_samples, n_features)
-            val_y ({array-like, sparse matrix}): Validation covariate matrix of shape (n_train_samples, n_covars)
-        Returns:
-            (tuple): Tuple containing:
-                - estimator (:class:`tmnt.estimator.BaseEstimator`) VAE model estimator
-                - objective (float): Resulting objective value
-                - result_details (dict): Estimator-specific metrics on validation data
-        """
-        seq_train, bow_train = X
-        model = self._get_model()
-        self.model = model
-        ## merge y values into the dataset for X
-        if y is not None:
-            seq_train._data.append(mx.nd.array(y))
-        else:
-            seq_train._data.append(mx.nd.zeros(bow_train.shape[0]))
-        dataloader = mx.gluon.data.DataLoader(seq_train, batch_size=self.batch_size,
-                                              shuffle=True, last_batch='rollover')
-        if val_X is not None:
-            seq_val, bow_val = val_X
-            if val_y is not None:
-                seq_val._data.append(mx.nd.array(val_y))
-            else:
-                seq_val._data.append(mx.nd.zeros(bow_val.shape[0]))
-            dataloader_val = mx.gluon.data.DataLoader(seq_val, batch_size=self.batch_size, last_batch='rollover',
-                                                       shuffle=False)
+        trainer = gluon.Trainer(non_decoder_params, self.optimizer,
+                                    optimizer_params, update_on_kvstore=False)
+        dec_trainer = gluon.Trainer(decoder_params, 'adam', {'learning_rate': self.decoder_lr, 'epsilon': 1e-6, 'wd': 0.02})
+        #if args.dtype == 'float16':
+        #    amp.init_trainer(trainer)
 
-        num_train_examples = len(seq_train)
-        num_train_steps = int(num_train_examples / self.batch_size * self.epochs)
-        num_warmup_steps = int(num_train_steps * self.warmup_ratio)
+        step_size = self.batch_size * accumulate if accumulate else self.batch_size
+        num_train_steps = int(num_train_examples / step_size * self.epochs)
+        warmup_ratio = self.warmup_ratio
+        num_warmup_steps = int(num_train_steps * warmup_ratio)
         step_num = 0
-        differentiable_params = []
-
-        lr = self.gen_lr
-
-        bert_params = model.encoder.collect_params()
-        if isinstance(model, LabeledBertBowVED):
-            bert_params.update(model.lab_decoder.collect_params())
-            
-        gen_trainer = gluon.Trainer(bert_params, self.optimizer,
-                                    {'learning_rate': self.gen_lr, 'epsilon': 1e-6, 'wd':self.weight_decay})
-        var_params = {**model.latent_dist.collect_params(), **model.decoder.collect_params()}
-        dec_trainer = gluon.Trainer(var_params, 'adam', {'learning_rate': self.dec_lr, 'epsilon': 1e-6})
 
         # Do not apply weight decay on LayerNorm and bias terms
-        all_model_params = model.collect_params()
-        
         for _, v in model.collect_params('.*beta|.*gamma|.*bias').items():
             v.wd_mult = 0.0
-
+        # Collect differentiable parameters
         params = [p for p in all_model_params.values() if p.grad_req != 'null']
 
-        sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
-        v_res = None
+        # Set grad_req if gradient accumulation is required
+        if accumulate and accumulate > 1:
+            for p in params:
+                p.grad_req = 'add'
+        # track best eval score
+        metric_history = []
+        
+        tic = time.time()
         for epoch_id in range(self.epochs):
-            all_model_params.zero_grad()
-            
-            step_loss = 0
-            step_recon_ls = 0
-            step_kl_ls = 0
-            step_red_ls = 0
-            step_lab_ls = 0
-            if self.max_batches > 0 and step_num >= self.max_batches:
-                break
-            for batch_id, seqs in enumerate(dataloader):
-                step_num += 1
-                if step_num < num_warmup_steps:
-                    new_lr = lr * step_num / num_warmup_steps
-                else:
-                    offset = (step_num - num_warmup_steps) * lr / ((num_train_steps - num_warmup_steps) * self.offset_factor)
-                    new_lr = max(lr - offset, self.min_lr)
-                gen_trainer.set_learning_rate(new_lr)
-                with mx.autograd.record():
-                    input_ids, valid_length, type_ids, output_vocab, labels = seqs
-                    ls, recon_ls, kl_ls, redundancy_ls, predictions, lab_loss = \
-                        model(input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-                              valid_length.astype('float32').as_in_context(self.ctx),
-                              output_vocab.as_in_context(self.ctx), labels.as_in_context(self.ctx))
-                    ls = ls.mean()
-                    ls.backward()
-                nlp.utils.clip_grad_global_norm(params, 1)
-                dec_trainer.update(1)
-                gen_trainer.update(1) # step of 1 since we averaged loss over batch
-                step_loss += ls.asscalar()
-                step_recon_ls += recon_ls.mean().asscalar()
-                step_kl_ls += kl_ls.mean().asscalar()
-                step_red_ls += redundancy_ls.mean().asscalar()
-                step_lab_ls += lab_loss.mean().asscalar() if lab_loss is not None else 0.0
-                if (batch_id + 1) % (self.log_interval) == 0:
-                    self._output_status(('[Epoch {}/{} Batch {}/{}] loss={:.4f}, recon_loss={:.4f}, ' \
-                                         'kl_loss={:.4f}, red_loss={:.4f}, gen_lr={:.7f}, lab_loss={:.4f}')
-                                 .format(epoch_id, self.epochs, batch_id + 1, len(dataloader),
-                                         step_loss / self.log_interval, step_recon_ls / self.log_interval,
-                                         step_kl_ls / self.log_interval, step_red_ls / self.log_interval,
-                                         gen_trainer.learning_rate, step_lab_ls / self.log_interval))
-                    step_loss = 0
-                    step_recon_ls = 0
-                    step_kl_ls = 0
-                    step_lab_ls = 0
-                if self.max_batches > 0 and step_num >= self.max_batches:
-                    break
-                
-            mx.nd.waitall()
-            if val_X is not None and (self.validate_each_epoch or epoch_id == self.epochs-1):
-                v_res  = self.validate(model, bow_train, bow_val, val_y, dataloader_val)
+            if True: # not only_inference:
+                step_loss = 0
+                elbo_loss = 0
+                red_loss  = 0
+                class_loss = 0
+                tic = time.time()
+                all_model_params.zero_grad()
+
+                for batch_id, seqs in enumerate(train_data):
+                    # learning rate schedule
+                    if step_num < num_warmup_steps:
+                        new_lr = self.lr * step_num / num_warmup_steps
+                        dec_lr = self.decoder_lr * step_num / num_warmup_steps
+                    else:
+                        non_warmup_steps = step_num - num_warmup_steps
+                        offset = non_warmup_steps / (num_train_steps - num_warmup_steps)
+                        new_lr = self.lr - offset * self.lr
+                        dec_lr = self.decoder_lr - offset * self.decoder_lr
+                    trainer.set_learning_rate(new_lr)
+                    dec_trainer.set_learning_rate(dec_lr)
+
+                    # forward and backward
+                    with mx.autograd.record():
+                        input_ids, valid_length, type_ids, bow, label = seqs
+                        elbo_ls, rec_ls, kl_ls, red_ls, out = model(
+                            input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+                            valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+                        if self.has_classifier:
+                            ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
+                            total_ls = ls + self.mix_val * elbo_ls.mean()
+                        else:
+                            total_ls = elbo_ls.mean()
+                        #if args.dtype == 'float16':
+                        #    with amp.scale_loss(ls, trainer) as scaled_loss:
+                        #        mx.autograd.backward(scaled_loss)
+                        #else:
+                        total_ls.backward()
+                    # update
+                    if not accumulate or (batch_id + 1) % accumulate == 0:
+                        trainer.allreduce_grads()
+                        dec_trainer.allreduce_grads()
+                        nlp.utils.clip_grad_global_norm(all_model_params.values(), 1.0, check_isfinite=True)
+                        trainer.update(accumulate if accumulate else 1)
+                        dec_trainer.update(accumulate if accumulate else 1)
+                        step_num += 1
+                        if accumulate and accumulate > 1:
+                            # set grad to zero for gradient accumulation
+                            all_model_params.zero_grad()
+                    step_loss += total_ls.mean().asscalar()
+                    elbo_loss += elbo_ls.mean().asscalar()
+                    red_loss  += red_ls.mean().asscalar()
+                    class_loss += ls.asscalar()
+                    if self.has_classifier:
+                        self.metric.update(labels=[label], preds=[out])
+                    if (batch_id + 1) % (self.log_interval) == 0:
+                        self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
+                                  epoch_id, trainer.learning_rate)
+                        step_loss = 0
+                        elbo_loss = 0
+                        red_loss  = 0
+                        class_loss = 0
+                mx.nd.waitall()
+
+            # inference on dev data
+            if dev_data is not None:
+                v_res, metric_nm, metric_val = self.validate(model, dev_data)
+                metric_history.append((epoch_id, metric_nm, metric_val))
                 sc_obj = self._get_objective_from_validation_result(v_res)
                 if 'accuracy' in v_res:
                     self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
@@ -1208,63 +1106,77 @@ class SeqBowEstimator(BaseEstimator):
                     else:
                         self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
                                   perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+            if self.checkpoint_dir:
+                self.write_model(self.checkpoint_dir, suf=str(epoch_id))
         return sc_obj, v_res
 
+    def _compute_coherence(self, model, k, test_data, log_terms=False):
+        num_topics = model.n_latent
+        sorted_ids = model.get_top_k_terms(k, ctx=self.ctx)
+        num_topics = min(num_topics, sorted_ids.shape[-1])
+        top_k_words_per_topic = [[ int(i) for i in list(sorted_ids[:k, t])] for t in range(num_topics)]
+        npmi_eval = EvaluateNPMI(top_k_words_per_topic)
+        npmi = npmi_eval.evaluate_csr_mat(test_data)
+        unique_term_ids = set()
+        unique_limit = 5  ## only consider the top 5 terms for each topic when looking at degree of redundancy
+        for i in range(num_topics):
+            topic_ids = list(top_k_words_per_topic[i][:unique_limit])
+            for j in range(len(topic_ids)):
+                unique_term_ids.add(topic_ids[j])
+        redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2.0
+        logging.info("Test Coherence: {}".format(npmi))
+        #if log_terms:
+        #    top_k_tokens = [list(map(lambda x: self.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
+        #    for i in range(num_topics):
+        #        logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
+        return npmi, redundancy
+            
+    
+    def validate(self, model, dataloader):
+        bow_matrix = self._bow_matrix if self._bow_matrix is not None else self._get_bow_matrix(dataloader, cache=True)
+        num_words = bow_matrix.sum().asscalar()
+        npmi, redundancy = self._compute_coherence(model, 10, bow_matrix, log_terms=True)
+        self.metric.reset()
+        step_loss = 0
+        elbo_loss  = 0
+        total_rec_loss = 0.0
+        total_kl_loss  = 0.0
+        tic = time.time()
+        for batch_id, seqs in enumerate(dataloader):
+            input_ids, valid_len, type_ids, bow, label = seqs
+            elbo_ls, rec_ls, kl_ls, red_ls, out = model(
+                input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+                valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+            if self.has_classifier:
+                ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
+                total_ls = ls + self.mix_val * elbo_ls.mean()
+            else:
+                total_ls = elbo_ls.mean()
+            total_rec_loss += rec_ls.sum().asscalar()
+            total_kl_loss  += kl_ls.sum().asscalar()
+            step_loss += total_ls.mean().asscalar()
+            elbo_loss  += elbo_ls.mean().asscalar()
+            if self.has_classifier:
+                self.metric.update([label], [out])
+            if (batch_id + 1) % (self.log_interval) == 0:
+                self.log_eval(batch_id, len(dataloader), self.metric, step_loss, elbo_loss, self.log_interval)
+                step_loss = 0
+                elbo_loss = 0
+        likelihood = (total_rec_loss + total_kl_loss) / num_words
+        if likelihood < 709.0:
+            perplexity = math.exp(likelihood)
+        else:
+            perplexity = 1e300
+        v_res = {'ppl':perplexity, 'npmi': npmi, 'redundancy': redundancy}
+        
+        if self.has_classifier:
+            metric_nm, metric_val = self.metric.get()
+            if not isinstance(metric_nm, list):
+                metric_nm, metric_val = [metric_nm], [metric_val]
+            self._output_status("Validation metric: {:.6}".format(metric_val[0]))
+            v_res['accuracy'] = metric_val[0]
+        return v_res, metric_nm, metric_val
 
-class LabeledSeqBowEstimator(SeqBowEstimator):
-
-    def __init__(self, n_labels, gamma, *args, igamma=1.0, multilabel=False, **kwargs):
-        super(LabeledSeqBowEstimator, self).__init__(*args, **kwargs)
-        self.multilabel = multilabel
-        self.gamma = gamma
-        self.n_labels = n_labels
-        self.igamma = igamma
-
-
-    @classmethod
-    def from_config(cls, n_labels, gamma, *args, **kwargs):
-        est = super().from_config(*args, **kwargs)
-        est.n_labels = n_labels
-        est.gamma    = gamma
-        return est
-
-    def _get_objective_from_validation_result(self, v_res):
-        topic_obj = super()._get_objective_from_validation_result(v_res)
-        acc = v_res['accuracy']
-        return topic_obj + self.gamma * acc
-
-    def _get_model(self):
-        model = LabeledBertBowVED(self.n_labels, self.gamma, self.bert_base, self.vocabulary, self.latent_distrib,
-                                  multilabel=self.multilabel,
-                           n_latent=self.n_latent, 
-                           kappa = self.kappa,
-                           alpha = self.alpha,
-                           batch_size = self.batch_size,
-                                  kld=1.0, wd_freqs=self.wd_freqs, igamma = self.igamma,
-                           redundancy_reg_penalty=self.redundancy_reg_penalty,
-                           ctx=self.ctx)
-        return model
-
-
-    def validate(self, model, bow_train, bow_val_X, val_y, dataloader):
-        v_res = super().validate(model, bow_train, bow_val_X, val_y, dataloader)
-        tot_correct = 0
-        tot = 0
-        bs = min(bow_val_X.shape[0], self.batch_size)
-        num_std_batches = bow_val_X.shape[0] // bs
-        for i, seqs in enumerate(dataloader):
-            if i < num_std_batches - 1:
-                input_ids, valid_length, type_ids, output_vocab, labels = seqs
-                predictions = self.model.predict(input_ids.as_in_context(self.ctx),
-                                                 type_ids.as_in_context(self.ctx),
-                                                 valid_length.astype('float32').as_in_context(self.ctx))
-                labels = labels.as_in_context(self.ctx)
-                correct = mx.nd.argmax(predictions, axis=1) == labels.squeeze()
-                tot_correct += mx.nd.sum(correct).asscalar()
-                tot += (input_ids.shape[0] - (labels < 0.0).sum().asscalar())
-        acc = float(tot_correct) / float(tot)
-        v_res['accuracy'] = acc
-        return v_res
 
 
 class DeepAveragingBowEstimator(BaseEstimator):

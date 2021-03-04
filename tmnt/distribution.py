@@ -42,7 +42,7 @@ class BaseDistribution(nn.HybridBlock):
         eps = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent), ctx=self.model_ctx)
         return mu + eps
 
-    def get_mu_encoding(self, data):
+    def get_mu_encoding(self, data, include_bn=False):
         """Provide the distribution mean as the natural result of running the full encoder
         
         Parameters:
@@ -50,7 +50,11 @@ class BaseDistribution(nn.HybridBlock):
         Returns:
             encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
         """
-        return self.mu_bn(self.mu_encoder(data))
+        enc = self.mu_encoder(data)
+        if include_bn:
+            return self.mu_bn(enc)
+        else:
+            return enc
 
 
 class GaussianDistribution(BaseDistribution):
@@ -202,7 +206,7 @@ class HyperSphericalDistribution(BaseDistribution):
         mu_bn = self.mu_bn(mu)
         kld = F.broadcast_to(kld_const, shape=(batch_size,))
         z_p = self._get_hypersphere_sample(F, mu_bn, batch_size, vmf_samples)
-        z = self.post_sample_dr_o(z_p)
+        z = z_p # self.post_sample_dr_o(z_p)
         z_r = F.softmax(z)
         return z_r, kld
 
@@ -307,6 +311,5 @@ class HyperSphericalDistribution(BaseDistribution):
         proj_mu_v  = F.broadcast_mul(mu, rescaled)        # shape =  (batch_size, n_latent)
         o_vec      = rv.squeeze() - proj_mu_v
         o_norm     = F.norm(o_vec, axis=1, keepdims=True)
-        #print("Shape mu_1 = {}, shape rv = {}, shape rescaled_1 = {}".format(mu_1.shape, rv.shape, rescaled_1.shape))                
         return F.broadcast_div(o_vec, o_norm)
     

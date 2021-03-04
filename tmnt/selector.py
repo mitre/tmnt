@@ -11,10 +11,13 @@ import datetime
 import os
 import json
 import io
+import dask
+import dask.distributed
 from autogluon.core.scheduler.reporter import FakeReporter
 from tabulate import tabulate
 from tmnt.configuration import TMNTConfigBOW, TMNTConfigSeqBOW
 from tmnt.trainer import BowVAETrainer, SeqBowVEDTrainer
+from tmnt.utils.log_utils import logging_config
 from pathlib import Path
 
 class BaseSelector(object):
@@ -37,7 +40,7 @@ class BaseSelector(object):
     """
     
     def __init__(self, tmnt_config_space, iterations=12, searcher='random', scheduler='fifo', brackets=1, cpus_per_task=2, use_gpu=False,
-                 num_final_evals=1, rng_seed=1234, log_dir='_exps'):
+                 num_final_evals=1, rng_seed=1234, log_dir='_exps', max_task_time=120000):
         self.tmnt_config_space = tmnt_config_space
         self.iterations = iterations
         self.searcher = searcher
@@ -48,6 +51,7 @@ class BaseSelector(object):
         self.num_final_evals = num_final_evals
         self.rng_seed = rng_seed
         self.log_dir = log_dir
+        self.max_task_time = max_task_time
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
 
 
@@ -103,7 +107,7 @@ class BaseSelector(object):
                 reward_attr='objective',
                 )
         hpb_scheduler.run()
-        hpb_scheduler.join_jobs()
+        hpb_scheduler.join_jobs(timeout=self.max_task_time)
         return hpb_scheduler
 
 
@@ -144,6 +148,11 @@ class BaseSelector(object):
 
 
 def model_select_bow_vae(c_args):
+    logging_config(folder=c_args.save_dir, name='tmnt', level=c_args.log_level, console_level=c_args.log_level)
+    ## dask config overrides
+    dask.config.config['distributed']['worker']['use-file-locking'] = False
+    dask.config.config['distributed']['comm']['timeouts']['connect'] = '90s'
+    ##
     tmnt_config = TMNTConfigBOW(c_args.config_space).get_configspace()
     trainer = BowVAETrainer.from_arguments(c_args, val_each_epoch = (not (c_args.searcher == 'random')))
     selector = BaseSelector(tmnt_config,
@@ -163,6 +172,7 @@ def model_select_bow_vae(c_args):
         
 
 def model_select_seq_bow(c_args):
+    logging_config(folder=c_args.save_dir, name='tmnt', level=c_args.log_level, console_level=c_args.log_level)
     tmnt_config = TMNTConfigSeqBOW(c_args.config_space).get_configspace()
     trainer = SeqBowVEDTrainer.from_arguments(c_args)
     selector = BaseSelector(tmnt_config,

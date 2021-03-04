@@ -11,7 +11,8 @@ import os
 import numpy as np
 import gluonnlp as nlp
 import logging
-from mxnet.gluon.block import HybridBlock, Block
+from mxnet.gluon import HybridBlock, Block
+from mxnet.gluon import nn
 
 from tmnt.distribution import LogisticGaussianDistribution
 from tmnt.distribution import GaussianDistribution
@@ -78,8 +79,8 @@ class BaseVAE(HybridBlock):
         """
         z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
         jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
-        z.attach_grad()        
         for i in range(self.vocab_size):
+            z.attach_grad()        
             with mx.autograd.record():
                 y = self.decoder(z)
                 yi = y[0][i]
@@ -237,7 +238,7 @@ class BowVAEModel(BaseVAE):
         return sorted_j
 
 
-    def encode_data(self, data):
+    def encode_data(self, data, include_bn=False):
         """
         Encode data to the mean of the latent distribution defined by the input `data`.
 
@@ -251,7 +252,7 @@ class BowVAEModel(BaseVAE):
         `mxnet.ndarray.NDArray` or `mxnet.symbol.Symbol`
             Result of encoding with shape (batch_size, n_latent)
         """
-        return self.latent_dist.get_mu_encoding(self.encoder(self.embedding(data)))
+        return self.latent_dist.get_mu_encoding(self.encoder(self.embedding(data)), include_bn=include_bn)
     
 
     def run_encode(self, F, in_data, batch_size):
@@ -338,13 +339,13 @@ class CovariateBowVAEModel(BowVAEModel):
                                                   batch_size=self.batch_size, interactions=True, ctx=self.model_ctx)
 
 
-    def encode_data_with_covariates(self, data, covars):
+    def encode_data_with_covariates(self, data, covars, include_bn=False):
         """
         Encode data to the mean of the latent distribution defined by the input `data`
         """
         emb_out = self.embedding(data)
         enc_out = self.encoder(mx.nd.concat(emb_out, covars))
-        return self.latent_dist.get_mu_encoding(enc_out)
+        return self.latent_dist.get_mu_encoding(enc_out, include_bn=include_bn)
 
 
 
@@ -501,7 +502,7 @@ class CoherenceRegularizer(HybridBlock):
 
         T = F.linalg.gemm2(emb_norm, w_norm)
         T_norm_vals = F.norm(T, keepdims=True, axis=0)
-        T_norm = F.broadcast_div(T, T_norm_vals)
+        T_norm = F.broadcast_div(T, T_norm_vals) # (D x K)
 
         S = F.linalg.gemm2(F.transpose(emb_norm), T_norm) # (V x K)
         C = -F.sum(S * w_norm)
@@ -606,7 +607,6 @@ class BertBowVED(Block):
                 emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
                 emb_norm = emb / emb_norm_val
                 self.embedding.collect_params().setattr('grad_req', 'null')
-                                                
         if wd_freqs is not None:
             freq_nd = wd_freqs + 1
             total = freq_nd.sum()
@@ -753,3 +753,93 @@ class LabeledBertBowVED(BertBowVED):
         ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
         iii_loss = ii_loss * self.igamma + lab_loss * self.gamma
         return iii_loss, recon_loss, KL_loss, redundancy_loss, y, lab_loss
+
+    
+class LabeledBert(Block):
+    def __init__(self,
+                 bert,
+                 latent_dist,
+                 num_classes=2,
+                 dropout=0.0,
+                 bow_vocab_size=2000,
+                 n_latent=256, 
+                 kappa = 100.0,
+                 alpha = 1.0,
+                 batch_size=16, kld=0.1, wd_freqs=None,
+                 redundancy_reg_penalty=0.0, pre_trained_embedding = None,
+                 prefix=None, params=None):
+        super(LabeledBert, self).__init__(prefix=prefix, params=params)
+        self.n_latent = n_latent
+        self.bert = bert
+        self.latent_dist = latent_dist
+        self.kld_wt = kld
+        self.has_classifier = num_classes >= 2
+        self.bow_vocab_size = bow_vocab_size
+        self.redundancy_reg_penalty = redundancy_reg_penalty
+        with self.name_scope():
+            self.embedding = None
+            self.decoder = nn.Dense(in_units=n_latent, units=bow_vocab_size, use_bias=True)
+            self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)            
+            if self.has_classifier:
+                self.classifier = nn.HybridSequential(prefix=prefix)
+                if dropout:
+                    self.classifier.add(nn.Dropout(rate=dropout))
+                self.classifier.add(nn.Dense(units=num_classes))
+            if pre_trained_embedding is not None:
+                self.embedding = nn.Dense(in_units = len(pre_trained_embedding.idx_to_vec), units = pre_trained_embedding.idx_to_vec[0].size, use_bias=False)
+
+                
+    def get_redundancy_penalty(self):
+        w = self.decoder.params.get('weight').data()
+        emb = self.embedding.params.get('weight').data() if self.embedding is not None else w.transpose()
+        _, redundancy_loss = self.coherence_regularization(w, emb)
+        return redundancy_loss
+
+
+    def initialize_bias_terms(self, wd_freqs):
+        if wd_freqs is not None:
+            freq_nd = wd_freqs + 1 # simple smoothing
+            total = freq_nd.sum()
+            log_freq = freq_nd.log() - freq_nd.sum().log()
+            bias_param = self.decoder.collect_params().get('bias')
+            bias_param.set_data(log_freq)
+            bias_param.grad_req = 'null'
+            self.out_bias = bias_param.data()
+
+
+    def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
+        _, enc = self.bert(inputs, token_types, valid_length)
+        elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
+        if bow is not None:
+            bow = bow.squeeze()
+            z, KL = self.latent_dist(enc, inputs.shape[0])
+            KL_loss = (KL * self.kld_wt)
+            y = mx.nd.softmax(self.decoder(z), axis=1)
+            rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
+            elbo = rec_loss + KL_loss
+        classifier_outputs = self.classifier(enc) if self.has_classifier else None
+        redundancy_loss = self.get_redundancy_penalty()
+        elbo = elbo + redundancy_loss
+        return elbo, rec_loss, KL_loss, redundancy_loss, classifier_outputs
+
+    def get_top_k_terms(self, k, ctx=mx.cpu()):
+        """
+        Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
+        probability increases the most for a unit increase in a given topic score/probability
+        are those most associated with the topic. This is just the topic-term weights for a 
+        linear decoder - but code here will work with arbitrary decoder.
+        """
+        z = mx.nd.ones(shape=(1, self.n_latent), ctx=ctx)
+        jacobian = mx.nd.zeros(shape=(self.bow_vocab_size, self.n_latent), ctx=ctx)
+        z.attach_grad()        
+        for i in range(self.bow_vocab_size):
+            with mx.autograd.record():
+                y = self.decoder(z)
+                yi = y[0][i]
+            yi.backward()
+            jacobian[i] = z.grad
+        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
+        return sorted_j.asnumpy()
+
+
+

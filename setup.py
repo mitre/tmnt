@@ -21,7 +21,7 @@ if __name__ == '__main__':
     ]
     install_requires = [
        'numpy>=1.19.0,<1.20.0',
-       'gluonnlp==0.9.1',
+       'gluonnlp==0.10.0',
         #'autogluon==0.0.15',
         'autogluon.core>=0.0.16b20210106',
        'mantichora==0.9.5',
