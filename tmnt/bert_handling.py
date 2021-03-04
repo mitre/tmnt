@@ -213,11 +213,10 @@ def get_vectorizer(train_json_file, txt_key, label_key, vocab_size=2000):
     return vectorizer
 
 
-def preprocess_data(tokenizer, class_labels, train_json_file, dev_json_file, batch_size, dev_batch_size, max_len, pad=False):
+
+def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch_size, dev_batch_size, max_len, pad=False):
     """Train/eval Data preparation function."""
     pool = multiprocessing.Pool()
-
-    vectorizer = get_vectorizer(train_json_file, "sentence", "label0")
 
     # transformation for data train and dev
     label_dtype = 'float32' # if not task.class_labels else 'int32'
@@ -230,7 +229,7 @@ def preprocess_data(tokenizer, class_labels, train_json_file, dev_json_file, bat
                                  vectorizer=vectorizer)
 
     # data train
-    train_ds = JsonlDataset(train_json_file, txt_key="sentence", label_key="label0")
+    #train_ds = JsonlDataset(train_json_file, txt_key="sentence", label_key="label0")
     data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_ds))
     data_train_len = data_train.transform(
         lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
@@ -251,7 +250,7 @@ def preprocess_data(tokenizer, class_labels, train_json_file, dev_json_file, bat
         batch_sampler=batch_sampler,
         batchify_fn=batchify_fn)
 
-    dev_ds = JsonlDataset(dev_json_file, txt_key="sentence", label_key="label0")
+    #dev_ds = JsonlDataset(dev_json_file, txt_key="sentence", label_key="label0")
     data_dev = mx.gluon.data.SimpleDataset(pool.map(trans, dev_ds))
     loader_dev = mx.gluon.data.DataLoader(
             data_dev,
@@ -322,8 +321,17 @@ def preprocess_data_metriclearn(tokenizer, class_labels, train_a_json_file, trai
     return loader_train, len(joined_data_train)
     
 
-
-def get_bert_datasets(class_labels, train_file, dev_file, model_name, dataset, batch_size, dev_bs, max_len, pad, ctx):
+def get_bert_datasets(class_labels,
+                      vectorizer,
+                      train_ds,
+                      dev_ds,
+                      model_name,
+                      dataset,
+                      batch_size,
+                      dev_bs,
+                      max_len,
+                      pad,
+                      ctx):
     bert, vocabulary = get_model(
         name=model_name,
         dataset_name=dataset,
@@ -334,9 +342,12 @@ def get_bert_datasets(class_labels, train_file, dev_file, model_name, dataset, b
         use_classifier=False)
     do_lower_case = 'uncased' in dataset    
     bert_tokenizer = BERTTokenizer(vocabulary, lower=do_lower_case)
+    #train_ds = JsonlDataset(train_json_file, txt_key=txt_key, label_key=label_key)
+    #dev_ds = JsonlDataset(dev_json_file, txt_key=txt_key, label_key=label_key)
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
-        bert_tokenizer, class_labels, train_file, dev_file, batch_size, dev_bs, max_len, pad)
+        bert_tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch_size, dev_bs, max_len, pad)
     return train_data, dev_data, num_train_examples, bert
+
 
 ############
 # Handle dataloading for Smoothed Deep Metric Loss with parallel batching

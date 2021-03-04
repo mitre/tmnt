@@ -79,8 +79,8 @@ class BaseVAE(HybridBlock):
         """
         z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
         jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
-        z.attach_grad()        
         for i in range(self.vocab_size):
+            z.attach_grad()        
             with mx.autograd.record():
                 y = self.decoder(z)
                 yi = y[0][i]
@@ -238,7 +238,7 @@ class BowVAEModel(BaseVAE):
         return sorted_j
 
 
-    def encode_data(self, data):
+    def encode_data(self, data, include_bn=False):
         """
         Encode data to the mean of the latent distribution defined by the input `data`.
 
@@ -252,7 +252,7 @@ class BowVAEModel(BaseVAE):
         `mxnet.ndarray.NDArray` or `mxnet.symbol.Symbol`
             Result of encoding with shape (batch_size, n_latent)
         """
-        return self.latent_dist.get_mu_encoding(self.encoder(self.embedding(data)))
+        return self.latent_dist.get_mu_encoding(self.encoder(self.embedding(data)), include_bn=include_bn)
     
 
     def run_encode(self, F, in_data, batch_size):
@@ -339,13 +339,13 @@ class CovariateBowVAEModel(BowVAEModel):
                                                   batch_size=self.batch_size, interactions=True, ctx=self.model_ctx)
 
 
-    def encode_data_with_covariates(self, data, covars):
+    def encode_data_with_covariates(self, data, covars, include_bn=False):
         """
         Encode data to the mean of the latent distribution defined by the input `data`
         """
         emb_out = self.embedding(data)
         enc_out = self.encoder(mx.nd.concat(emb_out, covars))
-        return self.latent_dist.get_mu_encoding(enc_out)
+        return self.latent_dist.get_mu_encoding(enc_out, include_bn=include_bn)
 
 
 
@@ -502,7 +502,7 @@ class CoherenceRegularizer(HybridBlock):
 
         T = F.linalg.gemm2(emb_norm, w_norm)
         T_norm_vals = F.norm(T, keepdims=True, axis=0)
-        T_norm = F.broadcast_div(T, T_norm_vals)
+        T_norm = F.broadcast_div(T, T_norm_vals) # (D x K)
 
         S = F.linalg.gemm2(F.transpose(emb_norm), T_norm) # (V x K)
         C = -F.sum(S * w_norm)

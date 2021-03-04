@@ -138,7 +138,6 @@ class BaseTrainer(object):
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
         best_model = None
-        self.validate_each_epoch = False  
         if self.test_data_path is not None:
             #if c_args.tst_vec_file:
             #    trainer.set_heldout_data_path_as_test()        
@@ -202,7 +201,8 @@ class BowVAETrainer(BaseTrainer):
         rng_seed (int): Seed for random number generator. Default = 1234
     """
     def __init__(self, log_out_dir, model_out_dir, vocabulary, wd_freqs, train_data_path, 
-                 test_data_path, pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False,
+                 test_data_path, coherence_via_encoder=False,
+                 pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False,
                  use_gpu=False, n_covars=None,
                  val_each_epoch=True, rng_seed=1234):
         super().__init__(vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed)
@@ -216,6 +216,7 @@ class BowVAETrainer(BaseTrainer):
         self.pretrained_param_file = pretrained_param_file
         self.n_covars = n_covars
         self.use_labels_as_covars = use_labels_as_covars
+        self.coherence_via_encoder = coherence_via_encoder
         if topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(topic_seed_file, vocabulary, ctx)
         
@@ -254,6 +255,7 @@ class BowVAETrainer(BaseTrainer):
         if not os.path.exists(model_out_dir):
             os.mkdir(model_out_dir)
         return cls(log_out_dir, model_out_dir, vocab, wd_freqs, c_args.tr_vec_file, c_args.val_vec_file,
+                   coherence_via_encoder=c_args.encoder_coherence,
                    pretrained_param_file=c_args.pretrained_param_file, topic_seed_file=c_args.topic_seed_file,
                    use_labels_as_covars=c_args.use_labels_as_covars,
                                 use_gpu=c_args.use_gpu, n_covars=n_covars, val_each_epoch=val_each_epoch)
@@ -291,10 +293,10 @@ class BowVAETrainer(BaseTrainer):
                                                      pretrained_param_file=self.pretrained_param_file,
                                                      wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
         else:
-            estimator = BowEstimator.from_config(config, vocab,
-                                                     pretrained_param_file=self.pretrained_param_file,
-                                                     wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
-        estimator.validate_each_epoch = self.validate_each_epoch
+           estimator = BowEstimator.from_config(config, vocab, coherence_via_encoder=self.coherence_via_encoder,
+                                                validate_each_epoch=self.validate_each_epoch,
+                                                pretrained_param_file=self.pretrained_param_file,
+                                                wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
         return estimator
     
 

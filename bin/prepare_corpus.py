@@ -35,7 +35,7 @@ parser.add_argument('--log_dir', type=str, help='Logging directory', default='.'
 args = parser.parse_args()
 
 if __name__ == '__main__':
-    logging_config(folder=args.log_dir, name='vectorizer', level=logging.INFO)
+    logging_config(folder=args.log_dir, name='vectorizer', level='info')
     if args.vocab_file is None:
         raise Exception("Vocabulary output file name/path must be provided")
     if (args.tr_vec_file is None) or (args.tr_input is None):

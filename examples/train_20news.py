@@ -1,6 +1,6 @@
 """
-Building a topic model with the API
-===================================
+Training a BOW topic model
+==========================
 
 Simple example loading 20 news data, building a topic model
 and encoding strings. 

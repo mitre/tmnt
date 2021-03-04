@@ -11,7 +11,9 @@ CONFIGURED = False
 
 def get_level(ll):
     log_level = ll
-    if ll.lower() == 'info':
+    if isinstance(ll, int):
+        return log_level
+    elif ll.lower() == 'info':
         log_level = logging.INFO
     elif ll.lower() == 'debug':
         log_level = logging.DEBUG
