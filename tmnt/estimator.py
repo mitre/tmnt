@@ -916,7 +916,7 @@ class SeqBowEstimator(BaseEstimator):
                  max_batches = 2,
                  checkpoint_dir = None,
                  **kwargs):
-        super(FullyLabeledSeqEstimator, self).__init__(*args, **kwargs)
+        super(SeqBowEstimator, self).__init__(*args, **kwargs)
         self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
         self.has_classifier = n_labels >= 2

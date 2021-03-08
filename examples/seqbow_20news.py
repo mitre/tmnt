@@ -2,7 +2,7 @@
 Training a seq2bow encoder-decoder model
 ========================================
 """
-from tmnt.estimator import FullyLabeledSeqEstimator
+from tmnt.estimator import SeqBowEstimator
 import numpy as np
 import gluonnlp as nlp
 import os
