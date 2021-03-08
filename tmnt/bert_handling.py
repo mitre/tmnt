@@ -240,8 +240,8 @@ def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch
     batch_sampler = nlp.data.sampler.FixedBucketSampler(
         data_train_len,
         batch_size=batch_size,
-        num_buckets=10,
-        ratio=0.5,
+        num_buckets=6,
+        ratio=0.2,
         shuffle=True)
     # data loader for training
     loader_train = gluon.data.DataLoader(
