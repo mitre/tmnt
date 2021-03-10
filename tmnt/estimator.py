@@ -1000,7 +1000,7 @@ class SeqBowEstimator(BaseEstimator):
 
         trainer = gluon.Trainer(non_decoder_params, self.optimizer,
                                     optimizer_params, update_on_kvstore=False)
-        dec_trainer = gluon.Trainer(decoder_params, 'adam', {'learning_rate': self.decoder_lr, 'epsilon': 1e-6, 'wd': 0.02})
+        dec_trainer = gluon.Trainer(decoder_params, 'adam', {'learning_rate': self.decoder_lr, 'epsilon': 1e-6, 'wd': 0.00001})
         #if args.dtype == 'float16':
         #    amp.init_trainer(trainer)
 
@@ -1015,7 +1015,11 @@ class SeqBowEstimator(BaseEstimator):
             v.wd_mult = 0.0
         # Collect differentiable parameters
         params = [p for p in all_model_params.values() if p.grad_req != 'null']
-
+        clipped_params = []
+        for p in non_decoder_params.values():
+            if p.grad_req != 'null':
+                clipped_params.append(p)
+        
         # Set grad_req if gradient accumulation is required
         if accumulate and accumulate > 1:
             for p in params:
@@ -1044,7 +1048,7 @@ class SeqBowEstimator(BaseEstimator):
                         new_lr = self.lr - offset * self.lr
                         dec_lr = self.decoder_lr - offset * self.decoder_lr
                     trainer.set_learning_rate(new_lr)
-                    dec_trainer.set_learning_rate(dec_lr)
+                    #dec_trainer.set_learning_rate(dec_lr)
 
                     # forward and backward
                     with mx.autograd.record():
@@ -1066,7 +1070,7 @@ class SeqBowEstimator(BaseEstimator):
                     if not accumulate or (batch_id + 1) % accumulate == 0:
                         trainer.allreduce_grads()
                         dec_trainer.allreduce_grads()
-                        nlp.utils.clip_grad_global_norm(all_model_params.values(), 1.0, check_isfinite=True)
+                        nlp.utils.clip_grad_global_norm(clipped_params, 1.0, check_isfinite=True)
                         trainer.update(accumulate if accumulate else 1)
                         dec_trainer.update(accumulate if accumulate else 1)
                         step_num += 1
@@ -1076,8 +1080,8 @@ class SeqBowEstimator(BaseEstimator):
                     step_loss += total_ls.mean().asscalar()
                     elbo_loss += elbo_ls.mean().asscalar()
                     red_loss  += red_ls.mean().asscalar()
-                    class_loss += ls.asscalar()
                     if self.has_classifier:
+                        class_loss += ls.asscalar()
                         self.metric.update(labels=[label], preds=[out])
                     if (batch_id + 1) % (self.log_interval) == 0:
                         self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
@@ -1168,7 +1172,9 @@ class SeqBowEstimator(BaseEstimator):
         else:
             perplexity = 1e300
         v_res = {'ppl':perplexity, 'npmi': npmi, 'redundancy': redundancy}
-        
+
+        metric_nm = 0.0
+        metric_val = 0.0
         if self.has_classifier:
             metric_nm, metric_val = self.metric.get()
             if not isinstance(metric_nm, list):
