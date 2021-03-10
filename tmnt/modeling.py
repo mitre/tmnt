@@ -560,53 +560,6 @@ class DeepAveragingVAEModel(BaseVAE):
         return iv_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, lab_loss
 
 
-
-class BertBowVED(Block):
-    def __init__(self, bert_base, bow_vocab, latent_distrib='vmf', 
-                 n_latent=256, 
-                 kappa = 100.0,
-                 alpha = 1.0,
-                 batch_size=16, kld=0.1, wd_freqs=None,
-                 redundancy_reg_penalty=0.0,
-                 ctx = mx.cpu(),
-                 prefix=None, params=None):
-        super(BertBowVED, self).__init__(prefix=prefix, params=params)
-        self.kld_wt = kld
-        self.n_latent = n_latent
-        self.model_ctx = ctx
-        self.batch_size = batch_size
-        self.bow_vocab_size = len(bow_vocab)
-        self.vocabulary = bow_vocab
-        self.latent_distrib = latent_distrib
-        self.kappa = kappa
-        self.alpha = alpha
-        self.coherence_reg_penalty = 0.0
-        self.redundancy_reg_penalty = redundancy_reg_penalty
-        with self.name_scope():
-            self.encoder = bert_base            
-            if latent_distrib == 'logistic_gaussian':
-                self.latent_dist = LogisticGaussianDistribution(n_latent, ctx, dr=0.0)
-            elif latent_distrib == 'vmf':
-                self.latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=self.model_ctx, dr=0.0)
-            elif latent_distrib == 'gaussian':
-                self.latent_dist = GaussianDistribution(n_latent, ctx, dr=0.0)
-            elif latent_distrib == 'gaussian_unitvar':
-                self.latent_dist = GaussianUnitVarDistribution(n_latent, ctx, dr=0.0, var=0.05)
-            else:
-                raise Exception("Invalid distribution ==> {}".format(latent_distrib))
-            self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.bow_vocab_size, activation=None)
-            self.decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-            self.latent_dist.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-            self.latent_dist.post_init(self.model_ctx)
-            self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
-            if self.vocabulary.embedding:
-                self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary),
-                                                units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
-                self.embedding.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-                emb = self.vocabulary.embedding.idx_to_vec.transpose()
-                emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
-                emb_norm = emb / emb_norm_val
-                self.embedding.collect_params().setattr('grad_req', 'null')
         if wd_freqs is not None:
             freq_nd = wd_freqs + 1
             total = freq_nd.sum()
@@ -705,57 +658,7 @@ class BertBowVED(Block):
         return jacobians
     
 
-class LabeledBertBowVED(BertBowVED):
-
-    def __init__(self, n_labels, gamma, *args, igamma=1.0, multilabel=False, **kwargs):
-        super(LabeledBertBowVED, self).__init__(*args, **kwargs)
-        self.multilabel = multilabel
-        self.n_labels = n_labels
-        self.gamma    = gamma
-        self.igamma   = igamma
-        with self.name_scope():
-            self.lab_decoder = gluon.nn.Dense(units=self.n_labels, activation=None, use_bias=True)
-            #self.lab_dr = gluon.nn.Dropout(0.0)
-        self.lab_decoder.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-        self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
-
-
-    def predict(self, toks, tok_types, valid_length):
-        _, enc = self.encoder(toks, tok_types, valid_length)
-        #mu_out = self.latent_dist.get_mu_encoding(enc)
-        return self.lab_decoder(enc)
-        
-
-    def forward(self, toks, tok_types, valid_length, bow, labels, label_mask=None):
-        """Forward pass for BERT-pretrained variational encoder-decoder.
-
-        Parameters:
-            tokens (tensor): Batches of token id sequences
-            tok_types (tensor): Types of tokens (sent1 or sent2) for BERT
-            valid_length (tensor): Lengths of each sequence
-        Returns:
-            (tuple): Tuple of:
-                loss, reconstruction loss, KL term, redundancy loss, reconstruction values, label CE loss
-        """
-        _, enc = self.encoder(toks, tok_types, valid_length)
-        #mu_out = self.latent_dist.get_mu_encoding(enc)
-        z, KL = self.latent_dist(enc, self.batch_size)
-        y = self.decoder(z)
-        y = mx.nd.softmax(y, axis=1)
-        rr = bow * mx.nd.log(y+1e-12)
-        #lab_loss = self.lab_loss_fn(self.lab_decoder(mu_out), labels)
-        lab_loss = self.lab_loss_fn(self.lab_decoder(enc), labels)
-        if label_mask is not None:
-            lab_loss = lab_loss * label_mask
-        recon_loss = -mx.nd.sparse.sum( rr, axis=1 )
-        KL_loss = ( KL * self.kld_wt )
-        loss = recon_loss + KL_loss
-        ii_loss, redundancy_loss = self.add_coherence_reg_penalty(loss)
-        iii_loss = ii_loss * self.igamma + lab_loss * self.gamma
-        return iii_loss, recon_loss, KL_loss, redundancy_loss, y, lab_loss
-
-    
-class LabeledBert(Block):
+class SeqBowVED(Block):
     def __init__(self,
                  bert,
                  latent_dist,
@@ -768,7 +671,7 @@ class LabeledBert(Block):
                  batch_size=16, kld=0.1, wd_freqs=None,
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None,
                  prefix=None, params=None):
-        super(LabeledBert, self).__init__(prefix=prefix, params=params)
+        super(SeqBowVED, self).__init__(prefix=prefix, params=params)
         self.n_latent = n_latent
         self.bert = bert
         self.latent_dist = latent_dist
@@ -776,6 +679,7 @@ class LabeledBert(Block):
         self.has_classifier = num_classes >= 2
         self.bow_vocab_size = bow_vocab_size
         self.redundancy_reg_penalty = redundancy_reg_penalty
+        self.vocabulary = None ### XXX - add this as option to be passed in
         with self.name_scope():
             self.embedding = None
             self.decoder = nn.Dense(in_units=n_latent, units=bow_vocab_size, use_bias=True)
@@ -786,7 +690,17 @@ class LabeledBert(Block):
                     self.classifier.add(nn.Dropout(rate=dropout))
                 self.classifier.add(nn.Dense(units=num_classes))
             if pre_trained_embedding is not None:
-                self.embedding = nn.Dense(in_units = len(pre_trained_embedding.idx_to_vec), units = pre_trained_embedding.idx_to_vec[0].size, use_bias=False)
+                self.embedding = nn.Dense(in_units = len(pre_trained_embedding.idx_to_vec),
+                                          units = pre_trained_embedding.idx_to_vec[0].size, use_bias=False)
+            if self.vocabulary:
+                self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary),
+                                                units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
+                self.embedding.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+                emb = self.vocabulary.embedding.idx_to_vec.transpose()
+                emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
+                emb_norm = emb / emb_norm_val
+                self.embedding.collect_params().setattr('grad_req', 'null')
+
 
                 
     def get_redundancy_penalty(self):

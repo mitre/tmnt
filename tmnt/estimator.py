@@ -23,7 +23,7 @@ import gluonnlp as nlp
 from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, BertBowVED, LabeledBertBowVED, DeepAveragingVAEModel, LabeledBert
+from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import HyperSphericalDistribution
 import autogluon.core as ag
@@ -925,7 +925,7 @@ class SeqBowEstimator(BaseEstimator):
         self.metric = mx.metric.Accuracy()
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
-        self.loss_function = gluon.loss.SoftmaxCELoss()
+        self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
         self.mix_val = mix_val
         self.decoder_lr = decoder_lr
         self._bow_matrix = None
@@ -940,7 +940,7 @@ class SeqBowEstimator(BaseEstimator):
 
     def _get_model(self, train_data):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
-        model = LabeledBert(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent)
+        model = SeqBowVED(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent)
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.post_init(self.ctx)

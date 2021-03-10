@@ -227,9 +227,7 @@ def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch
                                  pad=pad, pair=False,
                                  has_label=True,
                                  vectorizer=vectorizer)
-
     # data train
-    #train_ds = JsonlDataset(train_json_file, txt_key="sentence", label_key="label0")
     data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_ds))
     data_train_len = data_train.transform(
         lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
@@ -342,8 +340,6 @@ def get_bert_datasets(class_labels,
         use_classifier=False)
     do_lower_case = 'uncased' in dataset    
     bert_tokenizer = BERTTokenizer(vocabulary, lower=do_lower_case)
-    #train_ds = JsonlDataset(train_json_file, txt_key=txt_key, label_key=label_key)
-    #dev_ds = JsonlDataset(dev_json_file, txt_key=txt_key, label_key=label_key)
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
         bert_tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch_size, dev_bs, max_len, pad)
     return train_data, dev_data, num_train_examples, bert

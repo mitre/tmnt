@@ -13,9 +13,10 @@ import os
 import scipy
 import umap
 import logging
-from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, BertBowVED
+from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
+from tmnt.distribution import HyperSphericalDistribution
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from sklearn.datasets import load_svmlight_file
@@ -254,8 +255,9 @@ class SeqVEDInferencer(BaseInferencer):
         n_latent    = config['n_latent']
         kappa       = config['latent_distribution']['kappa']
         pad_id      = vocab[vocab.padding_token]
-        max_sent_len = config['sent_size']  
-        model = BertBowVED(bert_base, bow_vocab, latent_distrib=latent_dist,
+        max_sent_len = config['sent_size']
+        latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=ctx)
+        model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab),
                                 n_latent=n_latent,
                                 kappa = kappa,
                                 batch_size=1)
