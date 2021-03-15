@@ -164,7 +164,8 @@ class BowVAEInferencer(BaseInferencer):
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
             if covars is None:
                 covars = mx.nd.zeros(data_to_iter.shape[0])
-            infer_iter = DataIterLoader(SparseMatrixDataIter(data_to_iter, covars, batch_size, last_batch_handle='discard', shuffle=False))
+            infer_iter = DataIterLoader(SparseMatrixDataIter(data_to_iter, covars, batch_size, last_batch_handle='discard',
+                                                             shuffle=False))
         else:
             infer_iter = DataIterLoader(mx.io.NDArrayIter(data_to_iter, covars,
                                                       batch_size, last_batch_handle='discard', shuffle=False))
@@ -185,7 +186,8 @@ class BowVAEInferencer(BaseInferencer):
             last_data = mx.nd.sparse.csr_matrix(data_mat[-last_batch_size:], dtype='float32')
             data = last_data.as_in_context(self.ctx)
             if self.covar_model and labels is not None:
-                labels = mx.nd.one_hot(mx.nd.array(labels[-last_batch_size:], dtype='int'), self.n_covars).as_in_context(self.ctx)
+                labels = mx.nd.one_hot(mx.nd.array(labels[-last_batch_size:], dtype='int'),
+                                       self.n_covars).as_in_context(self.ctx)
                 encs = self.model.encode_data_with_covariates(data, labels)
             else:
                 encs = self.model.encode_data(data)
@@ -231,7 +233,7 @@ class SeqVEDInferencer(BaseInferencer):
     def __init__(self, model, bert_vocab, max_length, ctx=mx.cpu()):
         super().__init__(ctx)
         self.model     = model
-        self.bert_base = model.encoder
+        self.bert_base = model.bert
         self.tokenizer = BERTTokenizer(bert_vocab)
         self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
 
@@ -251,16 +253,13 @@ class SeqVEDInferencer(BaseInferencer):
                                              dataset_name='book_corpus_wiki_en_uncased',
                                              pretrained=True, ctx=ctx, use_pooler=True,
                                              use_decoder=False, use_classifier=False) #, output_attention=True)
-        latent_dist = config['latent_distribution']['dist_type']       
+        latent_dist_t = config['latent_distribution']['dist_type']       
         n_latent    = config['n_latent']
         kappa       = config['latent_distribution']['kappa']
+        num_classes = config['n_labels']
         pad_id      = vocab[vocab.padding_token]
-        max_sent_len = config['sent_size']
         latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=ctx)
-        model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab),
-                                n_latent=n_latent,
-                                kappa = kappa,
-                                batch_size=1)
+        model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab))
         model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
         return cls(model, vocab, max_length, ctx)
 

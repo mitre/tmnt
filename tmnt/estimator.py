@@ -906,6 +906,9 @@ class CovariateBowEstimator(BaseBowEstimator):
 class SeqBowEstimator(BaseEstimator):
 
     def __init__(self, bert_base, *args,
+                 bert_model_name = 'bert_12_768_12',
+                 bert_data_name = 'book_corpus_wiki_en_uncased',
+                 bow_vocab = None,
                  n_labels = 0,
                  n_latent = 20,
                  log_interval=5,
@@ -915,10 +918,13 @@ class SeqBowEstimator(BaseEstimator):
                  decoder_lr = 0.01,
                  max_batches = 2,
                  checkpoint_dir = None,
+                 optimizer = 'bertadam',
                  **kwargs):
-        super(SeqBowEstimator, self).__init__(*args, **kwargs)
+        super(SeqBowEstimator, self).__init__(*args, optimizer=optimizer, **kwargs)
         self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
+        self.bert_model_name = bert_model_name
+        self.bert_data_name = bert_data_name
         self.has_classifier = n_labels >= 2
         self.multilabel = multilabel
         self.n_labels = n_labels
@@ -929,18 +935,64 @@ class SeqBowEstimator(BaseEstimator):
         self.mix_val = mix_val
         self.decoder_lr = decoder_lr
         self._bow_matrix = None
+        self.bow_vocab = bow_vocab
 
 
     @classmethod
-    def from_config(cls, n_labels, gamma, *args, **kwargs):
-        est = super().from_config(*args, **kwargs)
-        est.n_labels = n_labels
-        est.gamma    = gamma
-        return est
+    def from_config(cls, config, reporter=None, log_interval=1, ctx=mx.cpu()):
+        if isinstance(config, str):
+            try:
+                with open(config, 'r') as f:
+                    config_dict = json.load(f)
+            except:
+                logging.error("File {} does not appear to be a valid config instance".format(config))
+                raise Exception("Invalid Json Configuration File")
+            config = ag.space.Dict(**config_dict)
+        lr = config.lr
+        decoder_lr = config.decoder_lr
+        optimizer = config.optimizer
+        n_latent = int(config.n_latent)
+        batch_size = int(config.batch_size)
+        epochs = int(config.epochs)
+        ldist_def = config.latent_distribution
+        kappa = 0.0
+        alpha = 1.0
+        latent_distrib = ldist_def.dist_type
+        #embedding_source = config.embedding_source
+        redundancy_reg_penalty = config.redundancy_reg_penalty
+        warmup_ratio = config.warmup_ratio
+        n_labels = config.n_labels
+        if latent_distrib == 'vmf':
+            kappa = ldist_def.kappa
+        elif latent_distrib == 'logistic_gaussian':
+            alpha = ldist_def.alpha
+        bert_base, _ = nlp.model.get_model(config.bert_model_name,  
+                                           dataset_name=config.bert_data_name,
+                                           pretrained=True, ctx=ctx, use_pooler=True,
+                                           use_decoder=False, use_classifier=False)
+        model = cls(bert_base,
+                    n_labels=n_labels,
+                    coherence_coefficient=8.0,
+                    reporter=reporter,
+                    latent_distribution=latent_distrib,
+                    n_latent=n_latent,
+                    redundancy_reg_penalty=redundancy_reg_penalty,
+                    kappa = kappa,
+                    alpha=alpha,
+                    batch_size=batch_size,
+                    warmup_ratio = warmup_ratio,
+                    optimizer = optimizer,
+                    epochs = epochs,
+                    lr = lr,
+                    decoder_lr = decoder_lr,
+                    ctx=ctx,
+                    log_interval=log_interval)
+        return model
 
     def _get_model(self, train_data):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
-        model = SeqBowVED(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent)
+        model = SeqBowVED(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent,
+                          bow_vocab_size = len(self.bow_vocab))
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.post_init(self.ctx)
@@ -949,6 +1001,41 @@ class SeqBowEstimator(BaseEstimator):
         tr_bow_matrix = self._get_bow_matrix(train_data)
         model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         return model
+
+    def _get_config(self):
+        config = {}
+        config['lr'] = self.lr
+        config['decoder_lr'] = self.decoder_lr
+        config['optimizer'] = self.optimizer
+        config['n_latent'] = self.n_latent
+        config['n_labels'] = self.n_labels
+        config['batch_size'] = self.batch_size
+        if self.latent_distrib == 'vmf':
+            config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}
+        elif self.latent_distrib == 'logistic_gaussian':
+            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.alpha}
+        else:
+            config['latent_distribution'] = {'dist_type':'gaussian'}
+        config['epochs'] = self.epochs
+        #config['embedding_source'] = self.embedding_source
+        config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
+        config['warmup_ratio'] = self.warmup_ratio
+        config['bert_model_name'] = self.bert_model_name
+        config['bert_data_name'] = self.bert_data_name
+        return config
+
+    def write_model(self, model_dir, suf=''):
+        pfile = os.path.join(model_dir, ('model.params' + suf))
+        conf_file = os.path.join(model_dir, ('model.config' + suf))
+        vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
+        self.model.save_parameters(pfile)
+        config = self._get_config()
+        specs = json.dumps(config, sort_keys=True, indent=4)
+        with open(conf_file, 'w') as f:
+            f.write(specs)
+        with open(vocab_file, 'w') as f:
+            f.write(self.bow_vocab.to_json())
+
 
     def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, red_loss, class_loss, log_interval, epoch_id, learning_rate):
         """Generate and print out the log message for training. """
@@ -975,7 +1062,6 @@ class SeqBowEstimator(BaseEstimator):
             self._bow_matrix = bow_matrix
         return bow_matrix
 
-
     def _get_objective_from_validation_result(self, val_result):
         npmi = val_result['npmi']
         ppl  = val_result['ppl']
@@ -989,6 +1075,8 @@ class SeqBowEstimator(BaseEstimator):
     def fit_with_validation(self, train_data, dev_data, num_train_examples):
         """Training function."""
         model = self._get_model(train_data)
+        self.model = model
+        
         accumulate = False
 
         all_model_params = model.collect_params()

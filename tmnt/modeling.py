@@ -662,17 +662,15 @@ class SeqBowVED(Block):
     def __init__(self,
                  bert,
                  latent_dist,
-                 num_classes=2,
+                 num_classes=0,
                  dropout=0.0,
                  bow_vocab_size=2000,
-                 n_latent=256, 
-                 kappa = 100.0,
-                 alpha = 1.0,
-                 batch_size=16, kld=0.1, wd_freqs=None,
+                 n_latent=20, 
+                 kld=0.1, 
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None,
                  prefix=None, params=None):
         super(SeqBowVED, self).__init__(prefix=prefix, params=params)
-        self.n_latent = n_latent
+        self.n_latent = latent_dist.n_latent
         self.bert = bert
         self.latent_dist = latent_dist
         self.kld_wt = kld
@@ -682,7 +680,7 @@ class SeqBowVED(Block):
         self.vocabulary = None ### XXX - add this as option to be passed in
         with self.name_scope():
             self.embedding = None
-            self.decoder = nn.Dense(in_units=n_latent, units=bow_vocab_size, use_bias=True)
+            self.decoder = nn.Dense(in_units=self.n_latent, units=bow_vocab_size, use_bias=True)
             self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)            
             if self.has_classifier:
                 self.classifier = nn.HybridSequential(prefix=prefix)

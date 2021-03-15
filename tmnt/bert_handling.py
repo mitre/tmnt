@@ -235,11 +235,12 @@ def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch
     batchify_fn = nlp.data.batchify.Tuple(
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
+    num_buckets = min(6, len(train_ds) // batch_size)
     batch_sampler = nlp.data.sampler.FixedBucketSampler(
         data_train_len,
         batch_size=batch_size,
-        num_buckets=6,
-        ratio=0.2,
+        num_buckets=num_buckets,
+        ratio=0.2, # may avoid batches with size = 1 (which triggers a bug)
         shuffle=True)
     # data loader for training
     loader_train = gluon.data.DataLoader(
