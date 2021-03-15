@@ -249,7 +249,6 @@ def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch
         batch_sampler=batch_sampler,
         batchify_fn=batchify_fn)
 
-    #dev_ds = JsonlDataset(dev_json_file, txt_key="sentence", label_key="label0")
     data_dev = mx.gluon.data.SimpleDataset(pool.map(trans, dev_ds))
     loader_dev = mx.gluon.data.DataLoader(
             data_dev,
