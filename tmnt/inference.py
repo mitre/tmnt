@@ -249,10 +249,10 @@ class SeqVEDInferencer(BaseInferencer):
         with open(vocab_file) as f:
             voc_js = f.read()
         bow_vocab = nlp.Vocab.from_json(voc_js)
-        bert_base, vocab = nlp.model.get_model('bert_12_768_12',  
-                                             dataset_name='book_corpus_wiki_en_uncased',
-                                             pretrained=True, ctx=ctx, use_pooler=True,
-                                             use_decoder=False, use_classifier=False) #, output_attention=True)
+        bert_base, vocab = nlp.model.get_model(config['bert_model_name'],  
+                                               dataset_name=config['bert_data_name'],
+                                               pretrained=True, ctx=ctx, use_pooler=True,
+                                               use_decoder=False, use_classifier=False) #, output_attention=True)
         latent_dist_t = config['latent_distribution']['dist_type']       
         n_latent    = config['n_latent']
         kappa       = config['latent_distribution']['kappa']
@@ -285,7 +285,17 @@ class SeqVEDInferencer(BaseInferencer):
 
     def encode_text(self, txt):                   
         tokens, ids, lens, segs = self.prep_text(txt)
-        _, enc = self.model.encoder(ids.as_in_context(self.ctx),
+        _, enc = self.model.bert(ids.as_in_context(self.ctx),
                                               segs.as_in_context(self.ctx), lens.as_in_context(self.ctx))
         topic_encoding = self.model.latent_dist.get_mu_encoding(enc)
         return topic_encoding, tokens
+
+    def encode_data(self, dataloader, use_probs=False):
+        encodings = []
+        for _, seqs in enumerate(dataloader):
+            ids, lens, segs, _, _ = seqs
+            _, encs = self.model.bert(ids.as_in_context(self.ctx),
+                                      segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
+            topic_encodings = self.model.latent_dist.get_mu_encoding(encs)
+            encodings.extend(list(topic_encodings))
+        return encodings

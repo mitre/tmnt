@@ -913,7 +913,7 @@ class SeqBowEstimator(BaseEstimator):
                  n_latent = 20,
                  log_interval=5,
                  warmup_ratio=0.1,
-                 mix_val=0.0,
+                 gamma=1.0,
                  multilabel=False,
                  decoder_lr = 0.01,
                  max_batches = 2,
@@ -932,7 +932,7 @@ class SeqBowEstimator(BaseEstimator):
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
-        self.mix_val = mix_val
+        self.gamma = gamma
         self.decoder_lr = decoder_lr
         self._bow_matrix = None
         self.bow_vocab = bow_vocab
@@ -1145,8 +1145,8 @@ class SeqBowEstimator(BaseEstimator):
                             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
                             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
                         if self.has_classifier:
-                            ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
-                            total_ls = ls + self.mix_val * elbo_ls.mean()
+                            label_ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
+                            total_ls = (self.gamma * ls) + elbo_ls.mean()
                         else:
                             total_ls = elbo_ls.mean()
                         #if args.dtype == 'float16':
@@ -1241,7 +1241,7 @@ class SeqBowEstimator(BaseEstimator):
                 valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
             if self.has_classifier:
                 ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
-                total_ls = ls + self.mix_val * elbo_ls.mean()
+                total_ls = (self.gamma * ls) + elbo_ls.mean()
             else:
                 total_ls = elbo_ls.mean()
             total_rec_loss += rec_ls.sum().asscalar()

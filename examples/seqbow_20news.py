@@ -39,11 +39,12 @@ tr_dataset, dev_dataset, num_examples, bert_base = get_bert_datasets(None, vecto
 
 num_classes = int(np.max(y) + 1)
 
-estimator = SeqBowEstimator(bert_base, n_labels = num_classes,
+estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_name = dataset,
+                            n_labels = num_classes,
                             bow_vocab = vectorizer.get_vocab(),
                             optimizer='bertadam',
                             batch_size=batch_size, ctx=ctx, log_interval=1,
-                            log_method='print', mix_val=1.0, n_latent=20,
+                            log_method='print', gamma=1.0, n_latent=20,
                             lr=2e-5, decoder_lr=0.02, epochs=1)
 
 # this will take quite some time without a GPU!
