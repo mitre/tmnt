@@ -1169,7 +1169,7 @@ class SeqBowEstimator(BaseEstimator):
                     elbo_loss += elbo_ls.mean().asscalar()
                     red_loss  += red_ls.mean().asscalar()
                     if self.has_classifier:
-                        class_loss += ls.asscalar()
+                        class_loss += label_ls.asscalar()
                         self.metric.update(labels=[label], preds=[out])
                     if (batch_id + 1) % (self.log_interval) == 0:
                         self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
