@@ -192,14 +192,17 @@ class TMNTVectorizer(object):
         return ys
 
     def _get_y_ids(self, y_strs):
-        lab_map = {}
+        fixed = len(self.label_map) > 1
+        lab_map = self.label_map
         def _update(s):
             i = lab_map.get(s)
             if i is None:
-                i = len(lab_map)
-                lab_map[s] = i
+                if not fixed:
+                    i = len(lab_map)
+                    lab_map[s] = i
+                else:
+                    i = -1
             return i
-        
         cnts = collections.Counter(y_strs)
         y_ids = [ (_update(ys) if cnts[ys] >= self.label_min_cnt else -1) for ys in y_strs ]
         self.label_map = lab_map
@@ -254,7 +257,6 @@ class TMNTVectorizer(object):
         X = self._tr_json_dir(self.vectorizer.fit_transform, json_dir)
         y = self._get_ys_dir(json_dir)
         return X, y
-
         
     def _tr_in_place_json(self, tr_method, json_file):        
         X, _ = tr_method(json_file)

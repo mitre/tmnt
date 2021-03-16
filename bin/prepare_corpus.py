@@ -31,6 +31,7 @@ parser.add_argument('--label_prefix_chars', type=int, help='Use first N characte
 parser.add_argument('--label_min_cnt', type=int, help='Minimum label count (lower count labels mapped to -1)', default=1)
 parser.add_argument('--str_encoding', type=str, help='String/file encoding to use', default='utf-8')
 parser.add_argument('--log_dir', type=str, help='Logging directory', default='.')
+parser.add_argument('--token_pattern', type=str, help='Token regular expression for CountVectorizer', default=None)
 
 args = parser.parse_args()
 
@@ -40,6 +41,8 @@ if __name__ == '__main__':
         raise Exception("Vocabulary output file name/path must be provided")
     if (args.tr_vec_file is None) or (args.tr_input is None):
         raise Exception("Training directory and output vector file must be provided")
+    tok_pattern = args.token_pattern or r'(?u)\b\w\w+\b'
+    count_vectorizer_kwargs = {'token_pattern': tok_pattern,'stop_words':'english','max_df':0.95, 'min_df':2 }
     vectorizer = \
         TMNTVectorizer(text_key=args.json_text_key, 
                        label_key=args.json_label_key,
@@ -49,7 +52,8 @@ if __name__ == '__main__':
                        json_out_dir=args.json_out_dir,
                        encoding=args.str_encoding,
                        label_min_cnt=args.label_min_cnt,
-                       stop_word_file=args.custom_stop_words)
+                       stop_word_file=args.custom_stop_words,
+                       count_vectorizer_kwargs=count_vectorizer_kwargs)
     tr_X, tr_y = \
         vectorizer.fit_transform_json_dir(args.tr_input) if os.path.isdir(args.tr_input) else vectorizer.fit_transform_json(args.tr_input)
     vectorizer.write_to_vec_file(tr_X, tr_y, args.tr_vec_file)
