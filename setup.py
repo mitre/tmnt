@@ -32,6 +32,7 @@ if __name__ == '__main__':
        'sacremoses>=0.0.38',
        'sentence-splitter==1.4',
        'scikit-learn<0.23,>=0.22.0',
+        'numba<=0.52.0',
        'umap-learn==0.4.6',
        'tabulate>=0.8.7'
     ]
