@@ -223,8 +223,7 @@ def get_vectorizer(train_json_file, txt_key, label_key, vocab_size=2000):
     return vectorizer
 
 
-def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch_size, dev_batch_size, max_len,
-                    train_label_mask=None,
+def preprocess_data(trans, class_labels, train_ds, dev_ds, batch_size, dev_batch_size, max_len,
                     pad=False):
     """Train/eval Data preparation function."""
     pool = multiprocessing.Pool()
@@ -232,12 +231,6 @@ def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch
     # transformation for data train and dev
     label_dtype = 'float32' # if not task.class_labels else 'int32'
     bow_count_dtype = 'float32'
-    trans = BERTDatasetTransform(tokenizer, max_len,
-                                 class_labels=class_labels,
-                                 label_alias=None,
-                                 pad=pad, pair=False,
-                                 has_label=True,
-                                 vectorizer=vectorizer)
     # data train
     data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_ds))
     data_train_len = data_train.transform(
@@ -351,8 +344,14 @@ def get_bert_datasets(class_labels,
         use_classifier=False)
     do_lower_case = 'uncased' in dataset    
     bert_tokenizer = BERTTokenizer(vocabulary, lower=do_lower_case)
+    trans = BERTDatasetTransform(bert_tokenizer, max_len,
+                                 class_labels=class_labels,
+                                 label_alias=None,
+                                 pad=pad, pair=False,
+                                 has_label=True,
+                                 vectorizer=vectorizer)
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
-        bert_tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch_size, dev_bs, max_len, pad)
+        trans, class_labels, train_ds, dev_ds, batch_size, dev_bs, max_len, pad)
     return train_data, dev_data, num_train_examples, bert
 
 
