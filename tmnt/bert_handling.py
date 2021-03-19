@@ -54,9 +54,13 @@ class JsonlDataset(SimpleDataset):
             samples = self._read_samples(samples)
             all_samples += samples
         if self._label_mask is not None:
+            masked_samples = []
             for i in range(len(all_samples)):
                 if self._label_mask[i] < 1.0:
-                    all_samples[i][1] = "<unk>" ## set the label to <unk> 
+                    t = (all_samples[i][0], "<unk>")
+                else:
+                    t = all_samples[i]
+                masked_samples.append(t)
         return all_samples
 
     def _read_samples(self, samples):
