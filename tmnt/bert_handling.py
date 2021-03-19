@@ -29,8 +29,10 @@ class JsonlDataset(SimpleDataset):
         Path to the .jsonl file.
     encoding : str, default 'utf8'
         File encoding format.
+    label_mask : ``numpy.ndarray``
+        Optional label mask to set some labels to unknown for semi-supervised learning experimentation and training curves
     """
-    def __init__(self, filename, txt_key, label_key, encoding='utf8'):
+    def __init__(self, filename, txt_key, label_key, encoding='utf8', label_mask=None):
 
         if not isinstance(filename, (tuple, list)):
             filename = (filename, )
@@ -39,7 +41,7 @@ class JsonlDataset(SimpleDataset):
         self._encoding = encoding
         self._txt_key = txt_key
         self._label_key = label_key
-
+        self._label_mask = label_mask
         super(JsonlDataset, self).__init__(self._read())
 
     def _read(self):
@@ -51,6 +53,10 @@ class JsonlDataset(SimpleDataset):
                     samples.append(json.loads(line, object_pairs_hook=collections.OrderedDict))
             samples = self._read_samples(samples)
             all_samples += samples
+        if self._label_mask is not None:
+            for i in range(len(all_samples)):
+                if self._label_mask[i] < 1.0:
+                    all_samples[i][1] = "<unk>" ## set the label to <unk> 
         return all_samples
 
     def _read_samples(self, samples):
@@ -196,7 +202,7 @@ class BERTDatasetTransform(object):
             label = line[-1]
             # map to int if class labels are available
             if self.class_labels:
-                label = self._label_map[label]
+                label = self._label_map.get(label) or -1
             label = np.array([label], dtype=self._label_dtype)
             bow = None
             if self.vectorizer:
@@ -213,8 +219,9 @@ def get_vectorizer(train_json_file, txt_key, label_key, vocab_size=2000):
     return vectorizer
 
 
-
-def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch_size, dev_batch_size, max_len, pad=False):
+def preprocess_data(tokenizer, vectorizer, class_labels, train_ds, dev_ds, batch_size, dev_batch_size, max_len,
+                    train_label_mask=None,
+                    pad=False):
     """Train/eval Data preparation function."""
     pool = multiprocessing.Pool()
 
