@@ -919,6 +919,7 @@ class SeqBowEstimator(BaseEstimator):
                  max_batches = 2,
                  checkpoint_dir = None,
                  optimizer = 'bertadam',
+                 classifier_dropout = 0.0,
                  **kwargs):
         super(SeqBowEstimator, self).__init__(*args, optimizer=optimizer, **kwargs)
         self.checkpoint_dir = checkpoint_dir
@@ -926,6 +927,7 @@ class SeqBowEstimator(BaseEstimator):
         self.bert_model_name = bert_model_name
         self.bert_data_name = bert_data_name
         self.has_classifier = n_labels >= 2
+        self.classifier_dropout = classifier_dropout
         self.multilabel = multilabel
         self.n_labels = n_labels
         self.metric = mx.metric.Accuracy()
@@ -992,7 +994,7 @@ class SeqBowEstimator(BaseEstimator):
     def _get_model(self, train_data):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
         model = SeqBowVED(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent,
-                          bow_vocab_size = len(self.bow_vocab))
+                          bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.post_init(self.ctx)
