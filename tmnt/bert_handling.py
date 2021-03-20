@@ -206,7 +206,9 @@ class BERTDatasetTransform(object):
             label = line[-1]
             # map to int if class labels are available
             if self.class_labels:
-                label = self._label_map.get(label) or -1
+                label = self._label_map.get(label)
+                if label is None:
+                    label = -1
             label = np.array([label], dtype=self._label_dtype)
             bow = None
             if self.vectorizer:
