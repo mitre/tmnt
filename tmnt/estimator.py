@@ -990,7 +990,7 @@ class SeqBowEstimator(BaseEstimator):
                     ctx=ctx,
                     log_interval=log_interval)
         return model
-
+    
     def _get_model(self, train_data):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
         model = SeqBowVED(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent,
@@ -1074,6 +1074,34 @@ class SeqBowEstimator(BaseEstimator):
         return sc_obj
 
 
+    def _get_losses(self, model, batch_data):
+        input_ids, valid_length, type_ids, bow, label = batch_data
+        elbo_ls, rec_ls, kl_ls, red_ls, out = model(
+            input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+            valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+        if self.has_classifier:
+            label = label.as_in_context(self.ctx)
+            label_ls = self.loss_function(out, label)
+            if len(label.shape) > 1:
+                mask = label.sum(axis=1) >= 0.0
+            else:
+                mask = label >= 0.0
+            label_ls = label_ls * mask
+            label_ls = label_ls.mean()
+            total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+            ## update label metric (e.g. accuracy)
+            self.metric.update(labels=[label], preds=[out])
+        else:
+            total_ls = elbo_ls.mean()
+            label_ls = mx.nd.zeros(total_ls.shape)
+            #if args.dtype == 'float16':
+            #    with amp.scale_loss(ls, trainer) as scaled_loss:
+            #        mx.autograd.backward(scaled_loss)
+            #else:
+        return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
+
+
+
     def fit_with_validation(self, train_data, dev_data, num_train_examples):
         """Training function."""
         model = self._get_model(train_data)
@@ -1119,6 +1147,7 @@ class SeqBowEstimator(BaseEstimator):
         
         tic = time.time()
         for epoch_id in range(self.epochs):
+            self.metric.reset()
             if True: # not only_inference:
                 step_loss = 0
                 elbo_loss = 0
@@ -1142,26 +1171,7 @@ class SeqBowEstimator(BaseEstimator):
 
                     # forward and backward
                     with mx.autograd.record():
-                        input_ids, valid_length, type_ids, bow, label = seqs
-                        elbo_ls, rec_ls, kl_ls, red_ls, out = model(
-                            input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-                            valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
-                        if self.has_classifier:
-                            label = label.as_in_context(self.ctx)
-                            label_ls = self.loss_function(out, label)
-                            if len(label.shape) > 1:
-                                mask = label.sum(axis=1) >= 0.0
-                            else:
-                                mask = label >= 0.0
-                            label_ls = label_ls * mask
-                            label_ls = label_ls.mean()
-                            total_ls = (self.gamma * label_ls) + elbo_ls.mean()
-                        else:
-                            total_ls = elbo_ls.mean()
-                        #if args.dtype == 'float16':
-                        #    with amp.scale_loss(ls, trainer) as scaled_loss:
-                        #        mx.autograd.backward(scaled_loss)
-                        #else:
+                        elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
                         total_ls.backward()
                     # update
                     if not accumulate or (batch_id + 1) % accumulate == 0:
@@ -1178,8 +1188,7 @@ class SeqBowEstimator(BaseEstimator):
                     elbo_loss += elbo_ls.mean().asscalar()
                     red_loss  += red_ls.mean().asscalar()
                     if self.has_classifier:
-                        class_loss += label_ls.asscalar()
-                        self.metric.update(labels=[label], preds=[out])
+                        class_loss += label_ls.asscalar()                        
                     if (batch_id + 1) % (self.log_interval) == 0:
                         self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
                                   epoch_id, trainer.learning_rate)
@@ -1244,21 +1253,11 @@ class SeqBowEstimator(BaseEstimator):
         total_kl_loss  = 0.0
         tic = time.time()
         for batch_id, seqs in enumerate(dataloader):
-            input_ids, valid_len, type_ids, bow, label = seqs
-            elbo_ls, rec_ls, kl_ls, red_ls, out = model(
-                input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-                valid_len.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
-            if self.has_classifier:
-                label_ls = self.loss_function(out, label.as_in_context(self.ctx)).mean()
-                total_ls = (self.gamma * label_ls) + elbo_ls.mean()
-            else:
-                total_ls = elbo_ls.mean()
+            elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
             total_rec_loss += rec_ls.sum().asscalar()
             total_kl_loss  += kl_ls.sum().asscalar()
             step_loss += total_ls.mean().asscalar()
             elbo_loss  += elbo_ls.mean().asscalar()
-            if self.has_classifier:
-                self.metric.update([label], [out])
             if (batch_id + 1) % (self.log_interval) == 0:
                 self.log_eval(batch_id, len(dataloader), self.metric, step_loss, elbo_loss, self.log_interval)
                 step_loss = 0

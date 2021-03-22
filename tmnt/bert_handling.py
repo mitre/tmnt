@@ -303,7 +303,7 @@ def preprocess_data_metriclearn(tokenizer, class_labels, train_a_json_file, trai
     joined_data_train = UnevenArrayDataset(a_data_train, b_data_train)
     joined_len = joined_data_train.transform( lambda a, b: a[1] + b[1], lazy=False ) ## a[1] and b[1] and lengths, bucket by sum
     batchify_fn = nlp.data.batchify.Tuple(
-        ## tuple for a_data
+        ## tuple for a_data: (ids, lengths, segments, bow vector, label)
         nlp.data.batchify.Tuple(
             nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
             nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)),

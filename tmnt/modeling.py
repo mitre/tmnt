@@ -18,6 +18,7 @@ from tmnt.distribution import LogisticGaussianDistribution
 from tmnt.distribution import GaussianDistribution
 from tmnt.distribution import HyperSphericalDistribution
 from tmnt.distribution import GaussianUnitVarDistribution
+from mxnet.gluon.loss import Loss, KLDivLoss
 
 class BaseVAE(HybridBlock):
 
@@ -757,5 +758,107 @@ class SeqBowVED(Block):
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j.asnumpy()
 
+
+class GeneralizedSDMLLoss(Loss):
+    r"""Calculates Batchwise Smoothed Deep Metric Learning (SDML) Loss given two input tensors and a smoothing weight
+    SDM Loss learns similarity between paired samples by using unpaired samples in the minibatch
+    as potential negative examples.
+
+    The loss is described in greater detail in
+    "Large Scale Question Paraphrase Retrieval with Smoothed Deep Metric Learning."
+    - by Bonadiman, Daniele, Anjishnu Kumar, and Arpit Mittal.  arXiv preprint arXiv:1905.12786 (2019).
+    URL: https://arxiv.org/pdf/1905.12786.pdf
+
+    Parameters
+    ----------
+    smoothing_parameter : float
+        Probability mass to be distributed over the minibatch. Must be < 1.0.
+    weight : float or None
+        Global scalar weight for loss.
+    batch_axis : int, default 0
+        The axis that represents mini-batch.
+
+    Inputs:
+        - **x1**: Minibatch of data points with shape (batch_size, vector_dim)
+        - **x2**: Minibatch of data points with shape (batch_size, vector_dim)
+          Each item in x2 is a positive sample for the same index in x1.
+          That is, x1[0] and x2[0] form a positive pair, x1[1] and x2[1] form a positive pair - and so on.
+          All data points in different rows should be decorrelated
+
+    Outputs:
+        - **loss**: loss tensor with shape (batch_size,).
+    """
+
+    def __init__(self, smoothing_parameter=0.3, weight=1., batch_axis=0, **kwargs):
+        super(GeneralizedSDMLLoss, self).__init__(weight, batch_axis, **kwargs)
+        self.kl_loss = KLDivLoss(from_logits=True)
+        self.smoothing_parameter = smoothing_parameter # Smoothing probability mass
+
+    def _compute_distances(self, x1, x2):
+        """
+        This function computes the euclidean distance between every vector
+        in the two batches in input.
+        """
+
+        # extracting sizes expecting [batch_size, dim]
+        assert x1.shape == x2.shape
+        batch_size, dim = x1.shape
+        # expanding both tensor form [batch_size, dim] to [batch_size, batch_size, dim]
+        x1_ = x1.expand_dims(1).broadcast_to([batch_size, batch_size, dim])
+        x2_ = x2.expand_dims(0).broadcast_to([batch_size, batch_size, dim])
+        # pointwise squared differences
+        squared_diffs = (x1_ - x2_)**2
+        # sum of squared differences distance
+        return squared_diffs.sum(axis=2)
+
+
+    def _compute_labels(self, F, l1, l2):
+        """
+        Example:
+        l1 = [1,2,2]
+        l2 = [1,2,1]
+        ===> 
+        [ [ 1, 0, 1],
+          [ 0, 1, 0],
+          [ 0, 1, 0] ]
+        """
+        batch_size = l1.shape[0]
+        l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
+        l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
+        ll = F.equal(l1_x, l2_x)
+        labels = ll * (1 - self.smoothing_parameter) + (1 - ll) * self.smoothing_parameter / (batch_size - 1)
+        ## nor normalize rows to sum to 1.0
+        labels = labels / F.broadcast_to(F.sum(labels, axis=1, keepdims=True), (batch_size, batch_size))
+        return labels
+
+
+    def _loss(self, F, x1, l1, x2, l2):
+        """
+        the function computes the kl divergence between the negative distances
+        (internally it compute a softmax casting into probabilities) and the
+        identity matrix.
+
+        This assumes that the two batches are aligned therefore the more similar
+        vector should be the one having the same id.
+
+        Batch1                                Batch2
+
+        President of France                   French President
+        President of US                       American President
+
+        Given the question president of France in batch 1 the model will
+        learn to predict french president comparing it with all the other
+        vectors in batch 2
+        """
+        batch_size = x1.shape[0]
+        labels = self._compute_labels(F, l1, l2)
+        distances = self._compute_distances(x1, x2)
+        log_probabilities = F.log_softmax(-distances, axis=1)
+        # multiply for the number of labels to obtain the correct loss (gluon kl_loss averages instead of sum)
+        return self.kl_loss(log_probabilities, labels.as_in_context(distances.context)) * batch_size
+
+
+    def hybrid_forward(self, F, x1, l1, x2, l2):
+        return self._loss(F, x1, l1, x2, l2)    
 
 
