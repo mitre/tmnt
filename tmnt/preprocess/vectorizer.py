@@ -48,7 +48,7 @@ class TMNTVectorizer(object):
         count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
     """
 
-    def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1,
+    def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1, label_remap=None,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
                  additional_feature_keys=None, stop_word_file=None, label_min_cnt=1,
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
@@ -56,6 +56,7 @@ class TMNTVectorizer(object):
         self.text_key = text_key
         self.label_key = label_key
         self.label_prefix = label_prefix
+        self.label_remap = label_remap
         self.min_doc_size = min_doc_size
         self.json_rewrite = json_out_dir is not None
         self.json_out_dir = json_out_dir
@@ -180,6 +181,8 @@ class TMNTVectorizer(object):
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for j in fp:
                 label_string = json.loads(j)[self.label_key]
+                if self.label_remap:
+                    label_string = self.label_remap[label_string]
                 ys.append(label_string)
         return ys
 

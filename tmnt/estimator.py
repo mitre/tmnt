@@ -24,6 +24,7 @@ from pathlib import Path
 
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
 from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
+from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import HyperSphericalDistribution
 import autogluon.core as ag
@@ -1058,7 +1059,7 @@ class SeqBowEstimator(BaseEstimator):
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
         for _, seqs in enumerate(dataloader):
-            bow_matrix.extend(list(seqs[3].squeeze()))
+            bow_matrix.extend(list(seqs[3].squeeze(axis=1)))
         bow_matrix = mx.nd.stack(*bow_matrix)
         if cache:
             self._bow_matrix = bow_matrix
@@ -1072,7 +1073,6 @@ class SeqBowEstimator(BaseEstimator):
         b_obj = max(min(obj, 100.0), -100.0)
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         return sc_obj
-
 
     def _get_losses(self, model, batch_data):
         input_ids, valid_length, type_ids, bow, label = batch_data
@@ -1187,8 +1187,7 @@ class SeqBowEstimator(BaseEstimator):
                     step_loss += total_ls.mean().asscalar()
                     elbo_loss += elbo_ls.mean().asscalar()
                     red_loss  += red_ls.mean().asscalar()
-                    if self.has_classifier:
-                        class_loss += label_ls.asscalar()                        
+                    class_loss += label_ls.asscalar()                        
                     if (batch_id + 1) % (self.log_interval) == 0:
                         self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
                                   epoch_id, trainer.learning_rate)
@@ -1278,6 +1277,52 @@ class SeqBowEstimator(BaseEstimator):
             self._output_status("Validation metric: {:.6}".format(metric_val[0]))
             v_res['accuracy'] = metric_val[0]
         return v_res, metric_nm, metric_val
+
+
+
+class SeqBowMetricEstimator(SeqBowEstimator):
+
+    def __init__(self, *args, **kwargs):
+        super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
+        self.loss_function = GeneralizedSDMLLoss()
+
+    def _get_model(self, train_data):
+        latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
+        model = MetricSeqBowVED(self.bert_base, latent_dist, n_latent=self.n_latent,
+                                bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
+        model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
+        model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
+        model.latent_dist.post_init(self.ctx)
+        tr_bow_matrix = self._get_bow_matrix(train_data)
+        model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+        return model
+
+    def _get_bow_matrix(self, dataloader, cache=False):
+        bow_matrix = []
+        for _, seqs in enumerate(dataloader):
+            batch_1, batch_2 = seqs
+            bow_matrix.extend(list(batch_1[3].squeeze(axis=1)))
+            bow_matrix.extend(list(batch_2[3].squeeze(axis=1)))
+        bow_matrix = mx.nd.stack(*bow_matrix)
+        if cache:
+            self._bow_matrix = bow_matrix
+        return bow_matrix
+
+    def _get_losses(self, model, batch_data):
+        batch1, batch2 = batch_data
+        in1, vl1, tt1, bow1, label1 = batch1
+        in2, vl2, tt2, bow2, label2 = batch2
+        elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(
+            in1.as_in_context(self.ctx), tt1.as_in_context(self.ctx),
+            vl1.astype('float32').as_in_context(self.ctx), bow1.as_in_context(self.ctx),
+            in2.as_in_context(self.ctx), tt2.as_in_context(self.ctx),
+            vl2.astype('float32').as_in_context(self.ctx), bow2.as_in_context(self.ctx))
+        label1 = label1.as_in_context(self.ctx)
+        label2 = label1.as_in_context(self.ctx)
+        label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
+        label_ls = label_ls.mean()
+        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+        return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
 
 

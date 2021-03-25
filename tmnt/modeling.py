@@ -657,9 +657,9 @@ class DeepAveragingVAEModel(BaseVAE):
                 ss = x_data.grad.sum(axis=0).asnumpy()
                 jacobians[i] += ss
         return jacobians
-    
 
-class SeqBowVED(Block):
+
+class BaseSeqBowVED(Block):
     def __init__(self,
                  bert,
                  latent_dist,
@@ -668,14 +668,15 @@ class SeqBowVED(Block):
                  bow_vocab_size=2000,
                  n_latent=20, 
                  kld=0.1, 
-                 redundancy_reg_penalty=0.0, pre_trained_embedding = None,
-                 prefix=None, params=None):
-        super(SeqBowVED, self).__init__(prefix=prefix, params=params)
+                 redundancy_reg_penalty=0.0, pre_trained_embedding = None):
+        super(BaseSeqBowVED, self).__init__()
         self.n_latent = latent_dist.n_latent
         self.bert = bert
         self.latent_dist = latent_dist
         self.kld_wt = kld
         self.has_classifier = num_classes >= 2
+        self.num_classes = num_classes
+        self.dropout = dropout
         self.bow_vocab_size = bow_vocab_size
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.vocabulary = None ### XXX - add this as option to be passed in
@@ -683,11 +684,6 @@ class SeqBowVED(Block):
             self.embedding = None
             self.decoder = nn.Dense(in_units=self.n_latent, units=bow_vocab_size, use_bias=True)
             self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)            
-            if self.has_classifier:
-                self.classifier = nn.HybridSequential(prefix=prefix)
-                if dropout:
-                    self.classifier.add(nn.Dropout(rate=dropout))
-                self.classifier.add(nn.Dense(units=num_classes))
             if pre_trained_embedding is not None:
                 self.embedding = nn.Dense(in_units = len(pre_trained_embedding.idx_to_vec),
                                           units = pre_trained_embedding.idx_to_vec[0].size, use_bias=False)
@@ -700,8 +696,6 @@ class SeqBowVED(Block):
                 emb_norm = emb / emb_norm_val
                 self.embedding.collect_params().setattr('grad_req', 'null')
 
-
-                
     def get_redundancy_penalty(self):
         w = self.decoder.params.get('weight').data()
         emb = self.embedding.params.get('weight').data() if self.embedding is not None else w.transpose()
@@ -718,26 +712,6 @@ class SeqBowVED(Block):
             bias_param.set_data(log_freq)
             bias_param.grad_req = 'null'
             self.out_bias = bias_param.data()
-
-
-    def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
-        _, enc = self.bert(inputs, token_types, valid_length)
-        elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
-        if bow is not None:
-            bow = bow.squeeze()
-            z, KL = self.latent_dist(enc, inputs.shape[0])
-            KL_loss = (KL * self.kld_wt)
-            y = mx.nd.softmax(self.decoder(z), axis=1)
-            rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
-            elbo = rec_loss + KL_loss
-        if self.has_classifier:
-            z_mu = self.latent_dist.get_mu_encoding(enc)            
-            classifier_outputs = self.classifier(z_mu)
-        else:
-            classifier_outputs = None
-        redundancy_loss = self.get_redundancy_penalty()
-        elbo = elbo + redundancy_loss
-        return elbo, rec_loss, KL_loss, redundancy_loss, classifier_outputs
 
     def get_top_k_terms(self, k, ctx=mx.cpu()):
         """
@@ -757,6 +731,64 @@ class SeqBowVED(Block):
             jacobian[i] = z.grad
         sorted_j = jacobian.argsort(axis=0, is_ascend=False)
         return sorted_j.asnumpy()
+            
+
+class SeqBowVED(BaseSeqBowVED):
+    def __init__(self, *args, **kwargs):
+        super(SeqBowVED, self).__init__(*args, **kwargs)
+        with self.name_scope():
+            if self.has_classifier:
+                self.classifier = nn.HybridSequential()
+                if self.dropout:
+                    self.classifier.add(nn.Dropout(rate=self.dropout))
+                self.classifier.add(nn.Dense(units=self.num_classes))
+
+    def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
+        _, enc = self.bert(inputs, token_types, valid_length)
+        elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
+        if bow is not None:
+            bow = bow.squeeze(axis=1)
+            print("bow shape = {}".format(bow.shape))
+            z, KL = self.latent_dist(enc, inputs.shape[0])
+            KL_loss = (KL * self.kld_wt)
+            y = mx.nd.softmax(self.decoder(z), axis=1)
+            rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
+            elbo = rec_loss + KL_loss
+        if self.has_classifier:
+            z_mu = self.latent_dist.get_mu_encoding(enc)            
+            classifier_outputs = self.classifier(z_mu)
+        else:
+            classifier_outputs = None
+        redundancy_loss = self.get_redundancy_penalty()
+        elbo = elbo + redundancy_loss
+        return elbo, rec_loss, KL_loss, redundancy_loss, classifier_outputs
+
+
+class MetricSeqBowVED(BaseSeqBowVED):
+    def __init__(self, *args, **kwargs):
+        super(MetricSeqBowVED, self).__init__(*args, **kwargs)
+
+    def _get_elbo(self, bow, enc):
+        bow = bow.squeeze(axis=1)
+        z, KL = self.latent_dist(enc, bow.shape[0])
+        KL_loss = (KL * self.kld_wt)
+        y = mx.nd.softmax(self.decoder(z), axis=1)
+        rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
+        elbo = rec_loss + KL_loss
+        return elbo, rec_loss, KL_loss
+
+    def forward(self, in1, tt1, vl1, bow1, in2, tt2, vl2, bow2):
+        _, enc1 = self.bert(in1, tt1, vl1)
+        _, enc2 = self.bert(in2, tt2, vl2)
+        elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, enc1)
+        elbo2, rec_loss2, KL_loss2 = self._get_elbo(bow2, enc2)
+        elbo = elbo1 + elbo2
+        rec_loss = rec_loss1 + rec_loss2
+        KL_loss = KL_loss1 + KL_loss2
+        z_mu1 = self.latent_dist.get_mu_encoding(enc1)
+        z_mu2 = self.latent_dist.get_mu_encoding(enc2)
+        redundancy_loss = self.get_redundancy_penalty()
+        return elbo, rec_loss, KL_loss, redundancy_loss, z_mu1, z_mu2
 
 
 class GeneralizedSDMLLoss(Loss):
@@ -822,13 +854,14 @@ class GeneralizedSDMLLoss(Loss):
           [ 0, 1, 0],
           [ 0, 1, 0] ]
         """
-        batch_size = l1.shape[0]
-        l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
-        l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
+        batch_size, dim = l1.shape
+        print("l1 shape = {}, {}".format(batch_size, dim))
+        l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size, dim))
+        l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size, dim))
         ll = F.equal(l1_x, l2_x)
         labels = ll * (1 - self.smoothing_parameter) + (1 - ll) * self.smoothing_parameter / (batch_size - 1)
         ## nor normalize rows to sum to 1.0
-        labels = labels / F.broadcast_to(F.sum(labels, axis=1, keepdims=True), (batch_size, batch_size))
+        labels = labels / F.broadcast_to(F.sum(labels, axis=1, keepdims=True), (batch_size, batch_size, dim))
         return labels
 
 
