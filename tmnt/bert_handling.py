@@ -32,7 +32,7 @@ class JsonlDataset(SimpleDataset):
     label_mask : ``numpy.ndarray``
         Optional label mask to set some labels to unknown for semi-supervised learning experimentation and training curves
     """
-    def __init__(self, filename, txt_key, label_key, encoding='utf8', label_mask=None, label_remap=None):
+    def __init__(self, filename, txt_key, label_key, encoding='utf8', label_mask=None, label_remap=None, random_drop_pct=0.0):
 
         if not isinstance(filename, (tuple, list)):
             filename = (filename, )
@@ -43,6 +43,8 @@ class JsonlDataset(SimpleDataset):
         self._label_key = label_key
         self._label_mask = label_mask
         self._label_remap = label_remap
+        self._random_drop_pct = random_drop_pct
+        self._random_drop = random_drop_pct > 0.0
         super(JsonlDataset, self).__init__(self._read())
 
     def _read(self):
@@ -51,8 +53,12 @@ class JsonlDataset(SimpleDataset):
             samples = []
             with open(filename, 'r', encoding=self._encoding) as fin:
                 for line in fin.readlines():
-                    samples.append(json.loads(line, object_pairs_hook=collections.OrderedDict))
-            samples = self._read_samples(samples)
+                    if not self._random_drop or (random.uniform(0,1) > self._random_drop_pct):
+                        s = json.loads(line, object_pairs_hook=collections.OrderedDict)
+                        label = s[self._label_key]
+                        if self._label_remap is not None:
+                            label = self._label_remap[label]
+                        samples.append((s[self._txt_key], label))
             all_samples += samples
         if self._label_mask is not None:
             masked_samples = []
@@ -62,16 +68,8 @@ class JsonlDataset(SimpleDataset):
                 else:
                     t = all_samples[i]
                 masked_samples.append(t)
+            all_samples = masked_samples
         return all_samples
-
-    def _read_samples(self, samples):
-        m_samples = []
-        for s in samples:
-            label = s[self._label_key]
-            if self._label_remap is not None:
-                label = self._label_remap[label]
-            m_samples.append((s[self._txt_key], label))
-        return m_samples
     
 
 class UnevenArrayDataset(Dataset):
