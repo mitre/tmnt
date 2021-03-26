@@ -917,7 +917,6 @@ class SeqBowEstimator(BaseEstimator):
                  gamma=1.0,
                  multilabel=False,
                  decoder_lr = 0.01,
-                 max_batches = 2,
                  checkpoint_dir = None,
                  optimizer = 'bertadam',
                  classifier_dropout = 0.0,

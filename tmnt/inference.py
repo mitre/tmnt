@@ -144,9 +144,10 @@ class BowVAEInferencer(BaseInferencer):
 
     def encode_texts(self, texts, use_probs=False, include_bn=False):
         X, _ = self.vectorizer.transform(texts)
-        return self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
+        encodings, _ = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
+        return encodings
 
-    def encode_data(self, data_mat, labels, use_probs=False, include_bn=False):
+    def _get_data_iterator(self, data_mat, labels):
         x_size = data_mat.shape[0] * data_mat.shape[1]
         if x_size <= MAX_DESIGN_MATRIX and isinstance(data_mat, scipy.sparse.csr.csr_matrix):
             data_mat = mx.nd.sparse.csr_matrix(data_mat, dtype='float32')
@@ -169,6 +170,10 @@ class BowVAEInferencer(BaseInferencer):
         else:
             infer_iter = DataIterLoader(mx.io.NDArrayIter(data_to_iter, covars,
                                                       batch_size, last_batch_handle='discard', shuffle=False))
+        return infer_iter, last_batch_size
+
+    def encode_data(self, data_mat, labels, use_probs=False, include_bn=False):
+        infer_iter, last_batch_size = self._get_data_iterator(data_mat, labels)
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):
             data = data.as_in_context(self.ctx)
@@ -196,6 +201,26 @@ class BowVAEInferencer(BaseInferencer):
                 encs = mx.nd.softmax(e1 ** 0.5)
             encodings.extend(encs)
         return encodings
+
+    def get_likelihood_stats(self, data_mat, n_samples=50):
+        ## Notes:
+        ## Following ideas in the paper:
+        ## Bayesian Autoencoders: Analysing and Fixing the Bernoulli likelihood for Out-of-Distribution Detection
+        ## But - that analysis was done on images with less sparsity
+        ## Consider using Gaussian liklihood here as well to avoid skewness associated with Bernoulli likilhood
+        data_iter, last_batch_size = self._get_data_iterator(data_mat, None)
+        all_stats = []
+        for _, (data, labels) in enumerate(data_iter):
+            elbos = []
+            for s in range(0,n_samples):
+                elbo, _,_,_,_,_,_ = self.model(data)
+                elbos.append(list(elbo.asnumpy()))
+            wd_cnts = data.sum(axis=1).asnumpy()
+            elbos_np = np.array(elbos) / (wd_cnts + 1)
+            elbos_means = list(elbos_np.mean(axis=0))
+            elbos_var   = list(elbos_np.var(axis=0))
+            all_stats.extend(list(zip(elbos_means, elbos_var)))
+        return all_stats
 
 
     def get_top_k_words_per_topic(self, k):
