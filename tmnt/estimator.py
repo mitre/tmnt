@@ -1001,8 +1001,8 @@ class SeqBowEstimator(BaseEstimator):
         model.latent_dist.post_init(self.ctx)
         if model.has_classifier:
             model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
-        tr_bow_matrix = self._get_bow_matrix(train_data)
-        model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+        tr_bow_counts = self._get_bow_counts(train_data)
+        model.initialize_bias_terms(tr_bow_counts)
         return model
 
     def _get_config(self):
@@ -1059,6 +1059,7 @@ class SeqBowEstimator(BaseEstimator):
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
         max_rows = 2000000000 / len(self.bow_vocab)
+        logging.info("Maximum rows for BOW matrix = {}".format(max_rows))
         rows = 0
         for i, seqs in enumerate(dataloader):
             bow_batch = list(seqs[3].squeeze(axis=1))
@@ -1070,6 +1071,13 @@ class SeqBowEstimator(BaseEstimator):
         if cache:
             self._bow_matrix = bow_matrix
         return bow_matrix
+
+    def _get_wd_counts(self, dataloader):
+        sums = mx.nd.zeros(len(self.bow_vocab))
+        for i, seqs in enumerate(dataloader):
+            bow_batch = seqs[3].squeeze(axis=1)
+            sums += bow_batch.sum(axis=0)
+        return sums
 
     def _get_objective_from_validation_result(self, val_result):
         npmi = val_result['npmi']
