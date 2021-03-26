@@ -1059,10 +1059,13 @@ class SeqBowEstimator(BaseEstimator):
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
         max_rows = 2000000000 / len(self.bow_vocab)
+        rows = 0
         for i, seqs in enumerate(dataloader):
-            bow_matrix.extend(list(seqs[3].squeeze(axis=1)))
+            bow_batch = list(seqs[3].squeeze(axis=1))
+            rows += len(bow_batch)
             if i >= max_rows:
                 break
+            bow_matrix.extend(bow_batch)
         bow_matrix = mx.nd.stack(*bow_matrix)
         if cache:
             self._bow_matrix = bow_matrix
