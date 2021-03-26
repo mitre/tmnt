@@ -748,7 +748,6 @@ class SeqBowVED(BaseSeqBowVED):
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
             bow = bow.squeeze(axis=1)
-            print("bow shape = {}".format(bow.shape))
             z, KL = self.latent_dist(enc, inputs.shape[0])
             KL_loss = (KL * self.kld_wt)
             y = mx.nd.softmax(self.decoder(z), axis=1)
