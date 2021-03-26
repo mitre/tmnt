@@ -1001,7 +1001,7 @@ class SeqBowEstimator(BaseEstimator):
         model.latent_dist.post_init(self.ctx)
         if model.has_classifier:
             model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
-        tr_bow_counts = self._get_bow_counts(train_data)
+        tr_bow_counts = self._get_bow_wd_counts(train_data)
         model.initialize_bias_terms(tr_bow_counts)
         return model
 
@@ -1072,7 +1072,7 @@ class SeqBowEstimator(BaseEstimator):
             self._bow_matrix = bow_matrix
         return bow_matrix
 
-    def _get_wd_counts(self, dataloader):
+    def _get_bow_wd_counts(self, dataloader):
         sums = mx.nd.zeros(len(self.bow_vocab))
         for i, seqs in enumerate(dataloader):
             bow_batch = seqs[3].squeeze(axis=1)
