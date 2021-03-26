@@ -1056,10 +1056,13 @@ class SeqBowEstimator(BaseEstimator):
         self._output_status("Batch {}/{} loss={} (rec_loss = {}), metrics: {:.10f}"
               .format(batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, *metric_val))
 
-    def _get_bow_matrix(self, dataloader, cache=False):
+    def _get_bow_matrix(self, dataloader, bow_vocab_size, cache=False):
         bow_matrix = []
-        for _, seqs in enumerate(dataloader):
+        max_rows = 2000000000 / bow_vocab_size
+        for i, seqs in enumerate(dataloader):
             bow_matrix.extend(list(seqs[3].squeeze(axis=1)))
+            if i >= max_rows:
+                break
         bow_matrix = mx.nd.stack(*bow_matrix)
         if cache:
             self._bow_matrix = bow_matrix
