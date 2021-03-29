@@ -1023,6 +1023,7 @@ class SeqBowEstimator(BaseEstimator):
         config['warmup_ratio'] = self.warmup_ratio
         config['bert_model_name'] = self.bert_model_name
         config['bert_data_name'] = self.bert_data_name
+        config['classifier_dropout'] = self.classifier_dropout
         return config
 
     def write_model(self, model_dir, suf=''):
