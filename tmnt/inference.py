@@ -282,9 +282,11 @@ class SeqVEDInferencer(BaseInferencer):
         n_latent    = config['n_latent']
         kappa       = config['latent_distribution']['kappa']
         num_classes = config['n_labels']
+        classifier_dropout = config['classifier_dropout']
         pad_id      = vocab[vocab.padding_token]
         latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=ctx)
-        model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes)
+        model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
+                          dropout=classifier_dropout)
         model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
         return cls(model, vocab, max_length, ctx)
 
