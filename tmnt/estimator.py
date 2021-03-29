@@ -911,7 +911,6 @@ class SeqBowEstimator(BaseEstimator):
                  bert_data_name = 'book_corpus_wiki_en_uncased',
                  bow_vocab = None,
                  n_labels = 0,
-                 n_latent = 20,
                  log_interval=5,
                  warmup_ratio=0.1,
                  gamma=1.0,
