@@ -315,6 +315,11 @@ class SeqVEDInferencer(BaseInferencer):
         topic_encoding = self.model.latent_dist.get_mu_encoding(enc)
         return topic_encoding, tokens
 
+    def predict_text(self, txt):
+        encoding, _ = self.encode_text(txt)
+        return self.model.classifier(encoding)
+    
+
     def encode_data(self, dataloader, use_probs=False):
         encodings = []
         for _, seqs in enumerate(dataloader):
