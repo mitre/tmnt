@@ -812,8 +812,8 @@ class GeneralizedSDMLLoss(Loss):
     Inputs:
         - **x1**: Minibatch of data points with shape (batch_size, vector_dim)
         - **x2**: Minibatch of data points with shape (batch_size, vector_dim)
-          Each item in x2 is a positive sample for the same index in x1.
-          That is, x1[0] and x2[0] form a positive pair, x1[1] and x2[1] form a positive pair - and so on.
+          Each item in x1 is a positive sample for the items with the same label in x2
+          That is, x1[0] and x2[0] form a positive pair iff label(x1[0]) = label(x2[0])
           All data points in different rows should be decorrelated
 
     Outputs:
@@ -855,13 +855,13 @@ class GeneralizedSDMLLoss(Loss):
         
         This is an outer product with the equality predicate.
         """
-        batch_size, dim = l1.shape
-        l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size, dim))
-        l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size, dim))
+        batch_size = l1.shape[0]
+        l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
+        l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
         ll = F.equal(l1_x, l2_x)
         labels = ll * (1 - self.smoothing_parameter) + (1 - ll) * self.smoothing_parameter / (batch_size - 1)
-        ## nor normalize rows to sum to 1.0
-        labels = labels / F.broadcast_to(F.sum(labels, axis=1, keepdims=True), (batch_size, batch_size, dim))
+        ## now normalize rows to sum to 1.0
+        labels = labels / F.broadcast_to(F.sum(labels, axis=1, keepdims=True), (batch_size, batch_size))
         return labels
 
 
