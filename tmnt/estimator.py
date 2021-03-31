@@ -921,6 +921,7 @@ class SeqBowEstimator(BaseEstimator):
                  classifier_dropout = 0.0,
                  **kwargs):
         super(SeqBowEstimator, self).__init__(*args, optimizer=optimizer, **kwargs)
+        self.minimum_lr = 1e-8
         self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
         self.bert_model_name = bert_model_name
@@ -1135,7 +1136,7 @@ class SeqBowEstimator(BaseEstimator):
         #    amp.init_trainer(trainer)
 
         step_size = self.batch_size * accumulate if accumulate else self.batch_size
-        num_train_steps = int(num_train_examples / step_size * self.epochs)
+        num_train_steps = int(num_train_examples / step_size * self.epochs) + 1
         warmup_ratio = self.warmup_ratio
         num_warmup_steps = int(num_train_steps * warmup_ratio)
         step_num = 0
@@ -1169,7 +1170,7 @@ class SeqBowEstimator(BaseEstimator):
             for batch_id, seqs in enumerate(train_data):
                 # learning rate schedule
                 if step_num < num_warmup_steps:
-                    new_lr = self.lr * step_num / num_warmup_steps
+                    new_lr = self.lr * (step_num+1) / num_warmup_steps
                 else:
                     non_warmup_steps = step_num - num_warmup_steps
                     offset = non_warmup_steps / (num_train_steps - num_warmup_steps)
