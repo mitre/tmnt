@@ -372,8 +372,9 @@ def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_d
     a_loader_train = gluon.data.DataLoader(
             dataset=a_data_train,
             num_workers=4,
-            shuffle=True, batch_size = batch_size,
-            batchify_fn=batchify_fn)
+        last_batch = 'rollover', ## need to ensure all batches are the same size here
+        shuffle=True, batch_size = batch_size,
+        batchify_fn=batchify_fn)
     b_loader_train = gluon.data.DataLoader(
         dataset=b_data_train,
         num_workers=4,
