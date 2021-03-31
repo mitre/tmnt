@@ -852,10 +852,10 @@ class GeneralizedSDMLLoss(Loss):
         [ [ 1, 0, 1],
           [ 0, 1, 0],
           [ 0, 1, 0] ]
+        
+        This is an outer product with the equality predicate.
         """
         batch_size, dim = l1.shape
-        print("l2 shape = {}, {}".format(batch_size, dim))
-        print("l2 vec = {}".format(l2.asnumpy()))
         l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size, dim))
         l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size, dim))
         ll = F.equal(l1_x, l2_x)
