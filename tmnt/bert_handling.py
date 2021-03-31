@@ -315,17 +315,13 @@ def get_bert_datasets(class_labels,
 # Handle dataloading for Smoothed Deep Metric Loss with parallel batching
 ############
 
-##
-def preprocess_data_metriclearn(trans, class_labels, train_a_ds, train_b_ds, batch_size, max_len, pad=False):
+def preprocess_data_metriclearn(trans, class_labels, train_a_ds, train_b_ds, batch_size, max_len, pad=False, bucket_sample=False):
     """Train/eval Data preparation function."""
     pool = multiprocessing.Pool()
     label_dtype = 'float32' # if not task.class_labels else 'int32'
     bow_count_dtype = 'float32'
 
-    # data train
     a_data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_a_ds))
-
-    # data train
     b_data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_b_ds))
 
     # magic that "zips" these two datasets and pairs batches
@@ -340,19 +336,53 @@ def preprocess_data_metriclearn(trans, class_labels, train_a_ds, train_b_ds, bat
         nlp.data.batchify.Tuple(
             nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
             nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
-    batch_sampler = nlp.data.sampler.FixedBucketSampler(
-        joined_len,
-        batch_size=batch_size,
-        num_buckets=10,
-        ratio=0,
-        shuffle=True)
-    loader_train = gluon.data.DataLoader(
-        dataset=joined_data_train,
-        num_workers=4,
-        batch_sampler=batch_sampler,
-        batchify_fn=batchify_fn)
+    if bucket_sample:
+        batch_sampler = nlp.data.sampler.FixedBucketSampler(
+            joined_len,
+            batch_size=batch_size,
+            num_buckets=4,
+            ratio=0.2,
+            shuffle=True)
+        loader_train = gluon.data.DataLoader(
+            dataset=joined_data_train,
+            num_workers=4,
+            batch_sampler=batch_sampler,
+            batchify_fn=batchify_fn)
+    else:
+        loader_train = gluon.data.DataLoader(
+            dataset=joined_data_train,
+            num_workers=4,
+            shuffle=True, batch_size = batch_size,
+            batchify_fn=batchify_fn)
     return loader_train, len(joined_data_train)
+
+
+def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_ds, train_b_ds, batch_size):
+    """Train/eval Data preparation function."""
+    pool = multiprocessing.Pool()
+    label_dtype = 'float32' # if not task.class_labels else 'int32'
+    bow_count_dtype = 'float32'
+
+    a_data_train = mx.gluon.data.SimpleDataset(pool.map(trans1, train_a_ds))
+    b_data_train = mx.gluon.data.SimpleDataset(pool.map(trans2, train_b_ds))
     
+    batchify_fn = nlp.data.batchify.Tuple(
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
+    a_loader_train = gluon.data.DataLoader(
+            dataset=a_data_train,
+            num_workers=4,
+            shuffle=True, batch_size = batch_size,
+            batchify_fn=batchify_fn)
+    b_loader_train = gluon.data.DataLoader(
+        dataset=b_data_train,
+        num_workers=4,
+        shuffle=False,
+        batch_size = batch_size,
+        batchify_fn=batchify_fn)
+    return a_loader_train, len(a_data_train), b_loader_train
+
+
 
 def get_dual_bert_datasets(class_labels,
                            vectorizer,
@@ -362,7 +392,8 @@ def get_dual_bert_datasets(class_labels,
                            dataset,
                            batch_size,
                            dev_bs,
-                           max_len,
+                           max_len1,
+                           max_len2,
                            pad,
                            ctx):
     bert, vocabulary = get_model(
@@ -377,13 +408,23 @@ def get_dual_bert_datasets(class_labels,
     bert_tokenizer = BERTTokenizer(vocabulary, lower=do_lower_case)
 
     # transformation for data train and dev
-    trans = BERTDatasetTransform(bert_tokenizer, max_len,
+    trans1 = BERTDatasetTransform(bert_tokenizer, max_len1,
+                                 class_labels=class_labels,
+                                 label_alias=None,
+                                 pad=pad, pair=False,
+                                 has_label=True,
+                                 vectorizer=vectorizer)
+
+    trans2 = BERTDatasetTransform(bert_tokenizer, max_len2,
                                  class_labels=class_labels,
                                  label_alias=None,
                                  pad=pad, pair=False,
                                  has_label=True,
                                  vectorizer=vectorizer)
     
-    train_data, num_train_examples = preprocess_data_metriclearn(
-        trans, class_labels, train_ds1, train_ds2, batch_size, max_len, pad)
-    return train_data, num_train_examples, bert
+    #train_data, num_train_examples = preprocess_data_metriclearn(
+    #   trans, class_labels, train_ds1, train_ds2, batch_size, max_len, pad)
+    batch_size = len(train_ds2)
+    a_train_data, num_train_examples, b_train_data = preprocess_data_metriclearn_separate(
+        trans1, trans2, class_labels, train_ds1, train_ds2, batch_size)
+    return a_train_data, num_train_examples, bert, b_train_data

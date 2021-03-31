@@ -854,7 +854,8 @@ class GeneralizedSDMLLoss(Loss):
           [ 0, 1, 0] ]
         """
         batch_size, dim = l1.shape
-        print("l1 shape = {}, {}".format(batch_size, dim))
+        print("l2 shape = {}, {}".format(batch_size, dim))
+        print("l2 vec = {}".format(l2.asnumpy()))
         l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size, dim))
         l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size, dim))
         ll = F.equal(l1_x, l2_x)
@@ -867,20 +868,7 @@ class GeneralizedSDMLLoss(Loss):
     def _loss(self, F, x1, l1, x2, l2):
         """
         the function computes the kl divergence between the negative distances
-        (internally it compute a softmax casting into probabilities) and the
-        identity matrix.
-
-        This assumes that the two batches are aligned therefore the more similar
-        vector should be the one having the same id.
-
-        Batch1                                Batch2
-
-        President of France                   French President
-        President of US                       American President
-
-        Given the question president of France in batch 1 the model will
-        learn to predict french president comparing it with all the other
-        vectors in batch 2
+        and the smoothed label matrix.
         """
         batch_size = x1.shape[0]
         labels = self._compute_labels(F, l1, l2)

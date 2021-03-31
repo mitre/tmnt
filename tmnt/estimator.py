@@ -1114,7 +1114,6 @@ class SeqBowEstimator(BaseEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
 
-
     def fit_with_validation(self, train_data, dev_data, num_train_examples):
         """Training function."""
         model = self._get_model(train_data)
@@ -1155,65 +1154,59 @@ class SeqBowEstimator(BaseEstimator):
         if accumulate and accumulate > 1:
             for p in params:
                 p.grad_req = 'add'
-        # track best eval score
-        metric_history = []
-        
+                
         tic = time.time()
         for epoch_id in range(self.epochs):
             self.metric.reset()
-            if True: # not only_inference:
-                step_loss = 0
-                elbo_loss = 0
-                red_loss  = 0
-                class_loss = 0
-                tic = time.time()
-                all_model_params.zero_grad()
 
-                for batch_id, seqs in enumerate(train_data):
-                    # learning rate schedule
-                    if step_num < num_warmup_steps:
-                        new_lr = self.lr * step_num / num_warmup_steps
-                        dec_lr = self.decoder_lr * step_num / num_warmup_steps
-                    else:
-                        non_warmup_steps = step_num - num_warmup_steps
-                        offset = non_warmup_steps / (num_train_steps - num_warmup_steps)
-                        new_lr = self.lr - offset * self.lr
-                        dec_lr = self.decoder_lr - offset * self.decoder_lr
-                    trainer.set_learning_rate(new_lr)
-                    #dec_trainer.set_learning_rate(dec_lr)
+            step_loss = 0
+            elbo_loss = 0
+            red_loss  = 0
+            class_loss = 0
+            tic = time.time()
+            all_model_params.zero_grad()
 
-                    # forward and backward
-                    with mx.autograd.record():
-                        elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
-                        total_ls.backward()
-                    # update
-                    if not accumulate or (batch_id + 1) % accumulate == 0:
-                        trainer.allreduce_grads()
-                        dec_trainer.allreduce_grads()
-                        nlp.utils.clip_grad_global_norm(clipped_params, 1.0, check_isfinite=True)
-                        trainer.update(accumulate if accumulate else 1)
-                        dec_trainer.update(accumulate if accumulate else 1)
-                        step_num += 1
-                        if accumulate and accumulate > 1:
-                            # set grad to zero for gradient accumulation
-                            all_model_params.zero_grad()
-                    step_loss += total_ls.mean().asscalar()
-                    elbo_loss += elbo_ls.mean().asscalar()
-                    red_loss  += red_ls.mean().asscalar()
-                    class_loss += label_ls.asscalar()                        
-                    if (batch_id + 1) % (self.log_interval) == 0:
-                        self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
-                                  epoch_id, trainer.learning_rate)
-                        step_loss = 0
-                        elbo_loss = 0
-                        red_loss  = 0
-                        class_loss = 0
-                mx.nd.waitall()
+            for batch_id, seqs in enumerate(train_data):
+                # learning rate schedule
+                if step_num < num_warmup_steps:
+                    new_lr = self.lr * step_num / num_warmup_steps
+                else:
+                    non_warmup_steps = step_num - num_warmup_steps
+                    offset = non_warmup_steps / (num_train_steps - num_warmup_steps)
+                    new_lr = self.lr - offset * self.lr
+                trainer.set_learning_rate(new_lr)
+
+                # forward and backward
+                with mx.autograd.record():
+                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
+                    total_ls.backward()
+                # update
+                if not accumulate or (batch_id + 1) % accumulate == 0:
+                    trainer.allreduce_grads()
+                    dec_trainer.allreduce_grads()
+                    nlp.utils.clip_grad_global_norm(clipped_params, 1.0, check_isfinite=True)
+                    trainer.update(accumulate if accumulate else 1)
+                    dec_trainer.update(accumulate if accumulate else 1)
+                    step_num += 1
+                    if accumulate and accumulate > 1:
+                        # set grad to zero for gradient accumulation
+                        all_model_params.zero_grad()
+                step_loss += total_ls.mean().asscalar()
+                elbo_loss += elbo_ls.mean().asscalar()
+                red_loss  += red_ls.mean().asscalar()
+                class_loss += label_ls.asscalar()                        
+                if (batch_id + 1) % (self.log_interval) == 0:
+                    self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
+                              epoch_id, trainer.learning_rate)
+                    step_loss = 0
+                    elbo_loss = 0
+                    red_loss  = 0
+                    class_loss = 0
+            mx.nd.waitall()
 
             # inference on dev data
             if dev_data is not None:
                 v_res, metric_nm, metric_val = self.validate(model, dev_data)
-                metric_history.append((epoch_id, metric_nm, metric_val))
                 sc_obj = self._get_objective_from_validation_result(v_res)
                 if 'accuracy' in v_res:
                     self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
@@ -1295,9 +1288,13 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, fixed_data=None, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss()
+        if fixed_data:
+            self.fixed_batch = next(enumerate(fixed_data))[1] # take the first batch and fix
+        else:
+            self.fixed_batch = None
 
     def _get_model(self, train_data):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
@@ -1313,16 +1310,25 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
         for _, seqs in enumerate(dataloader):
-            batch_1, batch_2 = seqs
+            if self.fixed_batch:
+                batch_1 = seqs
+            else:
+                batch_1, batch_2 = seqs                
+                bow_matrix.extend(list(batch_2[3].squeeze(axis=1)))
             bow_matrix.extend(list(batch_1[3].squeeze(axis=1)))
-            bow_matrix.extend(list(batch_2[3].squeeze(axis=1)))
+        if self.fixed_batch:
+            bow_matrix.extend(list(self.fixed_batch[3].squeeze(axis=1)))
         bow_matrix = mx.nd.stack(*bow_matrix)
         if cache:
             self._bow_matrix = bow_matrix
         return bow_matrix
 
     def _get_losses(self, model, batch_data):
-        batch1, batch2 = batch_data
+        if self.fixed_batch:
+            batch1 = batch_data
+            batch2 = self.fixed_batch
+        else:
+            batch1, batch2 = batch_data
         in1, vl1, tt1, bow1, label1 = batch1
         in2, vl2, tt2, bow2, label2 = batch2
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(
@@ -1331,7 +1337,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             in2.as_in_context(self.ctx), tt2.as_in_context(self.ctx),
             vl2.astype('float32').as_in_context(self.ctx), bow2.as_in_context(self.ctx))
         label1 = label1.as_in_context(self.ctx)
-        label2 = label1.as_in_context(self.ctx)
+        label2 = label2.as_in_context(self.ctx)
         label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
         label_ls = label_ls.mean()
         total_ls = (self.gamma * label_ls) + elbo_ls.mean()
