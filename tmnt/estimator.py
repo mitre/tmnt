@@ -1289,9 +1289,9 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, fixed_data=None, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_data=None, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
-        self.loss_function = GeneralizedSDMLLoss()
+        self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
         if fixed_data:
             self.fixed_batch = next(enumerate(fixed_data))[1] # take the first batch and fix
         else:
