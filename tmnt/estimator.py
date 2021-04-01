@@ -1169,7 +1169,7 @@ class SeqBowEstimator(BaseEstimator):
 
             for batch_id, seqs in enumerate(train_data):
                 # learning rate schedule
-                if step_num =< num_warmup_steps:
+                if step_num < num_warmup_steps:
                     new_lr = self.lr * (step_num+1) / num_warmup_steps
                 else:
                     non_warmup_steps = step_num - num_warmup_steps
