@@ -1210,7 +1210,7 @@ class SeqBowEstimator(BaseEstimator):
 
             # inference on dev data
             if dev_data is not None:
-                self._perform_validation(model, dev_data, epoch_id)
+                sc_obj, v_res = self._perform_validation(model, dev_data, epoch_id)
             if self.checkpoint_dir:
                 self.write_model(self.checkpoint_dir, suf=str(epoch_id))
         return sc_obj, v_res
@@ -1253,6 +1253,7 @@ class SeqBowEstimator(BaseEstimator):
             else:
                 self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
                               perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+        return sc_obj, v_res
                 
     
     def validate(self, model, dataloader):
@@ -1362,23 +1363,25 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
-            probs = mx.softmax(-dists, axis=1).asnumpy()
+            probs = mx.nd.softmax(-dists, axis=1).asnumpy()
             posteriors += list(probs)
-            label1 = label1.squeeze().asnumpy()
-            gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())))
-            gt[np.arrange(label1.shape[0]), label1] = 1
+            label1 = np.array(label1.squeeze().asnumpy(), dtype='int')
+            gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())+1))
+            gt[np.arange(label1.shape[0]), label1] = 1
             ground_truth += list(gt)
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
-        avg_prec = average_precision_score(ground_truth, posteriors)
+        avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
         return {'avg_prec': avg_prec}
             
     def _perform_validation(self, model, dev_data, epoch_id):
         v_res = self.classifier_validate(model, dev_data)
-        self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}".format(epoch_id, v_res['avg_prec'], v_res['avg_prec']))
+        self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}"
+                            .format(epoch_id, v_res['avg_prec'], v_res['avg_prec']))
         if self.reporter:
-            self.reporter(epoch=epoch_id+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0, perplexity=0.0, redundancy=0.0)
-
+            self.reporter(epoch=epoch_id+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0,
+                          perplexity=0.0, redundancy=0.0)
+        return v_res['avg_prec'], v_res
 
 
 class DeepAveragingBowEstimator(BaseEstimator):
