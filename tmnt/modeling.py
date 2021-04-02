@@ -855,6 +855,8 @@ class GeneralizedSDMLLoss(Loss):
         
         This is an outer product with the equality predicate.
         """
+        l1 = l1.squeeze()
+        l2 = l2.squeeze()
         batch_size = l1.shape[0]
         l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
         l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
@@ -871,7 +873,7 @@ class GeneralizedSDMLLoss(Loss):
         and the smoothed label matrix.
         """
         batch_size = x1.shape[0]
-        labels = self._compute_labels(F, l1.squeeze(), l2.squeeze())
+        labels = self._compute_labels(F, l1, l2)
         distances = self._compute_distances(x1, x2)
         log_probabilities = F.log_softmax(-distances, axis=1)
         # multiply for the number of labels to obtain the correct loss (gluon kl_loss averages instead of sum)
