@@ -22,6 +22,7 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 
+from sklearn.metrics import average_precision_score
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
 from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
@@ -1040,7 +1041,8 @@ class SeqBowEstimator(BaseEstimator):
             f.write(self.bow_vocab.to_json())
 
 
-    def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, red_loss, class_loss, log_interval, epoch_id, learning_rate):
+    def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, red_loss, class_loss,
+                  log_interval, epoch_id, learning_rate):
         """Generate and print out the log message for training. """
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
@@ -1208,21 +1210,7 @@ class SeqBowEstimator(BaseEstimator):
 
             # inference on dev data
             if dev_data is not None:
-                v_res, metric_nm, metric_val = self.validate(model, dev_data)
-                sc_obj = self._get_objective_from_validation_result(v_res)
-                if 'accuracy' in v_res:
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
-                                    .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
-                else:
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                    .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
-                if self.reporter:
-                    if 'accuracy' in v_res:
-                        self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
-                                      perplexity=v_res['ppl'], redundancy=v_res['redundancy'], accuracy=v_res['accuracy'])
-                    else:
-                        self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
-                                  perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+                self._perform_validation(model, dev_data, epoch_id)
             if self.checkpoint_dir:
                 self.write_model(self.checkpoint_dir, suf=str(epoch_id))
         return sc_obj, v_res
@@ -1247,7 +1235,25 @@ class SeqBowEstimator(BaseEstimator):
         #    for i in range(num_topics):
         #        logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
         return npmi, redundancy
-            
+    
+
+    def _perform_validation(self, model, dev_data, epoch_id):
+        v_res, metric_nm, metric_val = self.validate(model, dev_data)
+        sc_obj = self._get_objective_from_validation_result(v_res)
+        if 'accuracy' in v_res:
+            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
+                                .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
+        else:
+            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                                .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
+        if self.reporter:
+            if 'accuracy' in v_res:
+                self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
+                              perplexity=v_res['ppl'], redundancy=v_res['redundancy'], accuracy=v_res['accuracy'])
+            else:
+                self.reporter(epoch=epoch_id+1, objective=sc_obj, time_step=time.time(), coherence=v_res['npmi'],
+                              perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+                
     
     def validate(self, model, dataloader):
         bow_matrix = self._bow_matrix if self._bow_matrix is not None else self._get_bow_matrix(dataloader, cache=True)
@@ -1275,7 +1281,6 @@ class SeqBowEstimator(BaseEstimator):
         else:
             perplexity = 1e300
         v_res = {'ppl':perplexity, 'npmi': npmi, 'redundancy': redundancy}
-
         metric_nm = 0.0
         metric_val = 0.0
         if self.has_classifier:
@@ -1326,6 +1331,15 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         return bow_matrix
 
     def _get_losses(self, model, batch_data):
+        elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
+        label1 = label1.as_in_context(self.ctx)
+        label2 = label2.as_in_context(self.ctx)
+        label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
+        label_ls = label_ls.mean()
+        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+        return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
+
+    def _ff_batch(self, model, batch_data):
         if self.fixed_batch:
             batch1 = batch_data
             batch2 = self.fixed_batch
@@ -1338,12 +1352,32 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             vl1.astype('float32').as_in_context(self.ctx), bow1.as_in_context(self.ctx),
             in2.as_in_context(self.ctx), tt2.as_in_context(self.ctx),
             vl2.astype('float32').as_in_context(self.ctx), bow2.as_in_context(self.ctx))
-        label1 = label1.as_in_context(self.ctx)
-        label2 = label2.as_in_context(self.ctx)
-        label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
-        label_ls = label_ls.mean()
-        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
-        return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
+        return elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2
+    
+
+    def classifier_validate(self, model, dataloader):
+        posteriors = []
+        ground_truth = []
+        for batch_id, seqs in enumerate(dataloader):
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs)
+            label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
+            dists = self.loss_function._compute_distances(z_mu1, z_mu2)
+            probs = mx.softmax(-dists, axis=1).asnumpy()
+            posteriors += list(probs)
+            label1 = label1.squeeze().asnumpy()
+            gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())))
+            gt[np.arrange(label1.shape[0]), label1] = 1
+            ground_truth += list(gt)
+        posteriors = np.array(posteriors)
+        ground_truth = np.array(ground_truth)
+        avg_prec = average_precision_score(ground_truth, posteriors)
+        return {'avg_prec': avg_prec}
+            
+    def _perform_validation(self, model, dev_data, epoch_id):
+        v_res = self.classifer_validate(model, dev_data)
+        self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}".format(epoch_id, v_res['avg_prec'], v_res['avg_prec']))
+        if self.reporter:
+            self.reporter(epoch=epoch_id+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0, perplexity=0.0, redundancy=0.0)
 
 
 
