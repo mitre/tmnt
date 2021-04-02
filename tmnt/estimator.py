@@ -1374,7 +1374,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         return {'avg_prec': avg_prec}
             
     def _perform_validation(self, model, dev_data, epoch_id):
-        v_res = self.classifer_validate(model, dev_data)
+        v_res = self.classifier_validate(model, dev_data)
         self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}".format(epoch_id, v_res['avg_prec'], v_res['avg_prec']))
         if self.reporter:
             self.reporter(epoch=epoch_id+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0, perplexity=0.0, redundancy=0.0)
