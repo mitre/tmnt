@@ -1296,13 +1296,16 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_data=None, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_data=None, fixed_test_data=None, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
+        self.fixed_batch = None
+        self.fixed_test_batch = None
         if fixed_data:
             self.fixed_batch = next(enumerate(fixed_data))[1] # take the first batch and fix
-        else:
-            self.fixed_batch = None
+            if fixed_test_batch:
+                self.fixed_test_batch = next(enumerate(fixed_test_data))[1]
+        
 
     def _get_model(self, train_data):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
@@ -1331,21 +1334,19 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             self._bow_matrix = bow_matrix
         return bow_matrix
 
-    def _get_losses(self, model, batch_data):
-        elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
-        label1 = label1.as_in_context(self.ctx)
-        label2 = label2.as_in_context(self.ctx)
-        label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
-        label_ls = label_ls.mean()
-        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
-        return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
-
-    def _ff_batch(self, model, batch_data):
-        if self.fixed_batch:
-            batch1 = batch_data
-            batch2 = self.fixed_batch
+    def _ff_batch(self, model, batch_data, on_test=False):
+        if on_test:
+            if self.fixed_test_batch:
+                batch1 = batch_data
+                batch2 = self.fixed_test_batch
+            else:
+                batch1, batch2 = batch_data
         else:
-            batch1, batch2 = batch_data
+            if self.fixed_batch:
+                batch1 = batch_data
+                batch2 = self.fixed_batch
+            else:
+                batch1, batch2 = batch_data
         in1, vl1, tt1, bow1, label1 = batch1
         in2, vl2, tt2, bow2, label2 = batch2
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(
@@ -1354,13 +1355,22 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             in2.as_in_context(self.ctx), tt2.as_in_context(self.ctx),
             vl2.astype('float32').as_in_context(self.ctx), bow2.as_in_context(self.ctx))
         return elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2
+
+    def _get_losses(self, model, batch_data):
+        elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
+        label1 = label1.as_in_context(self.ctx)
+        label2 = label2.as_in_context(self.ctx)
+        label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
+        label_ls = label_ls.mean()
+        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+        return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
     
 
     def classifier_validate(self, model, dataloader):
         posteriors = []
         ground_truth = []
         for batch_id, seqs in enumerate(dataloader):
-            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs)
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs, on_test=True)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
             probs = mx.nd.softmax(-dists, axis=1).asnumpy()
