@@ -1303,7 +1303,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         self.fixed_test_batch = None
         if fixed_data:
             self.fixed_batch = next(enumerate(fixed_data))[1] # take the first batch and fix
-            if fixed_test_batch:
+            if fixed_test_data:
                 self.fixed_test_batch = next(enumerate(fixed_test_data))[1]
         
 
