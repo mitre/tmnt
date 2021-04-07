@@ -50,7 +50,7 @@ class TMNTVectorizer(object):
 
     def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1, label_remap=None,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
-                 additional_feature_keys=None, stop_word_file=None, label_min_cnt=1,
+                 additional_feature_keys=None, stop_word_file=None, label_min_cnt=1, 
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
@@ -260,6 +260,7 @@ class TMNTVectorizer(object):
         X = self._tr_json_dir(self.vectorizer.fit_transform, json_dir)
         y = self._get_ys_dir(json_dir)
         return X, y
+
         
     def _tr_in_place_json(self, tr_method, json_file):        
         X, _ = tr_method(json_file)

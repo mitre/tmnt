@@ -1211,6 +1211,8 @@ class SeqBowEstimator(BaseEstimator):
             # inference on dev data
             if dev_data is not None:
                 sc_obj, v_res = self._perform_validation(model, dev_data, epoch_id)
+            else:
+                sc_obj, v_res = None, None
             if self.checkpoint_dir:
                 self.write_model(self.checkpoint_dir, suf=str(epoch_id))
         return sc_obj, v_res

@@ -121,9 +121,12 @@ class BERTDatasetTransform(object):
         Whether to pad the sentences to maximum length.
     pair : bool, default True
         Whether to transform sentences or sentence pairs.
-    label_dtype: int32 or float32, default float32
-        label_dtype = int32 for classification task
-        label_dtype = float32 for regression task
+    has_label: bool.
+        Whether labels are present for supervised learning
+    vectorizer: TMNTVectorizer
+        TMNTVectorizer to generate bag of words
+    bert_vocab_size: int
+        Use the raw BERT word-pieces as the bag-of-words vocabulary
     """
 
     def __init__(self,
@@ -134,9 +137,12 @@ class BERTDatasetTransform(object):
                  pad=True,
                  pair=True,
                  has_label=True,
-                 vectorizer=None):
+                 vectorizer=None,
+                 bert_vocab_size=0):
         self.class_labels = class_labels
         self.has_label = has_label
+        self.use_bert_bow = bert_vocab_size > 0
+        self.bert_vocab_size = bert_vocab_size
         self._label_dtype = 'int32' if class_labels else 'float32'
         if has_label and class_labels:
             self._label_map = {}
@@ -213,6 +219,13 @@ class BERTDatasetTransform(object):
                     label = -1
             label = np.array([label], dtype=self._label_dtype)
             bow = None
+            if self.use_bert_bow:
+                input_ids_np = input_ids.asnumpy()
+                bow = np.array((input_ids_np.shape[0], self.bert_vocab_size))
+                for i, row in enumerate(inpu_ids_np):
+                    inds, cnts = np.unique(row, return_counts=True)
+                    bow[i, inds] = cnts
+                bow = mx.nd.sparse.csr_matrix(bow)
             if self.vectorizer:
                 bow,_ = self.vectorizer.transform(line[:-1])
                 bow = mx.nd.array(bow, dtype='float32')
@@ -278,7 +291,6 @@ def preprocess_data(trans, class_labels, train_ds, dev_ds, batch_size, dev_batch
     return loader_train, loader_dev, loader_test, len(data_train)
 
 
-
 def get_bert_datasets(class_labels,
                       vectorizer,
                       train_ds,
@@ -289,6 +301,7 @@ def get_bert_datasets(class_labels,
                       dev_bs,
                       max_len,
                       pad,
+                      use_bert_vocab,
                       ctx):
     bert, vocabulary = get_model(
         name=model_name,
@@ -305,7 +318,8 @@ def get_bert_datasets(class_labels,
                                  label_alias=None,
                                  pad=pad, pair=False,
                                  has_label=True,
-                                 vectorizer=vectorizer)
+                                 vectorizer=vectorizer,
+                                 bert_vocab_size = len(vocabulary) if use_bert_vocab else 0)
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
         trans, class_labels, train_ds, dev_ds, batch_size, dev_bs, max_len, pad)
     return train_data, dev_data, num_train_examples, bert
