@@ -45,7 +45,8 @@ class TMNTVectorizer(object):
             features to use alongside vocabulary
         stop_word_file (str): Path to a file containing stop words (newline separated)
         label_min_cnt (int): Minimum number of occurrences of label; instance provided label id -1 if label occurs less than this value
-        unknown_label (str): Label value that corresponds to label UNKNOWN
+        unknown_label (str): Label value that corresponds to label UNKNOWN.  Note that in addition to specifying this, if the label key
+            is not found, the label will be treated as unknown (i.e. value of -1)
         count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
     """
 
@@ -182,9 +183,10 @@ class TMNTVectorizer(object):
         ys = []
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for j in fp:
-                label_string = json.loads(j)[self.label_key]
+                js = json.loads(j)
+                label_string = js.get(self.label_key) or self.unknown_label
                 if self.label_remap:
-                    label_string = self.label_remap[label_string]
+                    label_string = self.label_remap.get(label_string) or label_string
                 ys.append(label_string)
         return ys
 
