@@ -203,11 +203,11 @@ class BERTDatasetTransform(object):
 
         Returns
         -------
-        np.array: input token ids in 'int32', shape (batch_size, seq_length)
-        np.array: valid length in 'int32', shape (batch_size,)
-        np.array: input token type ids in 'int32', shape (batch_size, seq_length)
-        np.array: classification task: label id in 'int32', shape (batch_size, 1),
-            regression task: label in 'float32', shape (batch_size, 1)
+        np.array: input token ids in 'int32', shape (seq_length,)
+        np.array: valid length in 'int32', shape (1,)
+        np.array: input token type ids in 'int32', shape (seq_length,)
+        np.array: classification task: label id in 'int32', shape (1,),
+            regression task: label in 'float32', shape (1,)
         """
         if self.has_label:
             input_ids, valid_length, segment_ids = self._bert_xform(line[:-1])
@@ -220,12 +220,10 @@ class BERTDatasetTransform(object):
             label = np.array([label], dtype=self._label_dtype)
             bow = None
             if self.use_bert_bow:
-                input_ids_np = input_ids.asnumpy()
-                bow = np.array((input_ids_np.shape[0], self.bert_vocab_size))
-                for i, row in enumerate(inpu_ids_np):
-                    inds, cnts = np.unique(row, return_counts=True)
-                    bow[i, inds] = cnts
-                bow = mx.nd.sparse.csr_matrix(bow)
+                bow = np.zeros(self.bert_vocab_size)
+                inds, cnts = np.unique(input_ids, return_counts=True)
+                bow[inds] = cnts
+                bow = mx.nd.array(np.expand_dims(bow, 0), dtype='float32')
             if self.vectorizer:
                 bow,_ = self.vectorizer.transform(line[:-1])
                 bow = mx.nd.array(bow, dtype='float32')
@@ -303,7 +301,7 @@ def get_bert_datasets(class_labels,
                       pad,
                       use_bert_vocab,
                       ctx):
-    bert, vocabulary = get_model(
+    bert, bert_vocabulary = get_model(
         name=model_name,
         dataset_name=dataset,
         pretrained=True,
@@ -312,17 +310,17 @@ def get_bert_datasets(class_labels,
         use_decoder=False,
         use_classifier=False)
     do_lower_case = 'uncased' in dataset    
-    bert_tokenizer = BERTTokenizer(vocabulary, lower=do_lower_case)
+    bert_tokenizer = BERTTokenizer(bert_vocabulary, lower=do_lower_case)
     trans = BERTDatasetTransform(bert_tokenizer, max_len,
                                  class_labels=class_labels,
                                  label_alias=None,
                                  pad=pad, pair=False,
                                  has_label=True,
                                  vectorizer=vectorizer,
-                                 bert_vocab_size = len(vocabulary) if use_bert_vocab else 0)
+                                 bert_vocab_size = len(bert_vocabulary) if use_bert_vocab else 0)
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
         trans, class_labels, train_ds, dev_ds, batch_size, dev_bs, max_len, pad)
-    return train_data, dev_data, num_train_examples, bert
+    return train_data, dev_data, num_train_examples, bert, bert_vocabulary
 
 
 ############
