@@ -29,10 +29,10 @@ class JsonlDataset(SimpleDataset):
         Path to the .jsonl file.
     encoding : str, default 'utf8'
         File encoding format.
-    label_mask : ``numpy.ndarray``
-        Optional label mask to set some labels to unknown for semi-supervised learning experimentation and training curves
+    label_remap : dict
+        Dictionary to map labels.
     """
-    def __init__(self, filename, txt_key, label_key, encoding='utf8', label_mask=None, label_remap=None, random_drop_pct=0.0):
+    def __init__(self, filename, txt_key, label_key, encoding='utf8', label_remap=None, random_drop_pct=0.0):
 
         if not isinstance(filename, (tuple, list)):
             filename = (filename, )
@@ -41,7 +41,6 @@ class JsonlDataset(SimpleDataset):
         self._encoding = encoding
         self._txt_key = txt_key
         self._label_key = label_key
-        self._label_mask = label_mask
         self._label_remap = label_remap
         self._random_drop_pct = random_drop_pct
         self._random_drop = random_drop_pct > 0.0
@@ -55,20 +54,13 @@ class JsonlDataset(SimpleDataset):
                 for line in fin.readlines():
                     if not self._random_drop or (random.uniform(0,1) > self._random_drop_pct):
                         s = json.loads(line, object_pairs_hook=collections.OrderedDict)
-                        label = s[self._label_key]
-                        if self._label_remap is not None:
+                        label = s.get(self._label_key) or ""
+                        if self._label_remap is not None and len(label) > 0:
                             label = self._label_remap[label]
+                        if len(label) < 1:
+                            label = "<UNK>"
                         samples.append((s[self._txt_key], label))
             all_samples += samples
-        if self._label_mask is not None:
-            masked_samples = []
-            for i in range(len(all_samples)):
-                if self._label_mask[i] < 1.0:
-                    t = (all_samples[i][0], "<unk>")
-                else:
-                    t = all_samples[i]
-                masked_samples.append(t)
-            all_samples = masked_samples
         return all_samples
     
 
