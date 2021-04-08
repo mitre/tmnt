@@ -56,7 +56,7 @@ class JsonlDataset(SimpleDataset):
                         s = json.loads(line, object_pairs_hook=collections.OrderedDict)
                         label = s.get(self._label_key)
                         if self._label_remap is not None:
-                            label = self._label_remap[label]
+                            label = self._label_remap.get(label)
                         samples.append((s[self._txt_key], label))
             all_samples += samples
         return all_samples
