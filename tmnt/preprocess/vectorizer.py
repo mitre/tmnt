@@ -45,12 +45,13 @@ class TMNTVectorizer(object):
             features to use alongside vocabulary
         stop_word_file (str): Path to a file containing stop words (newline separated)
         label_min_cnt (int): Minimum number of occurrences of label; instance provided label id -1 if label occurs less than this value
+        unknown_label (str): Label value that corresponds to label UNKNOWN
         count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
     """
 
     def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1, label_remap=None,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
-                 additional_feature_keys=None, stop_word_file=None, label_min_cnt=1, 
+                 additional_feature_keys=None, stop_word_file=None, label_min_cnt=1, unknown_label=None,
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
@@ -71,6 +72,7 @@ class TMNTVectorizer(object):
         self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
                                           vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None),
                                           **self.cv_kwargs)
+        self.unknown_label = unknown_label
         self.label_map = {}
 
         
@@ -198,6 +200,8 @@ class TMNTVectorizer(object):
         fixed = len(self.label_map) > 1
         lab_map = self.label_map
         def _update(s):
+            if s == self.unknown_label:
+                return -1
             i = lab_map.get(s)
             if i is None:
                 if not fixed:

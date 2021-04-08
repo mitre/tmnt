@@ -54,11 +54,9 @@ class JsonlDataset(SimpleDataset):
                 for line in fin.readlines():
                     if not self._random_drop or (random.uniform(0,1) > self._random_drop_pct):
                         s = json.loads(line, object_pairs_hook=collections.OrderedDict)
-                        label = s.get(self._label_key) or ""
-                        if self._label_remap is not None and len(label) > 0:
+                        label = s[self._label_key)]
+                        if self._label_remap is not None:
                             label = self._label_remap[label]
-                        if len(label) < 1:
-                            label = "<UNK>"
                         samples.append((s[self._txt_key], label))
             all_samples += samples
         return all_samples
