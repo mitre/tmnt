@@ -232,13 +232,7 @@ class BERTDatasetTransform(object):
             return self._bert_xform(line)
 
 
-def get_vectorizer(train_json_file, txt_key, label_key, vocab_size=2000):
-    vectorizer = TMNTVectorizer(text_key=txt_key, label_key=label_key, vocab_size = vocab_size)
-    vectorizer.fit_transform_json(train_json_file)
-    return vectorizer
-
-
-def preprocess_data(trans, class_labels, train_ds, dev_ds, batch_size, dev_batch_size, max_len,
+def preprocess_data(trans, class_labels, train_ds, dev_ds, batch_size, max_len,
                     pad=False):
     """Train/eval Data preparation function."""
     pool = multiprocessing.Pool()
@@ -271,7 +265,7 @@ def preprocess_data(trans, class_labels, train_ds, dev_ds, batch_size, dev_batch
     data_dev = mx.gluon.data.SimpleDataset(pool.map(trans, dev_ds))
     loader_dev = mx.gluon.data.DataLoader(
             data_dev,
-            batch_size=dev_batch_size,
+            batch_size=batch_size,
             num_workers=4,
             shuffle=False,
             batchify_fn=batchify_fn)
@@ -293,23 +287,22 @@ def get_bert_datasets(class_labels,
                       vectorizer,
                       train_ds,
                       dev_ds,
-                      model_name,
-                      dataset,
                       batch_size,
-                      dev_bs,
                       max_len,
-                      pad,
-                      use_bert_vocab,
-                      ctx):
+                      bert_model_name = 'bert_12_768_12',
+                      bert_dataset = 'book_corpus_wiki_en_uncased',
+                      pad=False,
+                      use_bert_vocab=False,
+                      ctx=mx.cpu()):
     bert, bert_vocabulary = get_model(
-        name=model_name,
-        dataset_name=dataset,
+        name=bert_model_name,
+        dataset_name=bert_dataset,
         pretrained=True,
         ctx=ctx,
         use_pooler=True,
         use_decoder=False,
         use_classifier=False)
-    do_lower_case = 'uncased' in dataset    
+    do_lower_case = 'uncased' in bert_dataset    
     bert_tokenizer = BERTTokenizer(bert_vocabulary, lower=do_lower_case)
     trans = BERTDatasetTransform(bert_tokenizer, max_len,
                                  class_labels=class_labels,
@@ -319,7 +312,7 @@ def get_bert_datasets(class_labels,
                                  vectorizer=vectorizer,
                                  bert_vocab_size = len(bert_vocabulary) if use_bert_vocab else 0)
     train_data, dev_data, test_data, num_train_examples = preprocess_data(
-        trans, class_labels, train_ds, dev_ds, batch_size, dev_bs, max_len, pad)
+        trans, class_labels, train_ds, dev_ds, batch_size, max_len, pad)
     return train_data, dev_data, num_train_examples, bert, bert_vocabulary
 
 
