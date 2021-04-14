@@ -370,7 +370,6 @@ class BaseBowEstimator(BaseEstimator):
     def _get_model(self):
         raise NotImplementedError()
 
-
     def _npmi_with_dataloader(self, dataloader, k=10):
         sorted_ids = self.model.get_ordered_terms_encoder(dataloader) if self.coherence_via_encoder else self.model.get_ordered_terms()
         num_topics = min(self.n_latent, sorted_ids.shape[-1])

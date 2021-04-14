@@ -255,12 +255,13 @@ class BowVAEInferencer(BaseInferencer):
 class SeqVEDInferencer(BaseInferencer):
     """Inferencer for sequence variational encoder-decoder models using BERT
     """
-    def __init__(self, model, bert_vocab, max_length, ctx=mx.cpu()):
+    def __init__(self, model, bert_vocab, max_length, bow_vocab=None, ctx=mx.cpu()):
         super().__init__(ctx)
         self.model     = model
         self.bert_base = model.bert
         self.tokenizer = BERTTokenizer(bert_vocab)
         self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
+        self.bow_vocab = bow_vocab
 
 
     @classmethod
@@ -288,7 +289,7 @@ class SeqVEDInferencer(BaseInferencer):
         model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
                           dropout=classifier_dropout)
         model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
-        return cls(model, vocab, max_length, ctx)
+        return cls(model, vocab, max_length, bow_vocab, ctx)
 
 
     def _embed_sequence(self, ids, segs):
@@ -331,3 +332,17 @@ class SeqVEDInferencer(BaseInferencer):
             topic_encodings = self.model.latent_dist.get_mu_encoding(encs)
             encodings.extend(list(topic_encodings))
         return encodings
+
+    def get_top_k_words_per_topic(self, k):
+        if self.bow_vocab:
+            sorted_ids = self.model.get_ordered_terms()
+            topic_terms = []
+            for t in range(self.n_latent):
+                top_k = [ self.bow_vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t]) ]
+                topic_terms.append(top_k)
+            return topic_terms
+        else:
+            raise Exception("Bow vocabulary required for Inferencer in order to provide topic terms")
+
+
+    
