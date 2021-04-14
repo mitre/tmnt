@@ -337,7 +337,7 @@ class SeqVEDInferencer(BaseInferencer):
         if self.bow_vocab:
             sorted_ids = self.model.get_top_k_terms(k)
             topic_terms = []
-            for t in range(self.n_latent):
+            for t in range(self.model.n_latent):
                 top_k = [ self.bow_vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t]) ]
                 topic_terms.append(top_k)
             return topic_terms
