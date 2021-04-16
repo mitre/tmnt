@@ -22,6 +22,7 @@ from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
 import umap
+import umap.plot
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score
@@ -1394,10 +1395,13 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         if self.plot_dir:
             ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
             umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
-            embeddings = umap_model.fit_transform(np.array(emb1))
+            #embeddings = umap_model.fit_transform(np.array(emb1))
+            mapper = umap_model.fit(np.array(emb1))
             y = np.where(ground_truth > 0)[1]
-            plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
+            #plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
+            umap.plot.points(mapper, labels=y)
             plt.savefig(ofile)
+            plt.close("all")
         return {'avg_prec': avg_prec}
 
             
