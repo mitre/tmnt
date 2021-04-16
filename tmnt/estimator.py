@@ -21,6 +21,8 @@ from mxnet import autograd
 from mxnet import gluon
 import gluonnlp as nlp
 from pathlib import Path
+import umap
+import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
@@ -1297,11 +1299,12 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_data=None, fixed_test_data=None, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_data=None, fixed_test_data=None, plot_dir=None, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
         self.fixed_batch = None
         self.fixed_test_batch = None
+        self.plot_dir = None
         if fixed_data:
             self.fixed_batch = next(enumerate(fixed_data))[1] # take the first batch and fix
             if fixed_test_data:
@@ -1367,9 +1370,11 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
     
 
-    def classifier_validate(self, model, dataloader):
+    def classifier_validate(self, model, dataloader, epoch_id):
         posteriors = []
         ground_truth = []
+        emb2 = None
+        emb1 = []
         for batch_id, seqs in enumerate(dataloader):
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs, on_test=True)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
@@ -1380,13 +1385,23 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())+1))
             gt[np.arange(label1.shape[0]), label1] = 1
             ground_truth += list(gt)
+            if emb2 is None:
+                emb2 = z_mu2.asnumpy()
+            emb1 += list(z_mu1.asnumpy())
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
         avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
+        if self.plot_dir:
+            ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
+            umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
+            embeddings = umap_model.fit_transform(np.array(emb1))
+            plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
+            plt.savefig(ofile)
         return {'avg_prec': avg_prec}
+
             
     def _perform_validation(self, model, dev_data, epoch_id):
-        v_res = self.classifier_validate(model, dev_data)
+        v_res = self.classifier_validate(model, dev_data, epoch_id)
         self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}"
                             .format(epoch_id, v_res['avg_prec'], v_res['avg_prec']))
         if self.reporter:
