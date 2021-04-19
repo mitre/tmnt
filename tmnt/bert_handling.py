@@ -379,7 +379,6 @@ def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_d
     return a_loader_train, len(a_data_train), b_loader_train
 
 
-
 def get_dual_bert_datasets(class_labels,
                            vectorizer,
                            train_ds1,
@@ -391,8 +390,9 @@ def get_dual_bert_datasets(class_labels,
                            max_len1,
                            max_len2,
                            pad,
-                           ctx):
-    bert, vocabulary = get_model(
+                           use_bert_vocab=False,
+                           ctx=mx.cpu()):
+    bert, bert_vocabulary = get_model(
         name=model_name,
         dataset_name=dataset,
         pretrained=True,
@@ -401,26 +401,28 @@ def get_dual_bert_datasets(class_labels,
         use_decoder=False,
         use_classifier=False)
     do_lower_case = 'uncased' in dataset    
-    bert_tokenizer = BERTTokenizer(vocabulary, lower=do_lower_case)
+    bert_tokenizer = BERTTokenizer(bert_vocabulary, lower=do_lower_case)
 
     # transformation for data train and dev
     trans1 = BERTDatasetTransform(bert_tokenizer, max_len1,
-                                 class_labels=class_labels,
-                                 label_alias=None,
-                                 pad=pad, pair=False,
-                                 has_label=True,
-                                 vectorizer=vectorizer)
+                                  class_labels=class_labels,
+                                  label_alias=None,
+                                  pad=pad, pair=False,
+                                  has_label=True,
+                                  vectorizer=vectorizer,
+                                  bert_vocab_size=len(bert_vocabulary) if use_bert_vocab else 0)
 
     trans2 = BERTDatasetTransform(bert_tokenizer, max_len2,
-                                 class_labels=class_labels,
-                                 label_alias=None,
-                                 pad=pad, pair=False,
-                                 has_label=True,
-                                 vectorizer=vectorizer)
+                                  class_labels=class_labels,
+                                  label_alias=None,
+                                  pad=pad, pair=False,
+                                  has_label=True,
+                                  vectorizer=vectorizer,
+                                  bert_vocab_size=len(bert_vocabulary) if use_bert_vocab else 0)
     
     #train_data, num_train_examples = preprocess_data_metriclearn(
     #   trans, class_labels, train_ds1, train_ds2, batch_size, max_len, pad)
     batch_size = len(train_ds2)
     a_train_data, num_train_examples, b_train_data = preprocess_data_metriclearn_separate(
         trans1, trans2, class_labels, train_ds1, train_ds2, batch_size)
-    return a_train_data, num_train_examples, bert, b_train_data
+    return a_train_data, num_train_examples, bert, b_train_data, bert_vocabulary
