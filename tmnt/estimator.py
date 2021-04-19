@@ -320,7 +320,8 @@ class BaseBowEstimator(BaseEstimator):
                     embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
                     num_enc_layers=n_encoding_layers, enc_dr=enc_dr, 
                     epochs=epochs, log_method='log', coherence_via_encoder=coherence_via_encoder,
-                    pretrained_param_file = pretrained_param_file)
+                    pretrained_param_file = pretrained_param_file,
+                    warm_start = (pretrained_param_file is not None))
         return model
 
 
@@ -944,7 +945,7 @@ class SeqBowEstimator(BaseEstimator):
 
 
     @classmethod
-    def from_config(cls, config, reporter=None, log_interval=1, ctx=mx.cpu()):
+    def from_config(cls, config, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
         if isinstance(config, str):
             try:
                 with open(config, 'r') as f:
@@ -990,9 +991,18 @@ class SeqBowEstimator(BaseEstimator):
                     epochs = epochs,
                     lr = lr,
                     decoder_lr = decoder_lr,
+                    pretrained_param_file = pretrained_param_file,
+                    warm_start = (pretrained_param_file is not None),
                     ctx=ctx,
                     log_interval=log_interval)
         return model
+    
+
+    def initialize_with_pretrained(self):
+        assert(self.pretrained_param_file is not None)
+        self.model = self._get_model()
+        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
+
     
     def _get_model(self, train_data):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
@@ -1006,6 +1016,7 @@ class SeqBowEstimator(BaseEstimator):
         tr_bow_counts = self._get_bow_wd_counts(train_data)
         model.initialize_bias_terms(tr_bow_counts)
         return model
+    
 
     def _get_config(self):
         config = {}
@@ -1119,10 +1130,11 @@ class SeqBowEstimator(BaseEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
 
-    def fit_with_validation(self, train_data, dev_data, num_train_examples):
+    def fit_with_validation(self, train_data, dev_data, num_train_examples, ss_data=None):
         """Training function."""
-        model = self._get_model(train_data)
-        self.model = model
+        if self.model is None or not self.warm_start:
+            model = self._get_model(train_data)
+            self.model = model
         
         accumulate = False
 
@@ -1160,7 +1172,6 @@ class SeqBowEstimator(BaseEstimator):
             for p in params:
                 p.grad_req = 'add'
                 
-        tic = time.time()
         for epoch_id in range(self.epochs):
             self.metric.reset()
 
@@ -1168,10 +1179,12 @@ class SeqBowEstimator(BaseEstimator):
             elbo_loss = 0
             red_loss  = 0
             class_loss = 0
-            tic = time.time()
             all_model_params.zero_grad()
 
-            for batch_id, seqs in enumerate(train_data):
+            aux_data = [None] if ss_data is None else ss_data
+            paired_dataloaders = zip(train_data, cycle(ss_data)) if len(train_data) > len(ss_data) else zip(cycle(train_data), ss_data)
+            #for (batch_id, seqs) in enumerate(train_data):
+            for (batch_id, (seqs, aux_seqs)) in enumerate(paired_dataloaders):
                 # learning rate schedule
                 if step_num < num_warmup_steps:
                     new_lr = self.lr * (step_num+1) / num_warmup_steps
@@ -1181,11 +1194,21 @@ class SeqBowEstimator(BaseEstimator):
                     new_lr = self.lr - offset * self.lr
                 new_lr = max(new_lr, self.minimum_lr)
                 trainer.set_learning_rate(new_lr)
-
-                # forward and backward
+                # forward and backward with optional auxilliary data
                 with mx.autograd.record():
                     elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
                     total_ls.backward()
+                    step_loss += total_ls.mean().asscalar()
+                    elbo_loss += elbo_ls.mean().asscalar()
+                    red_loss  += red_ls.mean().asscalar()
+                    class_loss += label_ls.asscalar()                        
+                    if aux_seqs is not None:
+                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, label_ls_2, total_ls_2 = self._get_losses(model, aux_seqs)
+                        total_ls_2.backward()
+                        step_loss += total_ls_2.mean().asscalar()
+                        elbo_loss += elbo_ls_2.mean().asscalar()
+                        red_loss  += red_ls_2.mean().asscalar()
+                        class_loss += label_ls_2.asscalar()                        
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:
                     trainer.allreduce_grads()
@@ -1197,10 +1220,6 @@ class SeqBowEstimator(BaseEstimator):
                     if accumulate and accumulate > 1:
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
-                step_loss += total_ls.mean().asscalar()
-                elbo_loss += elbo_ls.mean().asscalar()
-                red_loss  += red_ls.mean().asscalar()
-                class_loss += label_ls.asscalar()                        
                 if (batch_id + 1) % (self.log_interval) == 0:
                     self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
                               epoch_id, trainer.learning_rate)
@@ -1218,6 +1237,7 @@ class SeqBowEstimator(BaseEstimator):
             if self.checkpoint_dir:
                 self.write_model(self.checkpoint_dir, suf=str(epoch_id))
         return sc_obj, v_res
+
 
     def _compute_coherence(self, model, k, test_data, log_terms=False):
         num_topics = model.n_latent
@@ -1269,7 +1289,6 @@ class SeqBowEstimator(BaseEstimator):
         elbo_loss  = 0
         total_rec_loss = 0.0
         total_kl_loss  = 0.0
-        tic = time.time()
         for batch_id, seqs in enumerate(dataloader):
             elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
             total_rec_loss += rec_ls.sum().asscalar()
@@ -1310,6 +1329,12 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             self.fixed_batch = next(enumerate(fixed_data))[1] # take the first batch and fix
             if fixed_test_data:
                 self.fixed_test_batch = next(enumerate(fixed_test_data))[1]
+
+
+    @classmethod
+    def from_config(cls, *args, **kwargs):
+        est = super().from_config(*args, **kwargs)
+        return est
         
 
     def _get_model(self, train_data):
@@ -1320,8 +1345,9 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.post_init(self.ctx)
         tr_bow_matrix = self._get_bow_matrix(train_data)
-        print("Shape tr_bow_matrix when getting model ... {}".format(tr_bow_matrix.shape))
         model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+        if self.pretrained_param_file is not None:
+            model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
 
     def _get_bow_matrix(self, dataloader, cache=False):
@@ -1364,14 +1390,17 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def _get_losses(self, model, batch_data):
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
-        label1 = label1.as_in_context(self.ctx)
-        label2 = label2.as_in_context(self.ctx)
-        label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
-        label_ls = label_ls.mean()
-        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+        if label1.sum() > 0 and label2.sum() > 0:
+            label1 = label1.as_in_context(self.ctx)
+            label2 = label2.as_in_context(self.ctx)
+            label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
+            label_ls = label_ls.mean()
+            total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+        else:
+            label_ls = mx.nd.array([0.0])
+            total_ls = elbo_ls.mean()
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
     
-
     def classifier_validate(self, model, dataloader, epoch_id):
         posteriors = []
         ground_truth = []
