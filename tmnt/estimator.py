@@ -1320,6 +1320,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.post_init(self.ctx)
         tr_bow_matrix = self._get_bow_matrix(train_data)
+        print("Shape tr_bow_matrix when getting model ... {}".format(tr_bow_matrix.shape))
         model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         return model
 
