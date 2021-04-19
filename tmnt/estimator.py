@@ -1182,7 +1182,7 @@ class SeqBowEstimator(BaseEstimator):
             all_model_params.zero_grad()
 
             aux_data = [None] if ss_data is None else ss_data
-            paired_dataloaders = zip(train_data, cycle(ss_data)) if len(train_data) > len(ss_data) else zip(cycle(train_data), ss_data)
+            paired_dataloaders = zip(train_data, cycle(aux_data)) if len(train_data) > len(aux_data) else zip(cycle(train_data), aux_data)
             #for (batch_id, seqs) in enumerate(train_data):
             for (batch_id, (seqs, aux_seqs)) in enumerate(paired_dataloaders):
                 # learning rate schedule
