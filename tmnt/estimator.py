@@ -32,6 +32,7 @@ from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import HyperSphericalDistribution
 import autogluon.core as ag
+from itertools import cycle
 
 MAX_DESIGN_MATRIX = 250000000 
 
