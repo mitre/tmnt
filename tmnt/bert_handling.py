@@ -214,7 +214,7 @@ class BERTDatasetTransform(object):
                 inds, cnts = np.unique(input_ids, return_counts=True)
                 bow[inds] = cnts
                 bow = mx.nd.array(np.expand_dims(bow, 0), dtype='float32')
-            if self.vectorizer:
+            elif self.vectorizer:
                 bow,_ = self.vectorizer.transform(line[:-1])
                 bow = mx.nd.array(bow, dtype='float32')
             return input_ids, valid_length, segment_ids, bow, label
