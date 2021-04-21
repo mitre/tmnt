@@ -1196,18 +1196,20 @@ class SeqBowEstimator(BaseEstimator):
                 # forward and backward with optional auxilliary data
                 with mx.autograd.record():
                     elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
-                    total_ls.backward()
                     step_loss += total_ls.mean().asscalar()
                     elbo_loss += elbo_ls.mean().asscalar()
                     red_loss  += red_ls.mean().asscalar()
                     class_loss += label_ls.asscalar()                        
                     if aux_seqs is not None:
-                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, label_ls_2, total_ls_2 = self._get_losses(model, aux_seqs)
-                        total_ls_2.backward()
-                        step_loss += total_ls_2.mean().asscalar()
+                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2 = self._get_unlabeled_losses(model, aux_seqs)
+                        step_loss += elbo_ls_2.mean().asscalar()
                         elbo_loss += elbo_ls_2.mean().asscalar()
                         red_loss  += red_ls_2.mean().asscalar()
-                        class_loss += label_ls_2.asscalar()                        
+                        tot_loss = total_ls + elbo_ls_2
+                    else:
+                        tot_loss = total_ls
+                    tot_loss.backward()
+                        
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:
                     trainer.allreduce_grads()
@@ -1389,16 +1391,19 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def _get_losses(self, model, batch_data):
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
-        if label1.sum() > 0 and label2.sum() > 0:
-            label1 = label1.as_in_context(self.ctx)
-            label2 = label2.as_in_context(self.ctx)
-            label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
-            label_ls = label_ls.mean()
-            total_ls = (self.gamma * label_ls) + elbo_ls.mean()
-        else:
-            label_ls = mx.nd.array([0.0])
-            total_ls = elbo_ls.mean()
+        label1 = label1.as_in_context(self.ctx)
+        label2 = label2.as_in_context(self.ctx)
+        label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
+        label_ls = label_ls.mean()
+        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
+
+    def _get_unlabeled_losses(self, model, batch_data):
+        in1, vl1, tt1, bow1, label1 = batch_data
+        elbo_ls, rec_ls, kl_ls, red_ls = model.unpaired_input_forward(
+            in1.as_in_context(self.ctx), tt1.as_in_context(self.ctx),
+            vl1.astype('float32').as_in_context(self.ctx), bow1.as_in_context(self.ctx))
+        return elbo_ls, rec_ls, kl_ls, red_ls
     
     def classifier_validate(self, model, dataloader, epoch_id):
         posteriors = []

@@ -776,6 +776,12 @@ class MetricSeqBowVED(BaseSeqBowVED):
         elbo = rec_loss + KL_loss
         return elbo, rec_loss, KL_loss
 
+    def unpaired_input_forward(self, in1, tt1, vl1, bow1):
+        _, enc1 = self.bert(in1, tt1, vl1)
+        elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, enc1)
+        redundancy_loss = self.get_redundancy_penalty()
+        return elbo1, rec_loss1, KL_loss1, redundancy_loss
+
     def forward(self, in1, tt1, vl1, bow1, in2, tt2, vl2, bow2):
         _, enc1 = self.bert(in1, tt1, vl1)
         _, enc2 = self.bert(in2, tt2, vl2)
