@@ -1167,7 +1167,7 @@ class SeqBowEstimator(BaseEstimator):
                 clipped_params.append(p)
         
         # Set grad_req if gradient accumulation is required
-        if accumulate and accumulate > 1:
+        if (accumulate and accumulate > 1) or (ss_data is not None):
             for p in params:
                 p.grad_req = 'add'
                 
@@ -1199,16 +1199,14 @@ class SeqBowEstimator(BaseEstimator):
                     step_loss += total_ls.mean().asscalar()
                     elbo_loss += elbo_ls.mean().asscalar()
                     red_loss  += red_ls.mean().asscalar()
-                    class_loss += label_ls.asscalar()                        
+                    class_loss += label_ls.asscalar()
+                    total_ls.backward()
                     if aux_seqs is not None:
                         elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2 = self._get_unlabeled_losses(model, aux_seqs)
                         step_loss += elbo_ls_2.mean().asscalar()
                         elbo_loss += elbo_ls_2.mean().asscalar()
                         red_loss  += red_ls_2.mean().asscalar()
-                        tot_loss = total_ls + elbo_ls_2
-                    else:
-                        tot_loss = total_ls
-                    tot_loss.backward()
+                        elbo_ls_2.backward()
                         
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:
@@ -1218,7 +1216,7 @@ class SeqBowEstimator(BaseEstimator):
                     trainer.update(accumulate if accumulate else 1)
                     dec_trainer.update(accumulate if accumulate else 1)
                     step_num += 1
-                    if accumulate and accumulate > 1:
+                    if (accumulate and accumulate > 1) or (ss_data is not None):
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
