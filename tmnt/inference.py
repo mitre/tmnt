@@ -144,7 +144,7 @@ class BowVAEInferencer(BaseInferencer):
 
     def encode_texts(self, texts, use_probs=False, include_bn=False):
         X, _ = self.vectorizer.transform(texts)
-        encodings, _ = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
+        encodings = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
         return encodings
 
     def _get_data_iterator(self, data_mat, labels):
