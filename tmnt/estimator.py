@@ -1406,6 +1406,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def classifier_validate(self, model, dataloader, epoch_id):
         posteriors = []
         ground_truth = []
+        ground_truth_idx = []
         emb2 = None
         emb1 = []
         for batch_id, seqs in enumerate(dataloader):
@@ -1415,6 +1416,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             probs = mx.nd.softmax(-dists, axis=1).asnumpy()
             posteriors += list(probs)
             label1 = np.array(label1.squeeze().asnumpy(), dtype='int')
+            ground_truth_idx.append(label1)
             gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())+1))
             gt[np.arange(label1.shape[0]), label1] = 1
             ground_truth += list(gt)
@@ -1423,11 +1425,12 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             emb1 += list(z_mu1.asnumpy())
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
+        ground_truth_idx = np.array(ground_truth_idx)
         avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
-        top_acc_1 = top_k_accuracy_score(ground_truth, posteriors, k=1)        
-        top_acc_2 = top_k_accuracy_score(ground_truth, posteriors, k=2)
-        top_acc_3 = top_k_accuracy_score(ground_truth, posteriors, k=3)
-        top_acc_4 = top_k_accuracy_score(ground_truth, posteriors, k=4)        
+        top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1)        
+        top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
+        top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
+        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)        
         if self.plot_dir:
             ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
             umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
