@@ -25,7 +25,7 @@ import umap
 #import umap.plot
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import average_precision_score, top_k_accuracy_score
+from sklearn.metrics import average_precision_score, top_k_accuracy_score, auc_roc_score, ndcg_score
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
 from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
@@ -1427,6 +1427,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
         avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
+        auroc = auc_roc_score(ground_truth, posteriors, average='weighted')
+        ndcg = ndcg_score(ground_truth, posteriors, average='weighted')
         top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1)        
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
         top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
@@ -1441,13 +1443,14 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             #umap.plot.points(mapper, labels=y)
             plt.savefig(ofile)
             plt.close("all")
-        return {'avg_prec': avg_prec, 'top_1': top_acc_1, 'top_2': top_acc_2, 'top_3': top_acc_3, 'top_4': top_acc_4}
+        return {'avg_prec': avg_prec, 'top_1': top_acc_1, 'top_2': top_acc_2, 'top_3': top_acc_3, 'top_4': top_acc_4,
+                'au_roc': auroc, 'ndcg': ndcg}
 
             
     def _perform_validation(self, model, dev_data, epoch_id):
         v_res = self.classifier_validate(model, dev_data, epoch_id)
-        self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}, [acc@1= {}, acc@2={}, acc@3={}, acc@4={}]"
-                            .format(epoch_id, v_res['avg_prec'], v_res['avg_prec'],
+        self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}, AuROC = {}, NDCG = {} [acc@1= {}, acc@2={}, acc@3={}, acc@4={}]"
+                            .format(epoch_id, v_res['avg_prec'], v_res['avg_prec'], v_res['au_roc'], v_res['ndcg'],
                                     v_res['top_1'], v_res['top_2'], v_res['top_3'], v_res['top_4']))
         if self.reporter:
             self.reporter(epoch=epoch_id+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0,
