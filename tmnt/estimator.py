@@ -1412,7 +1412,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         for batch_id, seqs in enumerate(dataloader):
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs, on_test=True)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
-            ground_truth_idx.append(label1.asscalar())
+            ground_truth_idx.append(label1.squeeze().asscalar())
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
             probs = mx.nd.softmax(-dists, axis=1).asnumpy()
             posteriors += list(probs)
