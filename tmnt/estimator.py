@@ -1428,7 +1428,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         ground_truth_idx = np.array(ground_truth_idx)
         avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
         auroc = roc_auc_score(ground_truth, posteriors, average='weighted')
-        ndcg = ndcg_score(ground_truth, posteriors, average='weighted')
+        ndcg = ndcg_score(ground_truth, posteriors)
         top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1)        
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
         top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
