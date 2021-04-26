@@ -20,21 +20,22 @@ if __name__ == '__main__':
         'numpy>=1.5.0'
     ]
     install_requires = [
-       'numpy>=1.19.0,<1.20.0',
-       'gluonnlp==0.10.0',
+        'numpy>=1.19.0,<1.20.0',
+        'gluonnlp==0.10.0',
         #'autogluon==0.0.15',
         'autogluon.core>=0.0.16b20210106',
-       'mantichora==0.9.5',
-       'pandas<2.0',
-       'pyLDAvis==2.1.2',
-       'pyOpenSSL==18.0.0',
-       'PySocks==1.6.8',
-       'sacremoses>=0.0.38',
-       'sentence-splitter==1.4',
-       'scikit-learn<0.23,>=0.22.0',
+        'mantichora==0.9.5',
+        'pandas<2.0',
+        'pyLDAvis==2.1.2',
+        'pyOpenSSL==18.0.0',
+        'PySocks==1.6.8',
+        'sacremoses>=0.0.38',
+        'sentence-splitter==1.4',
+        #'scikit-learn<0.23,>=0.22.0',
+        'scikit-learn>=0.24.1',
         'numba<=0.52.0',
-       'umap-learn==0.4.6',
-       'tabulate>=0.8.7'
+        'umap-learn==0.4.6',
+        'tabulate>=0.8.7'
     ]
     if(environ.get('USE_CUDA') == '1'):
         install_requires.append('mxnet-cu101<2.0.0,>=1.6.0')
