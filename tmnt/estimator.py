@@ -1427,12 +1427,18 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
         avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
-        auroc = roc_auc_score(ground_truth, posteriors, average='weighted')
+        
         ndcg = ndcg_score(ground_truth, posteriors)
         top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1)        
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
         top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
-        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)        
+        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)
+        logging.info('EVALUTAION: Ground truth indices: {}'.format(list(ground_truth_idx)))
+        try:
+            auroc = roc_auc_score(ground_truth, posteriors, average='weighted')
+        except:
+            auroc = 0.0
+            logging.error('ROC computation failed')
         if self.plot_dir:
             ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
             umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
