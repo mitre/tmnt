@@ -352,7 +352,7 @@ def preprocess_data_metriclearn(trans, class_labels, train_a_ds, train_b_ds, bat
     return loader_train, len(joined_data_train)
 
 
-def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_ds, train_b_ds, batch_size):
+def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_ds, train_b_ds, batch_size, shuffle=True):
     """Train/eval Data preparation function."""
     pool = multiprocessing.Pool()
     label_dtype = 'float32' # if not task.class_labels else 'int32'
@@ -368,12 +368,13 @@ def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_d
             dataset=a_data_train,
             num_workers=4,
         last_batch = 'rollover', ## need to ensure all batches are the same size here
-        shuffle=True, batch_size = batch_size,
+        shuffle=shuffle,  # shuffle optional (for training)
+        batch_size = batch_size,
         batchify_fn=batchify_fn)
     b_loader_train = gluon.data.DataLoader(
         dataset=b_data_train,
         num_workers=4,
-        shuffle=False,
+        shuffle=False,  # don't shuffle fixed set 'B'
         batch_size = batch_size,
         batchify_fn=batchify_fn)
     return a_loader_train, len(a_data_train), b_loader_train
@@ -391,6 +392,7 @@ def get_dual_bert_datasets(class_labels,
                            max_len2,
                            pad,
                            use_bert_vocab=False,
+                           shuffle=True,
                            ctx=mx.cpu()):
     bert, bert_vocabulary = get_model(
         name=model_name,
@@ -424,5 +426,5 @@ def get_dual_bert_datasets(class_labels,
     #   trans, class_labels, train_ds1, train_ds2, batch_size, max_len, pad)
     batch_size = len(train_ds2)
     a_train_data, num_train_examples, b_train_data = preprocess_data_metriclearn_separate(
-        trans1, trans2, class_labels, train_ds1, train_ds2, batch_size)
+        trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle=shuffle)
     return a_train_data, num_train_examples, bert, b_train_data, bert_vocabulary
