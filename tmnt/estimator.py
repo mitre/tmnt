@@ -1207,7 +1207,6 @@ class SeqBowEstimator(BaseEstimator):
                         elbo_loss += elbo_ls_2.mean().asscalar()
                         red_loss  += red_ls_2.mean().asscalar()
                         elbo_ls_2.backward()
-                        
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:
                     trainer.allreduce_grads()
@@ -1295,6 +1294,7 @@ class SeqBowEstimator(BaseEstimator):
             step_loss += total_ls.mean().asscalar()
             elbo_loss  += elbo_ls.mean().asscalar()
             if (batch_id + 1) % (self.log_interval) == 0:
+                logging.info('All loss terms: {}, {}, {}, {}, {}, {}'.format(elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls))
                 self.log_eval(batch_id, len(dataloader), self.metric, step_loss, elbo_loss, self.log_interval)
                 step_loss = 0
                 elbo_loss = 0
