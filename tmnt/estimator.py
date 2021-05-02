@@ -1438,6 +1438,10 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
         top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
         top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)
+        ## log some specific points with their labels
+        logging.info('****Getting labels and embeddings for first two hundred points*****')
+        for i in range(200):
+            logging.info('Input with label: {} has embedding => {}'.format(y[i], emb1[i]))
         if self.plot_dir:
             ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
             umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
