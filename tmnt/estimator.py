@@ -1340,7 +1340,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         est = super().from_config(*args, **kwargs)
         return est
         
-    def _get_model(self):
+    def _get_model(self, bow_size=-1):
+        bow_size = bow_size if bow_size > 1 else len(self.bow_vocab)
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
         model = MetricSeqBowVED(self.bert_base, latent_dist, n_latent=self.n_latent,
                                 bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
