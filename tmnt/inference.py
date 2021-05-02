@@ -345,4 +345,42 @@ class SeqVEDInferencer(BaseInferencer):
             raise Exception("Bow vocabulary required for Inferencer in order to provide topic terms")
 
 
+class MetricSeqVEDInferencer(SeqVEDInferencer):
+    """Inferencer for sequence variational encoder-decoder models using BERT trained via Metric Learning
+    """
+    def __init__(self, model, bert_vocab, max_length, bow_vocab=None, ctx=mx.cpu()):
+        super().__init__(ctx)
+        self.model     = model
+        self.bert_base = model.bert
+        self.tokenizer = BERTTokenizer(bert_vocab)
+        self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
+        self.bow_vocab = bow_vocab
+
+    @classmethod
+    def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, max_length=128, ctx=mx.cpu()):
+        if model_dir is not None:
+            param_file = os.path.join(model_dir, 'model.params')
+            vocab_file = os.path.join(model_dir, 'vocab.json')
+            config_file = os.path.join(model_dir, 'model.config')
+        with open(config_file) as f:
+            config = json.loads(f.read())
+        with open(vocab_file) as f:
+            voc_js = f.read()
+        bow_vocab = nlp.Vocab.from_json(voc_js)
+        bert_base, vocab = nlp.model.get_model(config['bert_model_name'],  
+                                               dataset_name=config['bert_data_name'],
+                                               pretrained=True, ctx=ctx, use_pooler=True,
+                                               use_decoder=False, use_classifier=False) #, output_attention=True)
+        latent_dist_t = config['latent_distribution']['dist_type']       
+        n_latent    = config['n_latent']
+        kappa       = config['latent_distribution']['kappa']
+        num_classes = config['n_labels']
+        classifier_dropout = config['classifier_dropout']
+        pad_id      = vocab[vocab.padding_token]
+        latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=ctx)
+        model = MetricSeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), n_latent=n_latent,
+                                dropout=classifier_dropout)
+        model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
+        return cls(model, vocab, max_length, bow_vocab, ctx)
+
     
