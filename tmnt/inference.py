@@ -13,7 +13,7 @@ import os
 import scipy
 import umap
 import logging
-from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
+from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.distribution import HyperSphericalDistribution
