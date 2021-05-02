@@ -1002,8 +1002,15 @@ class SeqBowEstimator(BaseEstimator):
         self.model = self._get_model()
         self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
 
+
+    def _get_model_bias_initialize(self, train_data):
+        model = self._get_model()
+        tr_bow_counts = self._get_bow_wd_counts(train_data)
+        model.initialize_bias_terms(tr_bow_counts)
+        return model
+        
     
-    def _get_model(self, train_data):
+    def _get_model(self):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
         model = SeqBowVED(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent,
                           bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
@@ -1012,8 +1019,6 @@ class SeqBowEstimator(BaseEstimator):
         model.latent_dist.post_init(self.ctx)
         if model.has_classifier:
             model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
-        tr_bow_counts = self._get_bow_wd_counts(train_data)
-        model.initialize_bias_terms(tr_bow_counts)
         return model
     
 
@@ -1132,7 +1137,7 @@ class SeqBowEstimator(BaseEstimator):
     def fit_with_validation(self, train_data, dev_data, num_train_examples, ss_data=None):
         """Training function."""
         if self.model is None or not self.warm_start:
-            model = self._get_model(train_data)
+            model = self._get_model_bias_initialize(train_data)
             self.model = model
         
         accumulate = False
@@ -1335,19 +1340,23 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         est = super().from_config(*args, **kwargs)
         return est
         
-
-    def _get_model(self, train_data):
+    def _get_model(self):
         latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
         model = MetricSeqBowVED(self.bert_base, latent_dist, n_latent=self.n_latent,
                                 bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.post_init(self.ctx)
-        tr_bow_matrix = self._get_bow_matrix(train_data)
-        model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
+
+    def _get_model_bias_initialize(self, train_data):
+        model = self._get_model()
+        tr_bow_matrix = self._get_bow_matrix(train_data)
+        model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+        return model
+        
 
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []

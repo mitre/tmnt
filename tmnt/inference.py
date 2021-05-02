@@ -378,4 +378,7 @@ class MetricSeqVEDInferencer(SeqVEDInferencer):
         model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
         return cls(model, vocab, max_length, bow_vocab, ctx)
 
+
+        
+
     
