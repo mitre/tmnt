@@ -349,12 +349,7 @@ class MetricSeqVEDInferencer(SeqVEDInferencer):
     """Inferencer for sequence variational encoder-decoder models using BERT trained via Metric Learning
     """
     def __init__(self, model, bert_vocab, max_length, bow_vocab=None, ctx=mx.cpu()):
-        super().__init__(ctx)
-        self.model     = model
-        self.bert_base = model.bert
-        self.tokenizer = BERTTokenizer(bert_vocab)
-        self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
-        self.bow_vocab = bow_vocab
+        super().__init__(model, bert_vocab, max_length, bow_vocab=bow_vocab, ctx=ctx)
 
     @classmethod
     def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, max_length=128, ctx=mx.cpu()):
