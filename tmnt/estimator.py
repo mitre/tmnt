@@ -1440,6 +1440,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)
         ## log some specific points with their labels
         logging.info('****Getting labels and embeddings for first two hundred points*****')
+        y = np.where(ground_truth > 0)[1]
         for i in range(200):
             logging.info('Input with label: {} has embedding => {}'.format(y[i], emb1[i]))
         if self.plot_dir:
@@ -1447,7 +1448,6 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
             embeddings = umap_model.fit_transform(np.array(emb1))
             #mapper = umap_model.fit(np.array(emb1))
-            y = np.where(ground_truth > 0)[1]
             plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
             #umap.plot.points(mapper, labels=y)
             plt.savefig(ofile)
