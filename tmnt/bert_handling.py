@@ -140,7 +140,8 @@ class BERTDatasetTransform(object):
                 self._label_map[label] = i
             if label_alias:
                 for key in label_alias:
-                    self._label_map[key] = self._label_map[label_alias[key]]
+                    if label_alias[key] in self._label_map:
+                        self._label_map[key] = self._label_map[label_alias[key]]
         self._bert_xform = BERTSentenceTransform(
             tokenizer, max_seq_length, pad=pad, pair=pair)
         self.vectorizer = vectorizer
