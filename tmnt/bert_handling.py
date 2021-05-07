@@ -283,6 +283,7 @@ def get_bert_datasets(class_labels,
                       bert_dataset = 'book_corpus_wiki_en_uncased',
                       pad=False,
                       use_bert_vocab=False,
+                      label_alias=None,
                       ctx=mx.cpu()):
     bert, bert_vocabulary = get_model(
         name=bert_model_name,
@@ -296,7 +297,7 @@ def get_bert_datasets(class_labels,
     bert_tokenizer = BERTTokenizer(bert_vocabulary, lower=do_lower_case)
     trans = BERTDatasetTransform(bert_tokenizer, max_len,
                                  class_labels=class_labels,
-                                 label_alias=None,
+                                 label_alias=label_alias,
                                  pad=pad, pair=False,
                                  has_label=True,
                                  vectorizer=vectorizer,
