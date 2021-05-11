@@ -1215,7 +1215,7 @@ class SeqBowEstimator(BaseEstimator):
                 # forward and backward with optional auxilliary data
                 with mx.autograd.record():
                     #elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
-                    arr_total_ls = self.get_losses_multi(model, seqs, arr_contexts)
+                    arr_total_ls = self._get_losses_multi(model, seqs, arr_contexts)
                 for total_ls in arr_total_ls:
                     total_ls.backward()
                     
