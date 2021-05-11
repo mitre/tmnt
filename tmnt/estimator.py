@@ -1177,11 +1177,11 @@ class SeqBowEstimator(BaseEstimator):
 
         loss_details = { 'step_loss': 0.0, 'elbo_loss': 0.0, 'red_loss': 0.0, 'class_loss': 0.0 }
         def update_loss_details(total_ls, elbo_ls, red_ls, class_ls):
-            loss_details['step_loss'] += total_ls
-            loss_details['elbo_loss'] += elbo_ls
-            loss_details['red_loss'] += red_ls
+            loss_details['step_loss'] += total_ls.mean().asscalar()
+            loss_details['elbo_loss'] += elbo_ls.mean().asscalar()
+            loss_details['red_loss'] += red_ls.mean().asscalar()
             if class_ls is not None:
-                loss_details['class_loss'] += class_ls
+                loss_details['class_loss'] += class_ls.mean().asscalar()
             
         for epoch_id in range(self.epochs):
             self.metric.reset()
