@@ -1180,7 +1180,7 @@ class SeqBowEstimator(BaseEstimator):
             loss_details['step_loss'] += total_ls
             loss_details['elbo_loss'] += elbo_ls
             loss_details['red_loss'] += red_ls
-            if class_loss is not None:
+            if class_ls is not None:
                 loss_details['class_loss'] += class_ls
             
         for epoch_id in range(self.epochs):
