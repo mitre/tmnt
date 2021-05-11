@@ -1131,8 +1131,8 @@ class SeqBowEstimator(BaseEstimator):
         arr_type_ids     = mx.gluon.utils.split_and_load(type_ids, ctx_list=contexts, even_split=False)
         arr_bow          = mx.gluon.utils.split_and_load(bow, ctx_list=contexts, even_split=False)
         arr_label        = mx.gluon.utils.split_and_load(label, ctx_list=contexts, even_split=False)
-        outputs = [ model(i_ids, v_length, t_ids, bow, label) for i_ids, v_length, t_ids, bow, label
-                   in zip(arr_input_ids, arr_valid_length, arr_type_ids, arr_bow, arr_label) ]
+        outputs = [ model(i_ids, v_length, t_ids, bow) for i_ids, v_length, t_ids, bow
+                   in zip(arr_input_ids, arr_valid_length, arr_type_ids, arr_bow) ]
         total_losses = [ self.loss_function(out, label) for ((_,_,_,_,out), label) in zip(outputs, arr_label) ]
         return total_losses
 
