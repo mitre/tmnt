@@ -1133,8 +1133,15 @@ class SeqBowEstimator(BaseEstimator):
             #else:
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
+    def _get_unlabeled_losses(self, model, batch_data):
+        in1, vl1, tt1, bow1, _ = batch_data
+        elbo_ls, rec_ls, kl_ls, red_ls, out = model(
+            input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
+            valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+        return elbo_ls, rec_ls, kl_ls, red_ls
+        
 
-    def fit_with_validation(self, train_data, dev_data, num_train_examples, ss_data=None):
+    def fit_with_validation(self, train_data, dev_data, num_train_examples, aux_data=None):
         """Training function."""
         if self.model is None or not self.warm_start:
             model = self._get_model_bias_initialize(train_data)
@@ -1172,7 +1179,7 @@ class SeqBowEstimator(BaseEstimator):
                 clipped_params.append(p)
         
         # Set grad_req if gradient accumulation is required
-        if (accumulate and accumulate > 1) or (ss_data is not None):
+        if (accumulate and accumulate > 1) or (aux_data is not None):
             for p in params:
                 p.grad_req = 'add'
                 
@@ -1185,7 +1192,7 @@ class SeqBowEstimator(BaseEstimator):
             class_loss = 0
             all_model_params.zero_grad()
 
-            aux_data = [None] if ss_data is None else ss_data
+            aux_data = [None] if aux_data is None else aux_data
             paired_dataloaders = zip(train_data, cycle(aux_data)) if len(train_data) > len(aux_data) else zip(cycle(train_data), aux_data)
             #for (batch_id, seqs) in enumerate(train_data):
             for (batch_id, (seqs, aux_seqs)) in enumerate(paired_dataloaders):
@@ -1220,7 +1227,7 @@ class SeqBowEstimator(BaseEstimator):
                     trainer.update(accumulate if accumulate else 1)
                     dec_trainer.update(accumulate if accumulate else 1)
                     step_num += 1
-                    if (accumulate and accumulate > 1) or (ss_data is not None):
+                    if (accumulate and accumulate > 1) or (aux_data is not None or (len(aux_data) > 1)):
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
@@ -1448,11 +1455,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
         top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
         top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)
-        ## log some specific points with their labels
-        logging.info('****Getting labels and embeddings for first two hundred points*****')
         y = np.where(ground_truth > 0)[1]
-        for i in range(200):
-            logging.info('Input with label: {} has embedding => {}'.format(y[i], emb1[i]))
         if self.plot_dir:
             ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
             umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
