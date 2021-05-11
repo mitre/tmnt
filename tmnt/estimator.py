@@ -1121,11 +1121,7 @@ class SeqBowEstimator(BaseEstimator):
             self.metric.update(labels=[label], preds=[out])
         else:
             total_ls = elbo_ls.mean()
-            label_ls = mx.nd.zeros(total_ls.shape)
-        loss_details['step_loss'] += total_ls
-        loss_details['elbo_loss'] += elbo_ls.mean()
-        loss_details['red_loss'] += red_ls.mean()
-        loss_details['class_loss'] += label_ls
+            label_ls = mx.nd.zeros(total_ls.shape)        
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
     def _get_unlabeled_losses(self, model, batch_data, loss_details):
@@ -1134,9 +1130,6 @@ class SeqBowEstimator(BaseEstimator):
             inputs.as_in_context(self.ctx), tt.as_in_context(self.ctx),
             vl.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
         total_ls = elbo_ls.mean() / self.gamma
-        loss_details['step_loss'] += total_ls
-        loss_details['red_loss'] += red_ls.mean()
-        loss_details['elbo_loss'] += elbo_ls.mean()
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
         
 
@@ -1181,11 +1174,17 @@ class SeqBowEstimator(BaseEstimator):
         if (accumulate and accumulate > 1) or (aux_data is not None):
             for p in params:
                 p.grad_req = 'add'
-                
+
+        loss_details = { 'step_loss': 0.0, 'elbo_loss': 0.0, 'red_loss': 0.0, 'class_loss': 0.0 }
+        def update_loss_details(total_ls, elbo_ls, red_ls, class_ls):
+            loss_details['step_loss'] += total_ls
+            loss_details['elbo_loss'] += elbo_ls
+            loss_details['red_loss'] += red_ls
+            if class_loss is not None:
+                loss_details['class_loss'] += class_ls
+            
         for epoch_id in range(self.epochs):
             self.metric.reset()
-
-            loss_details = { 'step_loss': 0.0, 'elbo_loss': 0.0, 'red_loss': 0.0, 'class_loss': 0.0 }
             all_model_params.zero_grad()
             aux_data = [None] if aux_data is None else aux_data
             paired_dataloaders = zip(train_data, cycle(aux_data)) if len(train_data) > len(aux_data) else zip(cycle(train_data), aux_data)
@@ -1202,13 +1201,16 @@ class SeqBowEstimator(BaseEstimator):
                 trainer.set_learning_rate(new_lr)
                 # forward and backward with optional auxilliary data
                 with mx.autograd.record():
-                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs, loss_details)
+                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
                     if aux_seqs is not None:
-                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_seqs, loss_details)
+                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_seqs)
                         
                 total_ls.backward()
+                update_loss_details(total_ls, elbo_ls, red_ls, label_ls)
                 if aux_seqs is not None:
                     total_ls_2.backward()
+                    update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
+
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:
                     trainer.allreduce_grads()
