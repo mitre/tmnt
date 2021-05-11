@@ -1136,8 +1136,8 @@ class SeqBowEstimator(BaseEstimator):
     def _get_unlabeled_losses(self, model, batch_data):
         in1, vl1, tt1, bow1, _ = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
-            input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-            valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+            in1.as_in_context(self.ctx), tt1.as_in_context(self.ctx),
+            vl1.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
         return elbo_ls, rec_ls, kl_ls, red_ls
         
 
