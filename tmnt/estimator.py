@@ -1107,7 +1107,7 @@ class SeqBowEstimator(BaseEstimator):
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         return sc_obj
 
-    def _get_losses(self, model, batch_data):
+    def _get_losses(self, model, batch_data, loss_details):
         input_ids, valid_length, type_ids, bow, label = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
@@ -1115,11 +1115,6 @@ class SeqBowEstimator(BaseEstimator):
         if self.has_classifier:
             label = label.as_in_context(self.ctx)
             label_ls = self.loss_function(out, label)
-            if len(label.shape) > 1:
-                mask = label.sum(axis=1) >= 0.0
-            else:
-                mask = label >= 0.0
-            label_ls = label_ls * mask
             label_ls = label_ls.mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
             ## update label metric (e.g. accuracy)
@@ -1127,18 +1122,22 @@ class SeqBowEstimator(BaseEstimator):
         else:
             total_ls = elbo_ls.mean()
             label_ls = mx.nd.zeros(total_ls.shape)
-            #if args.dtype == 'float16':
-            #    with amp.scale_loss(ls, trainer) as scaled_loss:
-            #        mx.autograd.backward(scaled_loss)
-            #else:
+        loss_details['step_loss'] += total_ls
+        loss_details['elbo_loss'] += elbo_ls.mean()
+        loss_details['red_loss'] += red_ls.mean()
+        loss_details['class_loss'] += label_ls
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
-    def _get_unlabeled_losses(self, model, batch_data):
+    def _get_unlabeled_losses(self, model, batch_data, loss_details):
         inputs, vl, tt, bow, _ = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
             inputs.as_in_context(self.ctx), tt.as_in_context(self.ctx),
             vl.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
-        return elbo_ls, rec_ls, kl_ls, red_ls
+        total_ls = elbo_ls.mean() / self.gamma
+        loss_details['step_loss'] += total_ls
+        loss_details['red_loss'] += red_ls.mean()
+        loss_details['elbo_loss'] += elbo_ls.mean()
+        return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
         
 
     def fit_with_validation(self, train_data, dev_data, num_train_examples, aux_data=None):
@@ -1186,12 +1185,8 @@ class SeqBowEstimator(BaseEstimator):
         for epoch_id in range(self.epochs):
             self.metric.reset()
 
-            step_loss = 0
-            elbo_loss = 0
-            red_loss  = 0
-            class_loss = 0
+            loss_details = { 'step_loss': 0.0, 'elbo_loss': 0.0, 'red_loss': 0.0, 'class_loss': 0.0 }
             all_model_params.zero_grad()
-
             aux_data = [None] if aux_data is None else aux_data
             paired_dataloaders = zip(train_data, cycle(aux_data)) if len(train_data) > len(aux_data) else zip(cycle(train_data), aux_data)
             #for (batch_id, seqs) in enumerate(train_data):
@@ -1207,18 +1202,11 @@ class SeqBowEstimator(BaseEstimator):
                 trainer.set_learning_rate(new_lr)
                 # forward and backward with optional auxilliary data
                 with mx.autograd.record():
-                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
-                    step_loss += total_ls.mean().asscalar()
-                    elbo_loss += elbo_ls.mean().asscalar()
-                    red_loss  += red_ls.mean().asscalar()
-                    class_loss += label_ls.asscalar()
+                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs, loss_details)
                     total_ls.backward()
                     if aux_seqs is not None:
-                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2 = self._get_unlabeled_losses(model, aux_seqs)
-                        step_loss += elbo_ls_2.mean().asscalar()
-                        elbo_loss += elbo_ls_2.mean().asscalar()
-                        red_loss  += red_ls_2.mean().asscalar()
-                        elbo_ls_2.backward()
+                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_seqs, loss_details)
+                        total_ls_2.backward()
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:
                     trainer.allreduce_grads()
@@ -1231,12 +1219,12 @@ class SeqBowEstimator(BaseEstimator):
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    self.log_train(batch_id, len(train_data), self.metric, step_loss, elbo_loss, red_loss, class_loss, self.log_interval,
-                              epoch_id, trainer.learning_rate)
-                    step_loss = 0
-                    elbo_loss = 0
-                    red_loss  = 0
-                    class_loss = 0
+                    self.log_train(batch_id, len(train_data), self.metric, loss_details['step_loss'],
+                                   loss_details['elbo_loss'], loss_details['red_loss'], loss_details['class_loss'], self.log_interval,
+                                   epoch_id, trainer.learning_rate)
+                    ## reset loss details
+                    for d in loss_details:
+                        loss_details[d] = 0.0
             mx.nd.waitall()
 
             # inference on dev data
@@ -1418,7 +1406,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         elbo_ls, rec_ls, kl_ls, red_ls = model.unpaired_input_forward(
             in1.as_in_context(self.ctx), tt1.as_in_context(self.ctx),
             vl1.astype('float32').as_in_context(self.ctx), bow1.as_in_context(self.ctx))
-        return elbo_ls, rec_ls, kl_ls, red_ls
+        total_ls = elbo_ls / self.gamma
+        return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
     
     def classifier_validate(self, model, dataloader, epoch_id):
         posteriors = []
