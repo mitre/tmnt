@@ -1107,7 +1107,7 @@ class SeqBowEstimator(BaseEstimator):
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         return sc_obj
 
-    def _get_losses(self, model, batch_data, loss_details):
+    def _get_losses(self, model, batch_data):
         input_ids, valid_length, type_ids, bow, label = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
@@ -1124,7 +1124,7 @@ class SeqBowEstimator(BaseEstimator):
             label_ls = mx.nd.zeros(total_ls.shape)        
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
-    def _get_unlabeled_losses(self, model, batch_data, loss_details):
+    def _get_unlabeled_losses(self, model, batch_data):
         inputs, vl, tt, bow, _ = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
             inputs.as_in_context(self.ctx), tt.as_in_context(self.ctx),
