@@ -1124,6 +1124,18 @@ class SeqBowEstimator(BaseEstimator):
             label_ls = mx.nd.zeros(total_ls.shape)        
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
+    def _get_losses_multi(self, model, batch_data, contexts):
+        input_ids, valid_length, type_ids, bow, label = batch_data
+        arr_input_ids    = mx.gluon.utils.split_and_load(input_ids, ctx_list=contexts, even_split=False)
+        arr_valid_length = mx.gluon.utils.split_and_load(valid_length, ctx_list=contexts, even_split=False)
+        arr_type_ids     = mx.gluon.utils.split_and_load(type_ids, ctx_list=contexts, even_split=False)
+        arr_bow          = mx.gluon.utils.split_and_load(bow, ctx_list=contexts, even_split=False)
+        arr_label        = mx.gluon.utils.split_and_load(label, ctx_list=contexts, even_split=False)
+        outputs = [ model(i_ids, v_length, t_ids, bow, label) for i_ids, v_length, t_ids, bow, label
+                   in zip(arr_input_ids, arr_valid_length, arr_type_ids, arr_bow, arr_label) ]
+        total_losses = [ self.loss_function(out, label) for ((_,_,_,_,out), label) in zip(outputs, arr_label) ]
+        return total_losses
+
     def _get_unlabeled_losses(self, model, batch_data):
         inputs, vl, tt, bow, _ = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
@@ -1140,6 +1152,7 @@ class SeqBowEstimator(BaseEstimator):
             self.model = model
         
         accumulate = False
+        arr_contexts = [mx.gpu(i) for i in range(mx.context.num_gpus()) ]
 
         all_model_params = model.collect_params()
         optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.02}
@@ -1201,8 +1214,11 @@ class SeqBowEstimator(BaseEstimator):
                 trainer.set_learning_rate(new_lr)
                 # forward and backward with optional auxilliary data
                 with mx.autograd.record():
-                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
-                total_ls.backward()
+                    #elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
+                    arr_total_ls = self.get_losses_multi(model, seqs, arr_contexts)
+                for total_ls in arr_total_ls:
+                    total_ls.backward()
+                    
                 if aux_seqs is not None:
                     with mx.autograd.record():
                         elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_seqs)
