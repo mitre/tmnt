@@ -1126,14 +1126,19 @@ class SeqBowEstimator(BaseEstimator):
 
     def _get_losses_multi(self, model, batch_data, contexts):
         input_ids, valid_length, type_ids, bow, label = batch_data
+        print("Shape input_ids = {}".format(input_ids.shape))
         arr_input_ids    = mx.gluon.utils.split_and_load(input_ids, ctx_list=contexts, even_split=False)
+        print("len arr_input_ids = {}".format(len(arr_input_ids)))
+        print("arr_input_ids[0] = {}".format(arr_input_ids[0].shape))
         arr_valid_length = mx.gluon.utils.split_and_load(valid_length, ctx_list=contexts, even_split=False)
         arr_type_ids     = mx.gluon.utils.split_and_load(type_ids, ctx_list=contexts, even_split=False)
         arr_bow          = mx.gluon.utils.split_and_load(bow, ctx_list=contexts, even_split=False)
         arr_label        = mx.gluon.utils.split_and_load(label, ctx_list=contexts, even_split=False)
-        outputs = [ model(i_ids, v_length, t_ids, bow) for i_ids, v_length, t_ids, bow
+        outputs = [ model(i_ids, t_ids, v_length.astype('float32'), bow) for i_ids, v_length, t_ids, bow
                    in zip(arr_input_ids, arr_valid_length, arr_type_ids, arr_bow) ]
-        total_losses = [ self.loss_function(out, label) for ((_,_,_,_,out), label) in zip(outputs, arr_label) ]
+        #total_losses = [ self.loss_function(out, label).mean() for ((elbo_ls,_,_,_,out), label) in zip(outputs, arr_label) ]
+        #total_losses = [ elbo_ls.mean() for ((elbo_ls,_,_,_,out), label) in zip(outputs, arr_label) ]
+        print("Total losses = {}".format(total_losses))
         return total_losses
 
     def _get_unlabeled_losses(self, model, batch_data):
@@ -1215,18 +1220,25 @@ class SeqBowEstimator(BaseEstimator):
                 # forward and backward with optional auxilliary data
                 with mx.autograd.record():
                     #elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
-                    arr_total_ls = self._get_losses_multi(model, seqs, arr_contexts)
-                for total_ls in arr_total_ls:
-                    total_ls.backward()
+                    #arr_total_ls = self._get_losses_multi(model, seqs, arr_contexts)
+                    arr_total_ls = self._get_losses_multi(model, seqs, [mx.cpu(), mx.cpu(), mx.cpu()])
+                    for total_ls in arr_total_ls:
+                        total_ls.backward()
                     
                 if aux_seqs is not None:
                     with mx.autograd.record():
                         elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_seqs)
                     total_ls_2.backward()
 
-                update_loss_details(total_ls, elbo_ls, red_ls, label_ls)
-                if aux_seqs is not None:
-                    update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
+                print("arr_total_ls = {}".format(arr_total_ls))
+                ss = mx.nd.array([0.0])
+                for a in arr_total_ls:
+                    ss += a.sum()
+                update_loss_details(ss, mx.nd.array([0.0]), mx.nd.array([0.0]), None)
+                
+                #update_loss_details(total_ls, elbo_ls, red_ls, label_ls)
+                #if aux_seqs is not None:
+                #    update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
 
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:

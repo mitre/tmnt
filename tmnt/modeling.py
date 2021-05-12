@@ -744,6 +744,9 @@ class SeqBowVED(BaseSeqBowVED):
                 self.classifier.add(nn.Dense(in_units=self.n_latent, units=self.num_classes))
 
     def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
+        print("Shape inputs: {}".format(inputs.shape))
+        print("Shape token_types: {}".format(token_types.shape))
+        print("Shape valid_length: {}".format(valid_length.shape))
         _, enc = self.bert(inputs, token_types, valid_length)
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
