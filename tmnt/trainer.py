@@ -21,8 +21,10 @@ from pathlib import Path
 from tmnt.utils import log_utils
 from tmnt.utils.random import seed_rng
 from tmnt.utils.log_utils import logging_config
-from tmnt.data_loading import load_vocab, file_to_data, load_dataset_bert
+from tmnt.data_loading import load_vocab, file_to_data
+from tmnt.bert_handling import get_bert_datasets, JsonlDataset
 from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator, LabeledBowEstimator
+from tmnt.preprocess.vectorizer import TMNTVectorizer
 
 
 class BaseTrainer(object):
@@ -367,25 +369,18 @@ class SeqBowVEDTrainer(BaseTrainer):
     Parameters:
         model_out_dir (str): Explicit string path to saved model information (and logging info).
         vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
-        wd_freqs (`mxnet.ndarray.NDArray`): Tensor representing term frequencies in training dataset used to 
-            initialize decoder bias weights.
-        num_val_words (int): Number of words in the validation data (for computing perplexity)
-        train_data (tuple): Training input data tensor for input sequence and separate tensor for bag-of-words output
-        test_data (tuple): Testing/validation input data tensor for input sequence and separate tensor for bag-of-words output
-        train_labels (array-like or sparse matrix): Labels associated with training inputs. Optional (default = None).
-        test_labels (array-like or sparse matrix): Labels associated with test inputs. Optional (default = None).
         use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
         log_interval (int): Perform validation (NPMI and perplexity) on the validation set this many batches. Default = 10.
         rng_seed (int): Seed for random number generator. Default = 1234
     """
-    def __init__(self, model_out_dir, vocabulary, train_data_path, 
+    def __init__(self, model_out_dir, train_data_path, 
                  test_data_path, use_gpu=False, log_interval=10, rng_seed=1234):
-        super().__init__(vocabulary, train_data_path, test_data_path, rng_seed)
+        super().__init__(None, train_data_path, test_data_path, True, rng_seed)
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
-        self.seed_matrix = None
         self.kld_wt = 1.0
         self.log_interval = log_interval
+
 
     @classmethod
     def from_arguments(cls, args, config):
@@ -395,10 +390,8 @@ class SeqBowVEDTrainer(BaseTrainer):
         print("Set logging config to {}".format(train_out_dir))
         logging_config(folder=train_out_dir, name='train_trans_vae', level=args.log_level, console_level=args.log_level, no_console=False)
         logging.info(args)
-        bow_vocab = load_vocab(args.bow_vocab_file)
         trainer = cls(
             train_out_dir,
-            bow_vocab,
             args.tr_file,
             args.val_file,
             use_gpu = args.use_gpu,
@@ -406,13 +399,6 @@ class SeqBowVEDTrainer(BaseTrainer):
             )
         return trainer
 
-
-    def _get_ved_estimator(self, config, reporter, wd_freqs, ctx):
-        vocab, _ = self._initialize_vocabulary(config.embedding_source)
-        n_labels = 0
-        gamma = 0
-        estimator = SeqBowEstimator.from_config(n_labels, gamma, config, vocab, wd_freqs=wd_freqs, reporter=reporter, ctx=ctx)
-        return estimator
 
     def train_model(self, config, reporter):
         """Primary training call used for model training/evaluation by autogluon model selection
@@ -432,21 +418,24 @@ class SeqBowVEDTrainer(BaseTrainer):
         """
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
+        vectorizer = TMNTVectorizer(vocab_size=4000, text_key="text", label_key="label")
+        _, _ = vectorizer.fit_transform_json(self.train_data_path)
+        classes = list(vectorizer.label_map) if config.use_labels else None
+        tr_ds = JsonlDataset(self.train_data_path, txt_key="text", label_key="label")
+        val_ds = JsonlDataset(self.test_data_path, txt_key="text", label_key="label")
 
-        train_data, _, _, train_csr = load_dataset_bert(self.train_data_path, len(self.vocabulary),
-                                                       max_len=config.sent_size, ctx=mx.cpu())
-        if self.test_data_path:
-            val_data, _, _, val_csr = load_dataset_bert(self.test_data_path, len(self.vocabulary), max_len=config.sent_size, ctx=mx.cpu())
-            val_wds = val_csr.sum().asscalar()
-        else:
-            val_data, val_csr, val_wds = None, None, None
-        sample_size = min(50000, train_csr.shape[0])
-        data = train_csr[:sample_size] 
-        wd_freqs = mx.nd.sum(data, axis=0)
-        seq_ved_estimator = self._get_ved_estimator(config, reporter, wd_freqs, ctx)
-        obj, npmi, perplexity, redundancy = \
-            seq_ved_estimator.fit_with_validation((train_data, train_csr), None, (val_data, val_csr), None)
-        return seq_ved_estimator.model, obj, npmi, perplexity, redundancy
+        bert_model_name = config.bert_model_name
+        bert_dataset    = config.bert_dataset
+        batch_size      = config.batch_size
+        max_seq_len     = config.max_seq_len
+        
+        tr_dataset, val_dataset, num_examples, bert_base, bert_vocab = \
+            get_bert_datasets(classes, vectorizer, tr_ds, val_ds, batch_size, max_seq_len,
+                              bert_model_name=bert_model_name, bert_dataset=bert_dataset, ctx=ctx)
+        seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), reporter=reporter, ctx=ctx)
+        obj, v_res = \
+            seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples)
+        return seq_ved_estimator.model, obj, v_res['npmi'], v_res['perplexity'], v_res['redundancy']
 
 
     def write_model(self, estimator, config, epoch_id=0):

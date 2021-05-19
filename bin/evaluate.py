@@ -10,6 +10,7 @@ from tmnt.inference import BowVAEInferencer
 from tmnt.data_loading import file_to_data, load_vocab
 from tmnt.eval_npmi import NPMI, EvaluateNPMI
 from tmnt.utils.ngram_helpers import BigramReader
+from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
 import gluonnlp as nlp
 
 from itertools import combinations
@@ -81,7 +82,6 @@ if __name__ == "__main__":
 
     inference_model = BowVAEInferencer.from_saved(model_dir=args.model_dir,
                                                   ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
-
 
     if args.plot_file: # get UMAP embedding visualization
         import matplotlib.pyplot as plt

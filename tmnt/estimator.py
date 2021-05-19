@@ -944,7 +944,7 @@ class SeqBowEstimator(BaseEstimator):
 
 
     @classmethod
-    def from_config(cls, config, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
+    def from_config(cls, config, bert_base, bow_vocab, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
         if isinstance(config, str):
             try:
                 with open(config, 'r') as f:
@@ -953,43 +953,31 @@ class SeqBowEstimator(BaseEstimator):
                 logging.error("File {} does not appear to be a valid config instance".format(config))
                 raise Exception("Invalid Json Configuration File")
             config = ag.space.Dict(**config_dict)
-        lr = config.lr
-        decoder_lr = config.decoder_lr
-        optimizer = config.optimizer
-        n_latent = int(config.n_latent)
-        batch_size = int(config.batch_size)
-        epochs = int(config.epochs)
-        ldist_def = config.latent_distribution
-        kappa = 0.0
-        alpha = 1.0
-        latent_distrib = ldist_def.dist_type
+        #ldist_def = config.latent_distribution
+        #kappa = 0.0
+        #alpha = 1.0
+        #latent_distrib = ldist_def.dist_type
         #embedding_source = config.embedding_source
-        redundancy_reg_penalty = config.redundancy_reg_penalty
+        #redundancy_reg_penalty = config.redundancy_reg_penalty
         warmup_ratio = config.warmup_ratio
-        n_labels = config.n_labels
-        if latent_distrib == 'vmf':
-            kappa = ldist_def.kappa
-        elif latent_distrib == 'logistic_gaussian':
-            alpha = ldist_def.alpha
-        bert_base, _ = nlp.model.get_model(config.bert_model_name,  
-                                           dataset_name=config.bert_data_name,
-                                           pretrained=True, ctx=ctx, use_pooler=True,
-                                           use_decoder=False, use_classifier=False)
+        #if latent_distrib == 'vmf':
+        #    kappa = ldist_def.kappa
+        #elif latent_distrib == 'logistic_gaussian':
+        #    alpha = ldist_def.alpha
         model = cls(bert_base,
-                    n_labels=n_labels,
-                    coherence_coefficient=8.0,
-                    reporter=reporter,
-                    latent_distribution=latent_distrib,
-                    n_latent=n_latent,
-                    redundancy_reg_penalty=redundancy_reg_penalty,
-                    kappa = kappa,
-                    alpha=alpha,
-                    batch_size=batch_size,
+                    bert_model_name = config.bert_model_name,
+                    bert_data_name  = config.bert_dataset,
+                    bow_vocab       = bow_vocab, 
+                    n_labels        = config.n_labels,
+                    n_latent        = int(config.n_latent),
+                    redundancy_reg_penalty = 0.0,
+                    kappa = 64.0,
                     warmup_ratio = warmup_ratio,
-                    optimizer = optimizer,
-                    epochs = epochs,
-                    lr = lr,
-                    decoder_lr = decoder_lr,
+                    optimizer = config.optimizer,
+                    classifier_dropout = config.classifier_dropout,
+                    epochs = int(config.epochs),
+                    lr = config.lr,
+                    decoder_lr = config.decoder_lr,
                     pretrained_param_file = pretrained_param_file,
                     warm_start = (pretrained_param_file is not None),
                     ctx=ctx,

@@ -23,6 +23,7 @@ parser.add_argument('--offset_factor', type=float, help='Adjusts offset for LR d
 parser.add_argument('--json_text_key', type=str, help='Assume json list format and select text using this key', default=None)
 parser.add_argument('--bow_vocab_file', type=str, help='Vocabulary for BOW in decoder', default=None)
 parser.add_argument('--config', type=str, help='JSON-formatted configuration file', default=None)
+parser.add_argument('--log_level', type=str, help='Log level (info, error, debug)', default='info')
 
 args = parser.parse_args()
 

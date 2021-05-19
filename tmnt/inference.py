@@ -231,6 +231,15 @@ class BowVAEInferencer(BaseInferencer):
             topic_terms.append(top_k)
         return topic_terms
 
+    def get_top_k_words_per_topic_encoder(self, k, dataloader, sample_size=-1):
+        sorted_ids = self.model.get_ordered_terms_encoder(dataloader, sample_size=sample_size)
+        topic_terms = []
+        for t in range(self.n_latent):
+            top_k = [ self.vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t]) ]
+            topic_terms.append(top_k)
+        return topic_terms
+
+
     def get_top_k_words_per_topic_per_covariate(self, k):
         n_topics = self.n_latent
         w = self.model.cov_decoder.cov_inter_decoder.collect_params().get('weight').data()

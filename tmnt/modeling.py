@@ -225,6 +225,31 @@ class BowVAEModel(BaseVAE):
             samples += data.shape[0]
             x_data = data.tostype('default')
             x_data = x_data.as_in_context(self.model_ctx)
+            x_data = mx.nd.minimum(x_data, 1.0)
+            for i in range(self.n_latent):
+                x_data.attach_grad()
+                with mx.autograd.record():
+                    emb_out = self.embedding(x_data)
+                    enc_out = self.latent_dist.get_mu_encoding(self.encoder(emb_out), include_bn=False)
+                    yi = enc_out[:, i] ## for the ith topic, over batch
+                yi.backward()
+                mx.nd.waitall()
+                ss = x_data.grad.sum(axis=0).asnumpy()
+                jacobians[i] += ss
+        sorted_j = (- jacobians).argsort(axis=1).transpose()
+        return sorted_j
+
+    def get_ordered_terms_per_item(self, dataloader, sample_size=-1):
+        jacobian_list = [[] for i in range(self.n_latent)]
+        samples = 0
+        for bi, (data, _) in enumerate(dataloader):
+            if sample_size > 0 and samples >= sample_size:
+                print("Sample processed, exiting..")
+                break
+            samples += data.shape[0]
+            x_data = data.tostype('default')
+            x_data = x_data.as_in_context(self.model_ctx)
+            x_data = mx.nd.minimum(x_data, 1.0)
             for i in range(self.n_latent):
                 x_data.attach_grad()
                 with mx.autograd.record():
@@ -233,10 +258,9 @@ class BowVAEModel(BaseVAE):
                     yi = enc_out[:, i] ## for the ith topic, over batch
                 yi.backward()
                 mx.nd.waitall()
-                ss = x_data.grad.sum(axis=0).asnumpy()
-                jacobians[i] += ss
-        sorted_j = (- jacobians).argsort(axis=1).transpose()
-        return sorted_j
+                ss = x_data.grad.asnumpy() # should be b x |V|
+                jacobian_list[i] += list(ss)
+        return jacobian_list
 
 
     def encode_data(self, data, include_bn=False):
