@@ -230,11 +230,10 @@ class BowVAEModel(BaseVAE):
                 x_data.attach_grad()
                 with mx.autograd.record():
                     emb_out = self.embedding(x_data)
-                    enc_out = self.latent_dist.get_mu_encoding(self.encoder(emb_out), include_bn=False)
+                    enc_out = self.latent_dist.get_mu_encoding(self.encoder(emb_out), include_bn=True)
                     yi = enc_out[:, i] ## for the ith topic, over batch
-                yi.backward()
-                mx.nd.waitall()
-                ss = x_data.grad.sum(axis=0).asnumpy()
+                dx = mx.autograd.grad(yi, x_data, train_mode=False)
+                ss = dx[0].sum(axis=0).asnumpy()
                 jacobians[i] += ss
         sorted_j = (- jacobians).argsort(axis=1).transpose()
         return sorted_j
@@ -254,11 +253,10 @@ class BowVAEModel(BaseVAE):
                 x_data.attach_grad()
                 with mx.autograd.record():
                     emb_out = self.embedding(x_data)
-                    enc_out = self.latent_dist.mu_encoder(self.encoder(emb_out))
+                    enc_out = self.latent_dist.get_mu_encoding(self.encoder(emb_out), include_bn=True)
                     yi = enc_out[:, i] ## for the ith topic, over batch
-                yi.backward()
-                mx.nd.waitall()
-                ss = x_data.grad.asnumpy() # should be b x |V|
+                dx = mx.autograd.grad(yi, x_data, train_mode=False)
+                ss = dx[0].asnumpy()
                 jacobian_list[i] += list(ss)
         return jacobian_list
 
