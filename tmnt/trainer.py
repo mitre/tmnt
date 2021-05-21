@@ -435,7 +435,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), reporter=reporter, ctx=ctx)
         obj, v_res = \
             seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples)
-        return seq_ved_estimator.model, obj, v_res['npmi'], v_res['ppl'], v_res['redundancy']
+        return seq_ved_estimator.model, obj, v_res
 
 
     def write_model(self, estimator, config, epoch_id=0):
