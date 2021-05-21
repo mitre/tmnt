@@ -395,6 +395,7 @@ class SeqBowVEDTrainer(BaseTrainer):
             train_out_dir,
             args.tr_file,
             args.val_file,
+            aux_data_path = args.aux_file,
             use_gpu = args.use_gpu,
             log_interval = args.log_interval
             )
