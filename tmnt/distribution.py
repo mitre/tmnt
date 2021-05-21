@@ -26,7 +26,7 @@ class BaseDistribution(nn.HybridBlock):
         with self.name_scope():
             self.mu_encoder = gluon.nn.Dense(units = n_latent)
             self.mu_bn = gluon.nn.BatchNorm(momentum = 0.8, epsilon=0.0001)
-        self.mu_bn.collect_params().setattr('grad_req', 'null')
+        #self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     ## perform any postinitialization setup
     def post_init(self, ctx):
@@ -71,7 +71,7 @@ class GaussianDistribution(BaseDistribution):
             self.lv_encoder = gluon.nn.Dense(units = n_latent)            
             self.lv_bn = gluon.nn.BatchNorm(momentum = 0.8, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)        
-        self.lv_bn.collect_params().setattr('grad_req', 'null')        
+        #self.lv_bn.collect_params().setattr('grad_req', 'null')        
 
     def _get_kl_term(self, F, mu, lv):
         return -0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
@@ -138,7 +138,7 @@ class LogisticGaussianDistribution(BaseDistribution):
             self.lv_encoder = gluon.nn.Dense(units = n_latent)
             self.lv_bn = gluon.nn.BatchNorm(momentum = 0.8, epsilon=0.001)
             self.post_sample_dr_o = gluon.nn.Dropout(dr)
-        self.lv_bn.collect_params().setattr('grad_req', 'null')        
+        #self.lv_bn.collect_params().setattr('grad_req', 'null')        
             
 
     def _get_kl_term(self, F, mu, lv):
