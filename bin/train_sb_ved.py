@@ -10,6 +10,7 @@ parser = argparse.ArgumentParser(description='Train a Transformer-based Variatio
 parser.add_argument('--tr_file', type=str, help='A JSON list file representing the training data')
 parser.add_argument('--val_file', type=str, help='A JSON list file representing the validation data (optional)')
 parser.add_argument('--tst_file', type=str, help='A JSON list file representing the test data (optional)')
+parser.add_argument('--aux_file', type=str, help='A JSON list file with additional UNLABELED auxilliary data')
 parser.add_argument('--use_gpu',action='store_true', help='Use GPU(s) if available', default=False)
 parser.add_argument('--save_dir',type=str, help='Target directory for trained model parameters', default='seqvae_exp_logs')
 parser.add_argument('--kld_wt',type=float, help='Weight of the KL divergence term in variational loss', default=1.0)

@@ -40,9 +40,10 @@ class BaseTrainer(object):
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed):
+    def __init__(self, vocabulary, train_data_path, test_data_path, aux_data_path, val_each_epoch, rng_seed):
         self.train_data_path   = train_data_path
         self.test_data_path    = test_data_path
+        self.aux_data_path     = aux_data_path
         self.rng_seed     = rng_seed
         self.vocabulary   = vocabulary
         self.vocab_cache  = {}
@@ -203,11 +204,11 @@ class BowVAETrainer(BaseTrainer):
         rng_seed (int): Seed for random number generator. Default = 1234
     """
     def __init__(self, log_out_dir, model_out_dir, vocabulary, wd_freqs, train_data_path, 
-                 test_data_path, coherence_via_encoder=False,
+                 test_data_path, coherence_via_encoder=False, aux_data_path=None,
                  pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False,
                  use_gpu=False, n_covars=None,
                  val_each_epoch=True, rng_seed=1234):
-        super().__init__(vocabulary, train_data_path, test_data_path, val_each_epoch, rng_seed)
+        super().__init__(vocabulary, train_data_path, test_data_path, aux_data_path, val_each_epoch, rng_seed)
         if not log_utils.CONFIGURED:
             logging_config(folder=log_out_dir, name='tmnt', level='info', console_level='info')
         self.log_out_dir = log_out_dir
@@ -374,8 +375,8 @@ class SeqBowVEDTrainer(BaseTrainer):
         rng_seed (int): Seed for random number generator. Default = 1234
     """
     def __init__(self, model_out_dir, train_data_path, 
-                 test_data_path, use_gpu=False, log_interval=10, rng_seed=1234):
-        super().__init__(None, train_data_path, test_data_path, True, rng_seed)
+                 test_data_path, aux_data_path=None, use_gpu=False, log_interval=10, rng_seed=1234):
+        super().__init__(None, train_data_path, test_data_path, aux_data_path, True, rng_seed)
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
         self.kld_wt = 1.0
@@ -423,18 +424,19 @@ class SeqBowVEDTrainer(BaseTrainer):
         classes = list(vectorizer.label_map) if config.use_labels else None
         tr_ds = JsonlDataset(self.train_data_path, txt_key="text", label_key="label")
         val_ds = JsonlDataset(self.test_data_path, txt_key="text", label_key="label")
+        aux_ds = JsonlDataset(self.aux_data_path, txt_key="text", label_key="label") if self.aux_data_path else None
 
         bert_model_name = config.bert_model_name
         bert_dataset    = config.bert_dataset
         batch_size      = config.batch_size
         max_seq_len     = config.max_seq_len
         
-        tr_dataset, val_dataset, num_examples, bert_base, bert_vocab = \
-            get_bert_datasets(classes, vectorizer, tr_ds, val_ds, batch_size, max_seq_len,
+        tr_dataset, val_dataset, num_examples, bert_base, bert_vocab, aux_dataset = \
+            get_bert_datasets(classes, vectorizer, tr_ds, val_ds, batch_size, max_seq_len, aux_ds = aux_ds, 
                               bert_model_name=bert_model_name, bert_dataset=bert_dataset, ctx=ctx)
         seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), reporter=reporter, ctx=ctx)
         obj, v_res = \
-            seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples)
+            seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples, aux_data=aux_dataset)
         return seq_ved_estimator.model, obj, v_res
 
 

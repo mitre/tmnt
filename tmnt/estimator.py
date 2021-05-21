@@ -1174,8 +1174,8 @@ class SeqBowEstimator(BaseEstimator):
         for epoch_id in range(self.epochs):
             self.metric.reset()
             all_model_params.zero_grad()
-            aux_data = [None] if aux_data is None else aux_data
-            paired_dataloaders = zip(train_data, cycle(aux_data)) if len(train_data) > len(aux_data) else zip(cycle(train_data), aux_data)
+            _aux_data = [None] if aux_data is None else aux_data
+            paired_dataloaders = zip(train_data, cycle(_aux_data)) if len(train_data) > len(_aux_data) else zip(cycle(train_data), _aux_data)
             #for (batch_id, seqs) in enumerate(train_data):
             for (batch_id, (seqs, aux_seqs)) in enumerate(paired_dataloaders):
                 # learning rate schedule
@@ -1208,7 +1208,7 @@ class SeqBowEstimator(BaseEstimator):
                     trainer.update(accumulate if accumulate else 1)
                     dec_trainer.update(accumulate if accumulate else 1)
                     step_num += 1
-                    if (accumulate and accumulate > 1) or (aux_data is not None or (len(aux_data) > 1)):
+                    if (accumulate and accumulate > 1) or (aux_data is not None):
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
@@ -1287,7 +1287,7 @@ class SeqBowEstimator(BaseEstimator):
             step_loss += total_ls.mean().asscalar()
             elbo_loss  += elbo_ls.mean().asscalar()
             if (batch_id + 1) % (self.log_interval) == 0:
-                logging.info('All loss terms: {}, {}, {}, {}, {}, {}'.format(elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls))
+                logging.debug('All loss terms: {}, {}, {}, {}, {}, {}'.format(elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls))
                 self.log_eval(batch_id, len(dataloader), self.metric, step_loss, elbo_loss, self.log_interval)
                 step_loss = 0
                 elbo_loss = 0

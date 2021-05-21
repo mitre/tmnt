@@ -261,17 +261,44 @@ def preprocess_data(trans, class_labels, train_ds, dev_ds, batch_size, max_len,
             shuffle=False,
             batchify_fn=batchify_fn)
 
-    #test_json_file = os.path.join(input_dir, 'test.jsonl')
-    #test_ds = JsonlDataset(test_json_file, txt_key="sentence", label_key="label0")
-    #data_test = mx.gluon.data.SimpleDataset(pool.map(test_trans, data))
-    #loader_test = mx.gluon.data.DataLoader(
-    #        data_test,
-    #        batch_size=dev_batch_size,
-    #        num_workers=4,
-    #        shuffle=False,
-    #        batchify_fn=test_batchify_fn)
     loader_test = None
     return loader_train, loader_dev, loader_test, len(data_train)
+
+def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train_mode=True, pad=False):
+    pool = multiprocessing.Pool()
+    # transformation for data train and dev
+    label_dtype = 'float32' # if not task.class_labels else 'int32'
+    bow_count_dtype = 'float32'
+    # data train
+    data_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
+    if train_mode:
+        data_ds_len = data_ds.transform(
+            lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
+        # bucket sampler 
+        batchify_fn = nlp.data.batchify.Tuple(
+            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
+        num_buckets = min(6, len(data_ds) // batch_size)
+        batch_sampler = nlp.data.sampler.FixedBucketSampler(
+            data_ds_len,
+            batch_size=batch_size,
+            num_buckets=num_buckets,
+            ratio=0.2, # may avoid batches with size = 1 (which triggers a bug)
+            shuffle=True)
+        # data loader for training
+        loader = gluon.data.DataLoader(
+            dataset=data_ds,
+            num_workers=4,
+            batch_sampler=batch_sampler,
+            batchify_fn=batchify_fn)
+    else:
+        loader = gluon.data.DataLoader(
+            dataset=data_ds,
+            batch_size=batch_size,
+            num_workers=4,
+            shuffle=False,
+            batchify_fn=batchify_fn)
+    return loader, len(data_ds)
 
 
 def get_bert_datasets(class_labels,
@@ -280,6 +307,7 @@ def get_bert_datasets(class_labels,
                       dev_ds,
                       batch_size,
                       max_len,
+                      aux_ds = None,
                       bert_model_name = 'bert_12_768_12',
                       bert_dataset = 'book_corpus_wiki_en_uncased',
                       pad=False,
@@ -303,9 +331,13 @@ def get_bert_datasets(class_labels,
                                  has_label=True,
                                  vectorizer=vectorizer,
                                  bert_vocab_size = len(bert_vocabulary) if use_bert_vocab else 0)
-    train_data, dev_data, test_data, num_train_examples = preprocess_data(
-        trans, class_labels, train_ds, dev_ds, batch_size, max_len, pad)
-    return train_data, dev_data, num_train_examples, bert, bert_vocabulary
+    train_data, num_train_examples = preprocess_seq_data(trans, class_labels, train_ds, batch_size, max_len, train_mode=True, pad=pad)
+    dev_data, _ = preprocess_seq_data(trans, class_labels, dev_ds, batch_size, max_len, train_mode=False, pad=pad)
+    if aux_ds:
+        aux_data, _ = preprocess_seq_data(trans, class_labels, aux_ds, batch_size, max_len, train_mode=False, pad=pad)
+    else:
+        aux_data = None
+    return train_data, dev_data, num_train_examples, bert, bert_vocabulary, aux_data
 
 
 ############
