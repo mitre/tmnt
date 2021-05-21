@@ -976,6 +976,7 @@ class SeqBowEstimator(BaseEstimator):
                     optimizer = config.optimizer,
                     classifier_dropout = config.classifier_dropout,
                     epochs = int(config.epochs),
+                    gamma = config.gamma,
                     lr = config.lr,
                     decoder_lr = config.decoder_lr,
                     pretrained_param_file = pretrained_param_file,
