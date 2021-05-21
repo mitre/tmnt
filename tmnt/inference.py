@@ -139,7 +139,7 @@ class BowVAEInferencer(BaseInferencer):
             json.dump(d, fp, sort_keys=True, indent=4)        
 
     def encode_vec_file(self, sp_vec_file, use_probs=False):
-        data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab))
+        data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab), zero_based=True)
         return self.encode_data(data_mat, labels, use_probs=use_probs), labels
 
     def encode_texts(self, texts, use_probs=False, include_bn=False):

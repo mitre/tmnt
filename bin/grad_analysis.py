@@ -71,18 +71,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     verbose = False ### XXX - add as argument
-    vocab = load_vocab(args.vocab_file)        
+    inference_model = BowVAEInferencer.from_saved(model_dir=args.model_dir,
+                                                  ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
+    
     if args.override_top_k_terms:
         top_k_words_per_topic = get_top_k_terms_from_file(args.override_top_k_terms)
-        tst_csr, _, _, _ = file_to_data(args.test_file, len(vocab))
-        top_k_words_per_topic_ids = [ [ vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
+        tst_csr, _, _, _ = file_to_data(args.test_file, len(inference_model.vocab))
+        top_k_words_per_topic_ids = [ [ inference_model.vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
         npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
         test_npmi = npmi_eval.evaluate_csr_mat(tst_csr)
         print("**** Test NPMI = {} *******".format(test_npmi))
         exit(0)
 
-    inference_model = BowVAEInferencer.from_saved(model_dir=args.model_dir,
-                                                  ctx=mx.cpu() if args.gpu < 0 else mx.gpu(args.gpu))
 
     if args.plot_file: # get UMAP embedding visualization
         import matplotlib.pyplot as plt
@@ -101,12 +101,13 @@ if __name__ == "__main__":
     top_k_words_per_topic_ids = [ [ inference_model.vocab[t] for t in t_set ]  for t_set in top_k_words_per_topic ]
 
     npmi_eval = EvaluateNPMI(top_k_words_per_topic_ids)
-    tst_csr, _, _, _ = file_to_data(args.test_file, len(vocab))
+    tst_csr, _, _, _ = file_to_data(args.test_file, len(inference_model.vocab))
     test_npmi = npmi_eval.evaluate_csr_mat(tst_csr)
     print("**** Test NPMI = {} *******".format(test_npmi))
     if args.encoder_terms:
-        sample_size = 2000
-        dataloader = DataIterLoader(SparseMatrixDataIter(tst_csr[:sample_size], None, batch_size=8, last_batch_handle='pad', shuffle=False))
+        sample_size = min(2000, tst_csr.shape[0])
+        batch_size  = min(8, tst_csr.shape[0])
+        dataloader = DataIterLoader(SparseMatrixDataIter(tst_csr[:sample_size], None, batch_size=batch_size, last_batch_handle='pad', shuffle=False))
         top_k_words_encoder = inference_model.get_top_k_words_per_topic_encoder(args.words_per_topic, dataloader, sample_size=sample_size)
         for i in range(len(top_k_words_encoder)):
             print("Encoder topic {}: {}".format(i, top_k_words_encoder[i]))
@@ -114,15 +115,24 @@ if __name__ == "__main__":
         enc_npmi_eval = EvaluateNPMI(top_k_words_encoder_per_topic_ids)
         print("**** Test ENCODER NPMI = {} *******".format(enc_npmi_eval.evaluate_csr_mat(tst_csr)))
         details = inference_model.model.get_ordered_terms_per_item(dataloader, sample_size=sample_size)
-        encodings = inference_model.encode_data(tst_csr[:sample_size], None, use_probs=True)
+        #encodings = inference_model.encode_data(tst_csr[:sample_size], None, use_probs=True)
+        encodings = inference_model.encode_data(tst_csr[:sample_size], None, use_probs=False)
+        #encodings = inference_model.encode_vec_file(args.test_file)[0]
+        ##
+        details_np = np.array(details).swapaxes(0,1)
+        print("Encodings for docs")
+        for i,e in enumerate(encodings):
+            print("Encodings doc {}: {}".format(i, e))
         for topic_id in range(inference_model.model.n_latent):
+            print("***** ANALYSIS ON TOPIC {} *****".format(topic_id))
             details_i = np.array(details[topic_id][:sample_size])
             #selected_doc_ids_tp = np.where(np.isin((-np.array(encodings)).argsort(axis=1)[:,:3], topic_id).max(axis=1) > 0)[0]
             #print("Selected doc ids topic prominence: {}".format(selected_doc_ids_tp))
             for t in top_k_words_encoder[topic_id]:
                 t_id = inference_model.vocab[t]
+                print("t = {} ==> id = {}".format(t, t_id))
                 selected_docs_having_term = np.where(tst_csr[:sample_size].toarray()[:,t_id] > 0)[0]
-                #print("Docs having term {} ==> {}".format(t, selected_docs_having_term))
+                print("Docs having term {} ==> {}".format(t, selected_docs_having_term))
                 #selected_doc_ids = np.intersect1d(selected_doc_ids_tp, selected_docs_having_term)
                 selected_doc_ids = selected_docs_having_term
                 t_id_details = details_i[selected_doc_ids, t_id]
@@ -144,6 +154,10 @@ if __name__ == "__main__":
                           .format(t, t_id_details.mean(), t_id_details.std(), t_id_details.min(),  t_id_details.max(), num_negative, np.size(t_id_details)))
                 else:
                     print("Encoder info on {} ==> NO DATA".format(t))
+                t_grad0 = details_np[0,:,t_id]
+                print("t_grad[doc0] {} ==> {}".format(t, t_grad0))
+                t_grad1 = details_np[1,:,t_id]
+                print("t_grad[doc1] {} ==> {}".format(t, t_grad1))
             #print("Top terms for each document")
             #for d in range(details_i.shape[0]):
             #    doc_term_scores = details_i[d]
@@ -163,10 +177,12 @@ if __name__ == "__main__":
                         sorted_scores = (- doc_term_scores).argsort()
                         cur_ranks = ranks.get(t) or []
                         ranks[t] = [np.where(sorted_scores == t_id)[0][0] + 1] + cur_ranks
+            print("***********************")
             print("***Rank Analysis Topic {}*** (With {} selected docs based on topic prominence)".format(topic_id, cnt_rank/len(top_k_words_per_topic[topic_id])))
             for t in ranks:
                 ra = np.array(ranks[t])
                 print('For {} ==> best: {}, worst: {}, avg: {}'.format(t, ra.min(), ra.max(), ra.mean()))
+            print("\n\n\n")
                 
     exit(0)
 

@@ -202,7 +202,7 @@ def file_to_data(sp_file, voc_size, batch_size=1000):
     data_size = i+1
     num_batches = data_size // batch_size
     last_batch_size = data_size % batch_size
-    X, y = load_svmlight_file(sp_file, n_features=voc_size, dtype='int32')
+    X, y = load_svmlight_file(sp_file, n_features=voc_size, dtype='int32', zero_based=True)
     wd_freqs = mx.nd.array(np.array(X.sum(axis=0)).squeeze())
     total_words = X.sum()
     return X, y, wd_freqs, total_words
