@@ -271,19 +271,19 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
     bow_count_dtype = 'float32'
     # data train
     data_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
+    batchify_fn = nlp.data.batchify.Tuple(
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
     if train_mode:
         data_ds_len = data_ds.transform(
             lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
         # bucket sampler 
-        batchify_fn = nlp.data.batchify.Tuple(
-            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-            nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
         num_buckets = min(6, len(data_ds) // batch_size)
         batch_sampler = nlp.data.sampler.FixedBucketSampler(
             data_ds_len,
             batch_size=batch_size,
             num_buckets=num_buckets,
-            ratio=0.2, # may avoid batches with size = 1 (which triggers a bug)
+            ratio=0.2, # may avoid batches with size = 1 (which may tigger a bug)
             shuffle=True)
         # data loader for training
         loader = gluon.data.DataLoader(
