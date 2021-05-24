@@ -213,7 +213,7 @@ class BowVAEInferencer(BaseInferencer):
         for _, (data, labels) in enumerate(data_iter):
             elbos = []
             for s in range(0,n_samples):
-                elbo, _,_,_,_,_,_ = self.model(data)
+                elbo, _,_,_,_,_,_ = self.model(data.as_in_context(self.ctx))
                 elbos.append(list(elbo.asnumpy()))
             wd_cnts = data.sum(axis=1).asnumpy()
             elbos_np = np.array(elbos) / (wd_cnts + 1)
