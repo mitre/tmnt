@@ -44,7 +44,7 @@ class BowVAEInferencer(BaseInferencer):
     """
     """
     def __init__(self, model):
-        super().__init__(model.ctx)
+        super().__init__(model.model_ctx)
         self.max_batch_size = 16
         self.vocab = model.vocabulary
         self.vectorizer = TMNTVectorizer(initial_vocabulary=model.vocabulary)
