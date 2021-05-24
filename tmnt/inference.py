@@ -43,8 +43,8 @@ class BaseInferencer(object):
 class BowVAEInferencer(BaseInferencer):
     """
     """
-    def __init__(self, model, ctx=mx.cpu()):
-        super().__init__(ctx)
+    def __init__(self, model):
+        super().__init__(model.ctx)
         self.max_batch_size = 16
         self.vocab = model.vocabulary
         self.vectorizer = TMNTVectorizer(initial_vocabulary=model.vocabulary)
@@ -88,7 +88,7 @@ class BowVAEInferencer(BaseInferencer):
                                 vocabulary=vocab, latent_distrib=lat_distrib, n_latent=n_latent,
                                 ctx=ctx)
         model.load_parameters(str(param_file), allow_missing=False)
-        return cls(model, ctx)
+        return cls(model)
 
 
     def get_model_details(self, sp_vec_file):
