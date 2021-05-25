@@ -972,7 +972,7 @@ class SeqBowEstimator(BaseEstimator):
                     n_latent        = int(config.n_latent),
                     batch_size      = int(config.batch_size),
                     redundancy_reg_penalty = 0.0,
-                    kappa = 64.0,
+                    kappa = 20.0,
                     warmup_ratio = warmup_ratio,
                     optimizer = config.optimizer,
                     classifier_dropout = config.classifier_dropout,

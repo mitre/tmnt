@@ -439,6 +439,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         logging.info('Number of labels: {}'.format(n_labels))
         logging.info('Number of examples: {}'.format(num_examples))
         seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), n_labels=len(classes),
+                                                        log_interval=self.log_interval,
                                                         reporter=reporter, ctx=ctx)
         obj, v_res = \
             seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples, aux_data=aux_dataset)
