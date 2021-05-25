@@ -1095,6 +1095,8 @@ class SeqBowEstimator(BaseEstimator):
         obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
         b_obj = max(min(obj, 100.0), -100.0)
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+        if self.has_classifier and self.gamma >= 0.0:
+            sc_obj = (sc_obj + self.gamma * val_result['accuracy']) / (1.0 + self.gamma)
         return sc_obj
 
     def _get_losses(self, model, batch_data):
