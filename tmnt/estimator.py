@@ -970,6 +970,7 @@ class SeqBowEstimator(BaseEstimator):
                     bow_vocab       = bow_vocab, 
                     n_labels        = n_labels,
                     n_latent        = int(config.n_latent),
+                    batch_size      = int(config.batch_size),
                     redundancy_reg_penalty = 0.0,
                     kappa = 64.0,
                     warmup_ratio = warmup_ratio,
