@@ -1147,7 +1147,8 @@ class SeqBowEstimator(BaseEstimator):
         num_train_steps = int((num_train_examples / step_size) * self.epochs) + 1
         warmup_ratio = self.warmup_ratio
         num_warmup_steps = int(num_train_steps * warmup_ratio)
-        logging.info("Number of warmup steps = {}, num total train steps = {}".format(num_warmup_steps, num_train_steps))
+        logging.info("Number of warmup steps = {}, num total train steps = {}, train examples = {}, batch_size = {}, epochs = {}"
+                     .format(num_warmup_steps, num_train_steps, num_train_examples, self.batch_size, self.epochs))
         step_num = 0
 
         # Do not apply weight decay on LayerNorm and bias terms

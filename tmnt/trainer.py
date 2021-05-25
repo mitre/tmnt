@@ -437,6 +437,7 @@ class SeqBowVEDTrainer(BaseTrainer):
                               bert_model_name=bert_model_name, bert_dataset=bert_dataset, ctx=ctx)
         n_labels = len(classes) if classes else 0
         logging.info('Number of labels: {}'.format(n_labels))
+        logging.info('Number of examples: {}'.format(num_examples))
         seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), n_labels=len(classes),
                                                         reporter=reporter, ctx=ctx)
         obj, v_res = \
