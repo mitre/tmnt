@@ -19,6 +19,7 @@ parser.add_argument('--offset_factor', type=float, help='Adjusts offset for LR d
 parser.add_argument('--json_text_key', type=str, help='Assume json list format and select text using this key', default=None)
 parser.add_argument('--json_label_key', type=str, help='Assume json list format and select labels using this key', default=None)
 parser.add_argument('--log_interval', type=int, help='Number of batches after which loss and reconstruction examples will be logged', default=20)
+parser.add_argument('--log_level', type=str, help='Log level (info, error, debug)', default='info')
 parser.add_argument('--num_final_evals', type=int, help='Number of times to evaluate selected configuration (with random initializations)', default=1)
 parser.add_argument('--seed', type=int, default=1234, help='The random seed to use for RNG')
 parser.add_argument('--config_space', type=str, help='YAML configuration file that specifies the configuration space for model selection')

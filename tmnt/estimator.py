@@ -944,7 +944,7 @@ class SeqBowEstimator(BaseEstimator):
 
 
     @classmethod
-    def from_config(cls, config, bert_base, bow_vocab, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
+    def from_config(cls, config, bert_base, bow_vocab, n_labels=0, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
         if isinstance(config, str):
             try:
                 with open(config, 'r') as f:
@@ -968,7 +968,7 @@ class SeqBowEstimator(BaseEstimator):
                     bert_model_name = config.bert_model_name,
                     bert_data_name  = config.bert_dataset,
                     bow_vocab       = bow_vocab, 
-                    n_labels        = config.n_labels,
+                    n_labels        = n_labels,
                     n_latent        = int(config.n_latent),
                     redundancy_reg_penalty = 0.0,
                     kappa = 64.0,

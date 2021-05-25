@@ -435,7 +435,8 @@ class SeqBowVEDTrainer(BaseTrainer):
         tr_dataset, val_dataset, num_examples, bert_base, bert_vocab, aux_dataset = \
             get_bert_datasets(classes, vectorizer, tr_ds, val_ds, batch_size, max_seq_len, aux_ds = aux_ds, 
                               bert_model_name=bert_model_name, bert_dataset=bert_dataset, ctx=ctx)
-        seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), reporter=reporter, ctx=ctx)
+        seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), n_labels=len(classes),
+                                                        reporter=reporter, ctx=ctx)
         obj, v_res = \
             seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples, aux_data=aux_dataset)
         return seq_ved_estimator.model, obj, v_res

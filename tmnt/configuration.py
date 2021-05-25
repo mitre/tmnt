@@ -140,16 +140,21 @@ class TMNTConfigSeqBOW(BaseTMNTConfig):
         cd = self.cd
         sp_dict = {}
         sp_dict['epochs'] = int(cd['epochs'])
-        sp_dict['gen_lr'] = self._get_range_uniform('gen_lr', cd)
+        sp_dict['gamma']  = self._get_range_integer('gamma', cd)
+        sp_dict['lr'] = self._get_range_uniform('lr', cd)
         sp_dict['min_lr'] = self._get_range_uniform('min_lr', cd)
-        sp_dict['dec_lr'] = self._get_range_uniform('dec_lr', cd)
+        sp_dict['decoder_lr'] = self._get_range_uniform('decoder_lr', cd)
         sp_dict['n_latent'] = self._get_range_integer('n_latent', cd)
         sp_dict['batch_size'] = self._get_range_integer('batch_size', cd)
         sp_dict['optimizer'] = self._get_categorical('optimizer', cd)
         sp_dict['warmup_ratio'] = self._get_range_uniform('warmup_ratio', cd)
         sp_dict['embedding_source'] = self._get_categorical('embedding_source', cd)
         sp_dict['redundancy_reg_penalty'] = self._get_range_uniform('redundancy_reg_penalty', cd)
-        sp_dict['sent_size'] = int(cd['sent_size'])  ## currently not considering different sent_size values as this requires re-prepping the data
+        sp_dict['max_seq_len'] = self._get_range_integer('max_seq_len', cd)
+        sp_dict['bert_model_name'] = cd['bert_model_name']
+        sp_dict['bert_dataset'] = cd['bert_dataset']
+        sp_dict['use_labels'] = cd['use_labels']
+        sp_dict['classifier_dropout'] = self._get_range_uniform('classifier_dropout', cd)
         latent_types = cd['latent_distribution']
         latent_space = []
         for lt in latent_types:

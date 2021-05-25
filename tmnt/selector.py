@@ -174,7 +174,7 @@ def model_select_bow_vae(c_args):
 def model_select_seq_bow(c_args):
     logging_config(folder=c_args.save_dir, name='tmnt', level=c_args.log_level, console_level=c_args.log_level)
     tmnt_config = TMNTConfigSeqBOW(c_args.config_space).get_configspace()
-    trainer = SeqBowVEDTrainer.from_arguments(c_args)
+    trainer = SeqBowVEDTrainer.from_arguments(c_args, tmnt_config)
     selector = BaseSelector(tmnt_config,
                             c_args.iterations,
                             c_args.searcher,
