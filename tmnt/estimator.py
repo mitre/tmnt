@@ -982,6 +982,7 @@ class SeqBowEstimator(BaseEstimator):
                     decoder_lr = config.decoder_lr,
                     pretrained_param_file = pretrained_param_file,
                     warm_start = (pretrained_param_file is not None),
+                    reporter=reporter,
                     ctx=ctx,
                     log_interval=log_interval)
         return model
