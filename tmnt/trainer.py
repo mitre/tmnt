@@ -176,8 +176,8 @@ class BaseTrainer(object):
                 logging.info("Final {} Objective      ==> {}".format(test_type, objectives[0]))            
             return best_model, best_obj
         else:
-            model, obj, _ = self.train_model(config, FakeReporter())
-            return model, obj
+            estimator, obj, _ = self.train_model(config, FakeReporter())
+            return estimator, obj
 
         
 
@@ -443,7 +443,7 @@ class SeqBowVEDTrainer(BaseTrainer):
                                                         reporter=reporter, ctx=ctx)
         obj, v_res = \
             seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples, aux_data=aux_dataset)
-        return seq_ved_estimator.model, obj, v_res
+        return seq_ved_estimator, obj, v_res
 
 
     def write_model(self, estimator, config, epoch_id=0):
