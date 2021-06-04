@@ -11,10 +11,10 @@ import gluonnlp as nlp
 import os
 import umap
 
-from sklearn.datasets import fetch_20newsgroups, dump_svmlight_file
+from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.configuration import TMNTConfigBOW
-from tmnt.trainer import BowVAETrainer, LabeledBowVAETrainer
+from tmnt.trainer import BowVAETrainer
 from tmnt.selector import BaseSelector
 
 data, y = fetch_20newsgroups(shuffle=True, random_state=1,
@@ -25,18 +25,16 @@ tf_vectorizer = TMNTVectorizer(vocab_size=2000)
 X, _ = tf_vectorizer.fit_transform(data)
 vocab = tf_vectorizer.get_vocab()
 
-dump_svmlight_file(X[:8000], y[:8000], '_train.vec')
-dump_svmlight_file(X[8000:], y[8000:], '_test.vec')
-
 tmnt_config = TMNTConfigBOW('examples/select_model/config.yaml').get_configspace()
 selector = BaseSelector(tmnt_config, 8, 'random', 'fifo', 1, 4, False, 1, 1234, '_model_out')
 
-trainer = BowVAETrainer('_exps', '_model_out', vocab, None, '_train.vec', '_test.vec')
+trainer = BowVAETrainer(vocab, X[:8000], X[8000:], log_out_dir='_exps', model_out_dir='_model_out')
 selector.select_model(trainer)
 
 n_labels = int(np.max(y)) + 1
 
-labeled_trainer = LabeledBowVAETrainer(n_labels, '_model_out', '_model_out', vocab, None, '_train.vec', '_test.vec')
+labeled_trainer = BowVAETrainer(vocab, (X[:8000],y[:8000]), (X[8000:],y[8000:]), n_labels=n_labels,
+                                log_out_dir='_exps', model_out_dir='_model_out')
 
 l_selector = BaseSelector(tmnt_config, 8, 'random', 'fifo', 1, 4, False, 1, 1234, '_model_out')
 l_selector.select_model(labeled_trainer)

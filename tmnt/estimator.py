@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, LabeledBowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
+from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import HyperSphericalDistribution
@@ -47,7 +47,6 @@ class BaseEstimator(object):
             selection objective (default = 8.0)
         reporter (:class:`autogluon.core.scheduler.Reporter`): Callback reporter to include information for 
             model selection via AutoGluon
-        wd_freqs (:class:`mxnet.ndarray.NDArray`): Word frequencies over vocabulary to initialize model biases
         ctx (:class:`mxnet.context`): MXNet context for the estimator
         latent_distribution (str): Latent distribution of the variational autoencoder.
             'logistic_gaussian' | 'vmf' | 'gaussian' | 'gaussian_unitvar', optional (default="vmf")
@@ -74,7 +73,6 @@ class BaseEstimator(object):
                  quiet=False,
                  coherence_coefficient=8.0,
                  reporter=None,
-                 wd_freqs=None,
                  ctx=mx.cpu(),
                  latent_distribution="vmf",
                  optimizer="adam",
@@ -96,7 +94,6 @@ class BaseEstimator(object):
         self.model = None
         self.coherence_coefficient = coherence_coefficient
         self.reporter = reporter
-        self.wd_freqs = wd_freqs
         self.ctx = ctx
         self.latent_distrib = latent_distribution
         self.optimizer = optimizer
@@ -230,6 +227,9 @@ class BaseBowEstimator(BaseEstimator):
         warm_start (bool): Subsequent calls to `fit` will use existing model weights rather than reinitializing
     """
     def __init__(self, vocabulary,
+                 n_labels=0,
+                 gamma=1.0,
+                 multilabel=False,
                  validate_each_epoch=False,
                  enc_hidden_dim=150,
                  embedding_source="random",
@@ -246,11 +246,17 @@ class BaseBowEstimator(BaseEstimator):
         self.embedding_source = embedding_source
         self.embedding_size = embedding_size
         self.validate_each_epoch = validate_each_epoch
+        self.multilabel = multilabel
+        self.gamma = gamma
+        self.n_labels = n_labels
+        self.has_classifier = n_labels > 1
+        self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
 
     @classmethod
     def from_config(cls, config, vocabulary,
+                    n_labels=0,
                     coherence_via_encoder=False,
-                    validate_each_epoch=False, pretrained_param_file=None, wd_freqs=None, reporter=None, ctx=mx.cpu()):
+                    validate_each_epoch=False, pretrained_param_file=None, reporter=None, ctx=mx.cpu()):
         """
         Create an estimator from a configuration file/object rather than by keyword arguments
         
@@ -258,7 +264,6 @@ class BaseBowEstimator(BaseEstimator):
             config (str or dict): Path to a json representation of a configuation or TMNT config dictionary
             vocabulary(str or :class:`gluonnlp.Vocab`): Path to a json representation of a vocabulary or GluonNLP vocabulary object
             pretrained_param_file (str): Path to pretrained parameter file if using pretrained model
-            wd_freqs (:class:`mxnet.ndarray.NDArray`): Word frequencies over vocabulary to initialize model biases
             reporter (:class:`autogluon.core.scheduler.Reporter`): Callback reporter to include information for model selection via AutoGluon
             ctx (:class:`mxnet.context`): MXNet context for the estimator
 
@@ -289,6 +294,8 @@ class BaseBowEstimator(BaseEstimator):
                 emb_size = config.derived_info.get('embedding_size')
             if not emb_size:
                 raise Exception("Embedding size must be provided as the 'size' attribute of 'embedding' or as 'derived_info.embedding_size'")
+        gamma = config.gamma
+        multilabel = config.multilabel
         lr = config.lr
         latent_distrib = config.latent_distribution
         optimizer = config.optimizer
@@ -312,8 +319,12 @@ class BaseBowEstimator(BaseEstimator):
         elif latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
         model = \
-                cls(vocabulary, validate_each_epoch=validate_each_epoch,
-                    coherence_coefficient=8.0, reporter=reporter, wd_freqs=wd_freqs,
+                cls(vocabulary,
+                    n_labels=n_labels,
+                    gamma = gamma,
+                    multilabel = multilabel,
+                    validate_each_epoch=validate_each_epoch,
+                    coherence_coefficient=8.0, reporter=reporter, 
                     ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
                     n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
                     coherence_reg_penalty=coherence_reg_penalty,
@@ -398,13 +409,9 @@ class BaseBowEstimator(BaseEstimator):
         for i, (data,labels) in enumerate(dataloader):
             if labels is None:            
                 labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                mask = None
-            else:
-                mask = labels >= 0.0
-                mask = mask.as_in_context(self.ctx)
             data = data.as_in_context(self.ctx)
             labels = labels.as_in_context(self.ctx)
-            _, kl_loss, rec_loss, _, _, _, _ = self._forward(self.model, data, labels, mask)
+            _, kl_loss, rec_loss, _, _, _, _ = self._forward(self.model, data, labels)
             if i == num_batches - 1:
                 total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
                 total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
@@ -454,7 +461,24 @@ class BaseBowEstimator(BaseEstimator):
                 val_X = val_X[:50000]
                 val_y = val_y[:50000]
             npmi, redundancy = self._npmi(val_X, val_y)
-        return {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
+        v_res = {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
+        if self.has_classifier:
+            tot_correct = 0
+            tot = 0
+            bs = min(val_X.shape[0], self.batch_size)
+            num_std_batches = val_X.shape[0] // bs
+            last_batch_size = val_X.shape[0] % bs
+            for i, (data, labels) in enumerate(val_dataloader):
+                if i < num_std_batches - 1:
+                    data = data.as_in_context(self.ctx)
+                    labels = labels.as_in_context(self.ctx)
+                    predictions = self.model.predict(data)
+                    correct = mx.nd.argmax(predictions, axis=1) == labels
+                    tot_correct += mx.nd.sum(correct).asscalar()
+                    tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0
+            acc = float(tot_correct) / float(tot)
+            v_res['accuracy'] = acc
+        return v_res
     
 
     def initialize_with_pretrained(self):
@@ -470,7 +494,21 @@ class BaseBowEstimator(BaseEstimator):
         obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
         b_obj = max(min(obj, 100.0), -100.0)
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
+        if self.has_classifier:
+            sc_obj = (sc_obj + self.gamma * val_result['accuracy']) / (1.0 + self.gamma)
         return sc_obj
+
+
+    def _get_losses(self, model, data, labels):
+        elbo_ls, kl_ls, rec_ls, entropies, coherence_loss, red_ls, predicted_labels = \
+            self._forward(self.model, data, labels)
+        if self.has_classifier:
+            label_ls = self.loss_function(predicted_labels, labels).mean()
+            total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+        else:
+            total_ls = elbo_ls.mean()
+            label_ls = mx.nd.zeros(total_ls.shape)
+        return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
 
 
     def fit_with_validation(self, X, y, val_X, val_y):
@@ -487,7 +525,7 @@ class BaseBowEstimator(BaseEstimator):
             (tuple): Tuple of:
                sc_obj, npmi, perplexity, redundancy
         """
-        wd_freqs = self.wd_freqs if self.wd_freqs is not None else self._get_wd_freqs(X)
+        wd_freqs = self._get_wd_freqs(X)
         x_size = X.shape[0] * X.shape[1]
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
@@ -500,7 +538,7 @@ class BaseBowEstimator(BaseEstimator):
 
         if self.model is None or not self.warm_start:
             self.model = self._get_model()
-            self.model.set_biases(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
+            self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
         
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
@@ -512,20 +550,12 @@ class BaseBowEstimator(BaseEstimator):
             for i, (data, labels) in enumerate(train_dataloader):
                 if labels is None:
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                    mask = None
-                else:
-                    if len(labels.shape) > 1:
-                        mask = labels.sum(axis=1) >= 0.0
-                    else:
-                        mask = labels >= 0.0
-                    mask = mask.as_in_context(self.ctx)
                 labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
                 with autograd.record():
-                    elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, lab_loss = \
-                        self._forward(self.model, data, labels, mask=mask)
-                    elbo_mean = elbo.mean()
-                elbo_mean.backward()
+                    elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data, labels)
+                    elbo_mean = elbo_ls.mean()
+                total_ls.backward()
                 trainer.step(1)
                 if not self.quiet:
                     elbo_losses.append(float(elbo_mean.asscalar()))
@@ -549,15 +579,15 @@ class BaseBowEstimator(BaseEstimator):
         return sc_obj, v_res
 
                     
-    def fit(self, X, y):
+    def fit(self, X, y=None):
         self.fit_with_validation(X, y, None, None)
         return self
 
 
 class BowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, *args, **kwargs):
-        super().__init__(vocabulary, *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     @classmethod
     def from_config(cls, *args, **kwargs):
@@ -578,7 +608,7 @@ class BowEstimator(BaseBowEstimator):
         """
         return super().perplexity(X, None)
 
-    def _forward(self, model, data, labels, mask):
+    def _forward(self, model, data, labels):
         """
         Forward pass of BowVAE model given the supplied data
 
@@ -591,7 +621,7 @@ class BowEstimator(BaseBowEstimator):
             (tuple): Tuple of:
                 elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, reconstruction
         """
-        return model(data)
+        return model(data, labels)
 
 
     def _get_model(self):
@@ -607,16 +637,23 @@ class BowEstimator(BaseBowEstimator):
             pt_embedding = nlp.embedding.create(e_type, source=e_name)
             self.vocabulary.set_embedding(pt_embedding)
             emb_size = len(self.vocabulary.embedding.idx_to_vec[0])
+            for word in self.vocabulary.embedding._idx_to_token:
+                if (self.vocabulary.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                    self.vocabulary.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
         else:
             emb_size = self.embedding_size
         model = \
                 BowVAEModel(self.enc_hidden_dim, emb_size, n_encoding_layers=self.n_encoding_layers,
-                            enc_dr=self.enc_dr, fixed_embedding=self.fixed_embedding, vocabulary=self.vocabulary, n_latent=self.n_latent, 
+                            enc_dr=self.enc_dr, fixed_embedding=self.fixed_embedding,
+                            n_labels = self.n_labels,
+                            gamma = self.gamma,
+                            multilabel = self.multilabel,
+                            vocabulary=self.vocabulary, n_latent=self.n_latent, 
                             latent_distrib=self.latent_distrib, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                        kappa=self.kappa, alpha=self.alpha,
                        batch_size=self.batch_size, 
-                       wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, n_covars=0, ctx=self.ctx)
+                            seed_mat=self.seed_matrix, n_covars=0, ctx=self.ctx)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
@@ -647,126 +684,6 @@ class BowEstimator(BaseBowEstimator):
         mx_array = mx.nd.array(X,dtype='float32')
         return self.model.encode_data(mx_array).asnumpy()
 
-    def fit(self, X):
-        """
-        Fit BowVAE model according to the given training data.
-
-        Parameters:
-            X ({array-like, sparse matrix}): Document word matrix of shape (n_train_samples, vocab_size)
-
-        Returns:
-            (`BowVAE`): Self
-        """
-        return super().fit(X, None)
-
-
-class LabeledBowEstimator(BaseBowEstimator):
-
-    def __init__(self, vocabulary, *args, n_labels=0,  gamma=1.0, multilabel=False, **kwargs):
-        super().__init__(vocabulary, *args, **kwargs)
-        self.multilabel = multilabel
-        self.gamma = gamma
-        self.n_labels = n_labels
-
-    @classmethod
-    def from_config(cls, n_labels, gamma, *args, **kwargs):
-        est = super().from_config(*args, **kwargs)
-        est.n_labels = n_labels
-        est.gamma = gamma
-        return est
-
-    def _get_model(self):
-        """
-        Returns
-        MXNet model initialized using provided hyperparameters
-        """
-        if self.embedding_source != 'random' and self.vocabulary.embedding is None:
-            e_type, e_name = tuple(self.embedding_source.split(':'))
-            pt_embedding = nlp.embedding.create(e_type, source=e_name)
-            self.vocabulary.set_embedding(pt_embedding)
-            emb_size = len(self.vocabulary.embedding.idx_to_vec[0])
-            for word in self.vocabulary.embedding._idx_to_token:
-                if (self.vocabulary.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                    self.vocabulary.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
-        else:
-            emb_size = self.embedding_size
-        model = \
-            LabeledBowVAEModel(n_labels=self.n_labels, gamma=self.gamma, multilabel=self.multilabel,
-                           vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
-                           fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
-                           coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                           kappa=self.kappa, alpha=self.alpha,
-                           batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
-                           wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
-        return model
-
-
-    def _get_config(self):
-        config = super()._get_config()
-        config['n_labels'] = self.n_labels
-        return config
-    
-
-    def _forward(self, model, data, labels, mask):
-        self.train_data = data
-        self.train_labels = labels
-        return model(data, labels, mask)
-
-
-    def _get_objective_from_validation_result(self, v_res):
-        topic_obj = super()._get_objective_from_validation_result(v_res)
-        acc = v_res['accuracy']
-        logging.info("topic obj = {}, acc = {}".format(topic_obj, acc))
-        return topic_obj + self.gamma * acc
-
-
-    def validate(self, val_X, val_y):
-        v_res = super().validate(val_X, val_y)
-        val_loader = self._get_val_dataloader(val_X, val_y)
-        tot_correct = 0
-        tot = 0
-        bs = min(val_X.shape[0], self.batch_size)
-        num_std_batches = val_X.shape[0] // bs
-        last_batch_size = val_X.shape[0] % bs
-        for i, (data, labels) in enumerate(val_loader):
-            if i < num_std_batches - 1:
-                data = data.as_in_context(self.ctx)
-                labels = labels.as_in_context(self.ctx)
-                predictions = self.model.predict(data)
-                correct = mx.nd.argmax(predictions, axis=1) == labels
-                tot_correct += mx.nd.sum(correct).asscalar()
-                tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0
-        acc = float(tot_correct) / float(tot)
-        v_res['accuracy'] = acc
-        print("v_res = {}".format(v_res))
-        return v_res
-    
-
-    def get_topic_vectors(self):
-        """
-        Get topic vectors of the fitted model.
-
-        Returns:
-            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. 
-                shape=(n_latent, vocab_size)
-        """
-
-        return self.model.get_topic_vectors(self.train_data, self.train_labels)
-
-
-    def transform(self, X):
-        """
-        Transform data X according to the fitted model.
-
-        Parameters:
-            X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features}
-
-        Returns:
-            (:class:`mxnet.ndarray.NDArray`) topic_distribution: shape=(n_samples, n_latent) Document topic distribution for X
-        """
-        mx_array = mx.nd.array(X,dtype='float32')
-        return self.model.encode_data(mx_array).asnumpy()
-    
 
 class CovariateBowEstimator(BaseBowEstimator):
 
@@ -808,7 +725,7 @@ class CovariateBowEstimator(BaseBowEstimator):
                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                            kappa=self.kappa, alpha=self.alpha,
                            batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
-                           wd_freqs=self.wd_freqs, seed_mat=self.seed_matrix, ctx=self.ctx)
+                           seed_mat=self.seed_matrix, ctx=self.ctx)
         return model
 
 
@@ -818,7 +735,7 @@ class CovariateBowEstimator(BaseBowEstimator):
         return config
     
     
-    def _forward(self, model, data, labels, mask):
+    def _forward(self, model, data, labels):
         """
         Forward pass of BowVAE model given the supplied data
 
@@ -953,17 +870,6 @@ class SeqBowEstimator(BaseEstimator):
                 logging.error("File {} does not appear to be a valid config instance".format(config))
                 raise Exception("Invalid Json Configuration File")
             config = ag.space.Dict(**config_dict)
-        #ldist_def = config.latent_distribution
-        #kappa = 0.0
-        #alpha = 1.0
-        #latent_distrib = ldist_def.dist_type
-        #embedding_source = config.embedding_source
-        #redundancy_reg_penalty = config.redundancy_reg_penalty
-        warmup_ratio = config.warmup_ratio
-        #if latent_distrib == 'vmf':
-        #    kappa = ldist_def.kappa
-        #elif latent_distrib == 'logistic_gaussian':
-        #    alpha = ldist_def.alpha
         model = cls(bert_base,
                     bert_model_name = config.bert_model_name,
                     bert_data_name  = config.bert_dataset,
@@ -973,7 +879,7 @@ class SeqBowEstimator(BaseEstimator):
                     batch_size      = int(config.batch_size),
                     redundancy_reg_penalty = 0.0,
                     kappa = 20.0,
-                    warmup_ratio = warmup_ratio,
+                    warmup_ratio = config.warmup_ratio,
                     optimizer = config.optimizer,
                     classifier_dropout = config.classifier_dropout,
                     epochs = int(config.epochs),

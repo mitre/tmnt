@@ -26,7 +26,7 @@ num_label_values = int(np.max(y)) + 1 # get the number of possible labels
 gamma = 1.0 ## balanced unsupervised and supservised losses
 ## total loss = topic_loss + gamma * classification_loss
 
-l_estimator = LabeledBowEstimator(tf_vectorizer.get_vocab(), n_labels=num_label_values, gamma=gamma)
+l_estimator = BowEstimator(tf_vectorizer.get_vocab(), n_labels=num_label_values, gamma=gamma)
 _ = l_estimator.fit(X, y) # fit a covariate model using y
 v_results = l_estimator.validate(X, y)
 l_inferencer = BowVAEInferencer(l_estimator.model)

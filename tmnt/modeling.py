@@ -25,7 +25,7 @@ class BaseVAE(HybridBlock):
     def __init__(self, vocabulary=None, n_latent=20, latent_distrib='logistic_gaussian',
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
                  kappa=32.0, alpha=1.0, post_latent_dr=0.2, batch_size=None, seed_mat=None,
-                 wd_freqs=None, n_covars=0, ctx=mx.cpu(), **kwargs):
+                 n_covars=0, ctx=mx.cpu(), **kwargs):
         super(BaseVAE, self).__init__(**kwargs)        
         self.vocabulary = vocabulary
         self.vocab_size = len(vocabulary)        
@@ -38,7 +38,6 @@ class BaseVAE(HybridBlock):
         self.post_latent_dr = post_latent_dr
         self.batch_size = batch_size
         self.seed_matrix = seed_mat
-        self.wd_freqs = wd_freqs
         self.n_covars = n_covars
         self.model_ctx = ctx
         self.embedding = None
@@ -58,19 +57,15 @@ class BaseVAE(HybridBlock):
             self.decoder = gluon.nn.Dense(in_units=n_latent, units=self.vocab_size, activation=None)
             self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
 
-    def set_biases(self, wd_freqs):
-        """Set the biases to the log of the word frequencies.
-
-        Parameters:
-            wd_freqs (:class:`mxnet.ndarray.NDArray`): Word frequencies as determined from training data
-        """
-        freq_nd = wd_freqs + 1
-        total = freq_nd.sum()
-        log_freq = freq_nd.log() - freq_nd.sum().log()
-        bias_param = self.decoder.collect_params().get('bias')
-        bias_param.set_data(log_freq)
-        bias_param.grad_req = 'null'
-        self.out_bias = bias_param.data()
+    def initialize_bias_terms(self, wd_freqs):
+        if wd_freqs is not None:
+            freq_nd = wd_freqs + 1 # simple smoothing
+            total = freq_nd.sum()
+            log_freq = freq_nd.log() - freq_nd.sum().log()
+            bias_param = self.decoder.collect_params().get('bias')
+            bias_param.set_data(log_freq)
+            bias_param.grad_req = 'null'
+            self.out_bias = bias_param.data()            
 
     def get_ordered_terms(self):
         """
@@ -175,17 +170,25 @@ class BowVAEModel(BaseVAE):
         batch_size (int): provided only at training time (or when model is Hybridized) - otherwise will be inferred (default None) 
         n_encoding_layers (int): Number of layers used for the encoder. (default = 1)
         enc_dr (float): Dropout after each encoder layer. (default = 0.1)
-        wd_freqs (:class:`mxnet.ndarray.NDArray`): Tensor with word frequencies in training data to initialize bias terms.
         seed_mat (:class:`mxnet.ndarray.NDArray`): Tensor with seed terms for guided topic modeling loss
         n_covars (int): Number of values for categorical co-variate (0 for non-CovariateData BOW model)
         ctx (int): context device (default is mx.cpu())
     """
-    def __init__(self, enc_dim, embedding_size, n_encoding_layers, enc_dr, fixed_embedding, *args, **kwargs):
+    def __init__(self,
+                 enc_dim, embedding_size, n_encoding_layers, enc_dr, fixed_embedding,
+                 n_labels=0,
+                 gamma=1.0,
+                 multilabel=False,
+                 *args, **kwargs):
         super(BowVAEModel, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
         self.num_enc_layers = n_encoding_layers
         self.enc_dr = enc_dr
         self.enc_dim = enc_dim
+        self.multilabel = multilabel
+        self.n_labels = n_labels
+        self.gamma    = gamma
+        self.has_classifier = self.n_labels > 1
         if self.vocabulary.embedding:
             assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
         self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
@@ -195,6 +198,10 @@ class BowVAEModel(BaseVAE):
             ## should be tanh here to avoid losing embedding information
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
             self.encoder = self._get_encoder(self.encoding_dims, dr=enc_dr)
+            if self.has_classifier:
+                self.classifier = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
+                #self.lab_dr = gluon.nn.Dropout(self.enc_dr*2.0)
+            #self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
             
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
         ## vmf needs to set weight values post-initialization
@@ -281,17 +288,37 @@ class BowVAEModel(BaseVAE):
     def run_encode(self, F, in_data, batch_size):
         enc_out = self.encoder(in_data)
         return self.latent_dist(enc_out, batch_size)
+
+
+    def predict(self, data):
+        """Predict the label given the input data (ignoring VAE reconstruction)
+        
+        Parameters:
+            data (tensor): input data tensor
+        Returns:
+            output vector (tensor): unnormalized outputs over label values
+        """
+        emb_out = self.embedding(data)
+        enc_out = self.encoder(emb_out)
+        mu_out  = self.latent_dist.get_mu_encoding(enc_out)
+        return self.classifier(mu_out)
     
 
-    def hybrid_forward(self, F, data):
+    def hybrid_forward(self, F, data, labels):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
-        z, KL = self.run_encode(F, emb_out, batch_size)
-        dec_out = self.decoder(z)
-        y = F.softmax(dec_out, axis=1)
+        #z, KL = self.run_encode(F, emb_out, batch_size)
+        enc_out = self.encoder(emb_out)
+        mu_out  = self.latent_dist.get_mu_encoding(enc_out)
+        z, KL   = self.latent_dist(enc_out, batch_size)
+        y = F.softmax(self.decoder(z), axis=1)
         iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, data, y, KL, batch_size)
-        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, None
+        if self.has_classifier:
+            classifier_outputs = self.classifier(mu_out)
+        else:
+            classifier_outputs = None
+        return iii_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, classifier_outputs
 
 
 class LabeledBowVAEModel(BowVAEModel):
@@ -579,18 +606,8 @@ class DeepAveragingVAEModel(BaseVAE):
         iii_loss, recon_loss, entropies, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, bow, y, KL, batch_size)
         iv_loss = iii_loss + lab_loss * self.gamma
-        #print("Lab loss sum = {}".format((lab_loss * self.gamma).sum().asscalar()))
         return iv_loss, KL, recon_loss, entropies, coherence_loss, redundancy_loss, lab_loss
 
-
-        if wd_freqs is not None:
-            freq_nd = wd_freqs + 1
-            total = freq_nd.sum()
-            log_freq = freq_nd.log() - freq_nd.sum().log()
-            bias_param = self.decoder.collect_params().get('bias')
-            bias_param.set_data(log_freq)
-            bias_param.grad_req = 'null'
-            self.out_bias = bias_param.data()
 
     def get_top_k_terms(self, k):
         """

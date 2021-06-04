@@ -23,7 +23,7 @@ from tmnt.utils.random import seed_rng
 from tmnt.utils.log_utils import logging_config
 from tmnt.data_loading import load_vocab, file_to_data
 from tmnt.bert_handling import get_bert_datasets, JsonlDataset
-from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator, LabeledBowEstimator
+from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 
 
@@ -40,10 +40,10 @@ class BaseTrainer(object):
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, vocabulary, train_data_path, test_data_path, aux_data_path, val_each_epoch, rng_seed):
-        self.train_data_path   = train_data_path
-        self.test_data_path    = test_data_path
-        self.aux_data_path     = aux_data_path
+    def __init__(self, vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, val_each_epoch, rng_seed):
+        self.train_data_or_path   = train_data_or_path
+        self.test_data_or_path    = test_data_or_path
+        self.aux_data_or_path     = aux_data_or_path
         self.rng_seed     = rng_seed
         self.vocabulary   = vocabulary
         self.vocab_cache  = {}
@@ -91,6 +91,16 @@ class BaseTrainer(object):
             vocab.set_embedding(None) ## unset embedding
             emb_size = -1
         return vocab, emb_size
+
+
+    def _get_x_y_data(self, data_source):
+        if isinstance(data_source, str):
+            X, y, _, _ = file_to_data(data_source, len(self.vocabulary))
+        elif isinstance(data_source, tuple):
+            X, y = data_source
+        else:
+            X, y = data_source, None
+        return X, y
         
 
     def x_get_mxnet_visible_gpus(self):
@@ -141,7 +151,7 @@ class BaseTrainer(object):
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
         best_model = None
-        if self.test_data_path is not None:
+        if self.test_data_or_path is not None:
             #if c_args.tst_vec_file:
             #    trainer.set_heldout_data_path_as_test()        
             logging.info("Training with config: {}".format(config))
@@ -187,37 +197,33 @@ class BaseTrainer(object):
         raise NotImplementedError()
 
 
-
 class BowVAETrainer(BaseTrainer):
     """Trainer for bag-of-words VAE topic models.
     
     Parameters:
+        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
         log_out_dir (str): String path to directory for outputting log file and potentially saved model information
         model_out_dir (str): Explicit string path to saved model information
-        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
-        wd_freqs (`mxnet.ndarray.NDArray`): Tensor representing term frequencies in training dataset used to 
-            initialize decoder bias weights.
-        train_data_path (str): Training input path
-        test_data_path (str): Testing/validation input path
+        train_data_or_path (`scipy.sparse.csr.csr_matrix`|str): Training input path
+        test_data_or_path (`scipy.sparse.csr.csr_matrix`|str): Testing/validation input path
         use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
         val_each_epoch (bool): Perform validation (NPMI and perplexity) on the validation set after each epoch. Default = False.
         rng_seed (int): Seed for random number generator. Default = 1234
     """
-    def __init__(self, log_out_dir, model_out_dir, vocabulary, wd_freqs, train_data_path, 
-                 test_data_path, coherence_via_encoder=False, aux_data_path=None,
+    def __init__(self, vocabulary, train_data_or_path, test_data_or_path,
+                 log_out_dir='_exps', model_out_dir='_model_dir', coherence_via_encoder=False, aux_data_or_path=None,
                  pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False,
-                 use_gpu=False, n_covars=None,
+                 use_gpu=False, n_labels=0,
                  val_each_epoch=True, rng_seed=1234):
-        super().__init__(vocabulary, train_data_path, test_data_path, aux_data_path, val_each_epoch, rng_seed)
+        super().__init__(vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, val_each_epoch, rng_seed)
         if not log_utils.CONFIGURED:
             logging_config(folder=log_out_dir, name='tmnt', level='info', console_level='info')
         self.log_out_dir = log_out_dir
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
-        self.wd_freqs = wd_freqs
         self.seed_matrix = None
         self.pretrained_param_file = pretrained_param_file
-        self.n_covars = n_covars
+        self.n_labels = n_labels
         self.use_labels_as_covars = use_labels_as_covars
         self.coherence_via_encoder = coherence_via_encoder
         if topic_seed_file:
@@ -254,14 +260,14 @@ class BowVAETrainer(BaseTrainer):
         voc_size = len(vocab)
         X, y, wd_freqs, _ = file_to_data(c_args.tr_vec_file, voc_size)
         model_out_dir = c_args.model_dir if c_args.model_dir else os.path.join(log_out_dir, 'MODEL')
-        n_covars = int(float(np.max(y)) + 1)
+        n_labels = int(float(np.max(y)) + 1)
         if not os.path.exists(model_out_dir):
             os.mkdir(model_out_dir)
         return cls(log_out_dir, model_out_dir, vocab, wd_freqs, c_args.tr_vec_file, c_args.val_vec_file,
                    coherence_via_encoder=c_args.encoder_coherence,
                    pretrained_param_file=c_args.pretrained_param_file, topic_seed_file=c_args.topic_seed_file,
                    use_labels_as_covars=c_args.use_labels_as_covars,
-                                use_gpu=c_args.use_gpu, n_covars=n_covars, val_each_epoch=val_each_epoch)
+                                use_gpu=c_args.use_gpu, n_labels=n_labels, val_each_epoch=val_each_epoch)
 
 
     def pre_cache_vocabularies(self, sources):
@@ -292,14 +298,15 @@ class BowVAETrainer(BaseTrainer):
         embedding_source = config.embedding.source
         vocab, _ = self._initialize_vocabulary(embedding_source)
         if self.use_labels_as_covars:
-            estimator = CovariateBowEstimator.from_config(self.n_covars, config, vocab,
+            estimator = CovariateBowEstimator.from_config(self.n_labels, config, vocab,
                                                      pretrained_param_file=self.pretrained_param_file,
-                                                     wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
+                                                     reporter=reporter, ctx=ctx)
         else:
-           estimator = BowEstimator.from_config(config, vocab, coherence_via_encoder=self.coherence_via_encoder,
+           estimator = BowEstimator.from_config(config, vocab, n_labels=self.n_labels,
+                                                coherence_via_encoder=self.coherence_via_encoder,
                                                 validate_each_epoch=self.validate_each_epoch,
                                                 pretrained_param_file=self.pretrained_param_file,
-                                                wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
+                                                reporter=reporter, ctx=ctx)
         return estimator
     
 
@@ -321,11 +328,11 @@ class BowVAETrainer(BaseTrainer):
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         vae_estimator = self._get_estimator(config, reporter, ctx)
-        X, y, _, _ = file_to_data(self.train_data_path, len(self.vocabulary))
-        if self.test_data_path is None:
+        X, y = self._get_x_y_data(self.train_data_or_path)
+        if self.test_data_or_path is None:
             vX, vy = None, None
         else:
-            vX, vy, _, _ = file_to_data(self.test_data_path, len(self.vocabulary))
+            vX, vy = self._get_x_y_data(self.test_data_or_path)
         obj, v_res = vae_estimator.fit_with_validation(X, y, vX, vy)
         return vae_estimator, obj, v_res
 
@@ -341,26 +348,6 @@ class BowVAETrainer(BaseTrainer):
             estimator.write_model(model_dir)
         else:
             raise Exception("Model write failed, output directory not provided")
-
-
-class LabeledBowVAETrainer(BowVAETrainer):
-
-    def __init__(self, n_labels, *args, **kwargs):
-        self.n_labels = n_labels
-        super(LabeledBowVAETrainer, self).__init__(*args, **kwargs)
-
-
-    def _get_estimator(self, config, reporter, ctx):
-        embedding_source = config.embedding.source
-        #n_labels = config['num_labels']
-        n_labels = self.n_labels
-        gamma    = config.get('gamma') or 1.0
-        vocab, _ = self._initialize_vocabulary(embedding_source)
-        estimator = LabeledBowEstimator.from_config(n_labels, gamma, config, vocab,
-                                                     pretrained_param_file=self.pretrained_param_file,
-                                                     wd_freqs=self.wd_freqs, reporter=reporter, ctx=ctx)
-        estimator.validate_each_epoch = self.validate_each_epoch
-        return estimator
 
 
 

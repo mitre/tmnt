@@ -25,7 +25,11 @@ class BaseTMNTConfig(object):
     def _get_range_uniform(self, param, cd):
         if cd.get(param):            
             p = cd[param]
-            if len(p['range']) == 1:
+            if isinstance(p, float):
+                return p
+            elif isinstance(p, int):
+                return float(p)
+            elif len(p['range']) == 1:
                 return float(p['range'][0])
             low = float(p['range'][0])
             upp = float(p['range'][1])
@@ -44,6 +48,8 @@ class BaseTMNTConfig(object):
     def _get_range_integer(self, param, cd, q=1):
         if cd.get(param):
             p = cd[param]
+            if isinstance(p, int):
+                return p
             if len(p['i_range']) == 1:
                 return int(p['i_range'][0])
             low = int(p['i_range'][0])
@@ -68,8 +74,16 @@ class BaseTMNTConfig(object):
 
     def _get_categorical(self, param, cd):
         if cd.get(param):
-            categories = cd[param]
-            return ag.space.Categorical(*categories)
+            v = cd[param]
+            if isinstance(v, str):
+                return v
+            return ag.space.Categorical(*v)
+        else:
+            return None
+
+    def _get_atomic(self, param, cd):
+        if cd.get(param):
+            return cd[param]
         else:
             return None
 
@@ -93,6 +107,8 @@ class TMNTConfigBOW(BaseTMNTConfig):
         cd = self.cd
         sp_dict = {}
         sp_dict['epochs'] = int(cd['epochs'])
+        sp_dict['gamma'] = self._get_range_uniform('gamma', cd)
+        sp_dict['multilabel'] = self._get_atomic('multilabel', cd)
         sp_dict['lr'] = self._get_range_uniform('lr', cd)
         sp_dict['optimizer'] = self._get_categorical('optimizer', cd)
         sp_dict['n_latent'] = self._get_range_integer('n_latent',cd)
@@ -151,9 +167,9 @@ class TMNTConfigSeqBOW(BaseTMNTConfig):
         sp_dict['embedding_source'] = self._get_categorical('embedding_source', cd)
         sp_dict['redundancy_reg_penalty'] = self._get_range_uniform('redundancy_reg_penalty', cd)
         sp_dict['max_seq_len'] = self._get_range_integer('max_seq_len', cd)
-        sp_dict['bert_model_name'] = cd['bert_model_name']
-        sp_dict['bert_dataset'] = cd['bert_dataset']
-        sp_dict['use_labels'] = cd['use_labels']
+        sp_dict['bert_model_name'] = self._get_categorical('bert_model_name', cd)
+        sp_dict['bert_dataset'] = self._get_categorical('bert_dataset', cd)
+        sp_dict['use_labels'] = self._get_atomic('use_labels')
         sp_dict['classifier_dropout'] = self._get_range_uniform('classifier_dropout', cd)
         latent_types = cd['latent_distribution']
         latent_space = []

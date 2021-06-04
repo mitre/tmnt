@@ -1,6 +1,8 @@
 ## Learnable hyper-parameters 
 ---
   epochs: 27 ## this is the fixed/target number of training epochs
+  gamma: 1.0
+  multilabel: false
   lr: {range: [1e-4, 4e-2]}
   batch_size: {i_range: [100, 400], step: 100}  ## batch size should be larger for larger datasets (as long as vocabulary isn't too large)
   latent_distribution: [{dist_type: vmf, kappa: {range: [1.0, 100.0]}}, {dist_type: gaussian}, {dist_type: logistic_gaussian, alpha: {range: [0.5, 2.0]}}]
