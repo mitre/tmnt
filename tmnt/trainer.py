@@ -336,16 +336,16 @@ class BowVAETrainer(BaseTrainer):
         obj, v_res = vae_estimator.fit_with_validation(X, y, vX, vy)
         return vae_estimator, obj, v_res
 
-    def write_model(self, estimator, config):
-        """Method to write an estimated model to disk along with configuration used to train the model and the vocabulary.
+    def write_model(self, estimator):
+        """Method to write an estimated model to disk
 
         Parameters:
-            model (tmnt.estimator.BowEstimator): BOW Estimator
-            config (tmnt.configuration.TMNTConfigBOW): Configuration for models of tmnt.modeling.BowVAEModel type
+            estimator (tmnt.estimator.BowEstimator): BOW Estimator
         """
-        model_dir = self.model_out_dir
-        if model_dir:
-            estimator.write_model(model_dir)
+        if self.model_out_dir:
+            mpath = Path(self.model_out_dir)
+            mpath.mkdir(parents=True, exist_ok=True)
+            estimator.write_model(self.model_out_dir)
         else:
             raise Exception("Model write failed, output directory not provided")
 

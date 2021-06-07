@@ -6,7 +6,7 @@ Another example with 20 news dataset. This involves
 building a model using the labels as prediction targets.
 """
 
-from tmnt.estimator import BowEstimator, LabeledBowEstimator
+from tmnt.estimator import BowEstimator
 import numpy as np
 import gluonnlp as nlp
 import os
@@ -27,7 +27,7 @@ gamma = 1.0 ## balanced unsupervised and supservised losses
 ## total loss = topic_loss + gamma * classification_loss
 
 l_estimator = BowEstimator(tf_vectorizer.get_vocab(), n_labels=num_label_values, gamma=gamma)
-_ = l_estimator.fit(X, y) # fit a covariate model using y
+_ = l_estimator.fit(X, y) # fit a joint topic + classification model using y
 v_results = l_estimator.validate(X, y)
 l_inferencer = BowVAEInferencer(l_estimator.model)
 embeddings = l_inferencer.get_umap_embeddings(X)
