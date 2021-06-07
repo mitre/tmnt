@@ -131,7 +131,7 @@ class BaseSelector(object):
         logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
         model, obj = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
         logging.info("Objective with final retrained model: {}".format(obj))
-        trainer.write_model(model, best_config)
+        trainer.write_model(model)
         with open(os.path.join(self.log_dir, 'best.model.config'), 'w') as fp:
             specs = json.dumps(best_config)
             fp.write(specs)
