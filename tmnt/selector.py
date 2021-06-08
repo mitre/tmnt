@@ -39,7 +39,7 @@ class BaseSelector(object):
         log_dir (str): Directory for output of model selection info (default = ./_exps)
     """
     
-    def __init__(self, tmnt_config_space, iterations=12, searcher='random', scheduler='fifo', brackets=1, cpus_per_task=2, use_gpu=False,
+    def __init__(self, tmnt_config_space, iterations=12, searcher='random', scheduler='fifo', brackets=1, cpus_per_task=2, 
                  num_final_evals=1, rng_seed=1234, log_dir='_exps', max_task_time=120000):
         self.tmnt_config_space = tmnt_config_space
         self.iterations = iterations
@@ -47,7 +47,6 @@ class BaseSelector(object):
         self.scheduler = scheduler
         self.brackets = brackets
         self.cpus_per_task = cpus_per_task
-        self.use_gpu = use_gpu
         self.num_final_evals = num_final_evals
         self.rng_seed = rng_seed
         self.log_dir = log_dir

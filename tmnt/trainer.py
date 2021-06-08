@@ -40,10 +40,11 @@ class BaseTrainer(object):
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, val_each_epoch, rng_seed):
+    def __init__(self, vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, use_gpu, val_each_epoch, rng_seed):
         self.train_data_or_path   = train_data_or_path
         self.test_data_or_path    = test_data_or_path
         self.aux_data_or_path     = aux_data_or_path
+        self.use_gpu      = use_gpu
         self.rng_seed     = rng_seed
         self.vocabulary   = vocabulary
         self.vocab_cache  = {}
@@ -215,12 +216,11 @@ class BowVAETrainer(BaseTrainer):
                  pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False,
                  use_gpu=False, n_labels=0,
                  val_each_epoch=True, rng_seed=1234):
-        super().__init__(vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, val_each_epoch, rng_seed)
+        super().__init__(vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, use_gpu, val_each_epoch, rng_seed)
         if not log_utils.CONFIGURED:
             logging_config(folder=log_out_dir, name='tmnt', level='info', console_level='info')
         self.log_out_dir = log_out_dir
         self.model_out_dir = model_out_dir
-        self.use_gpu = use_gpu
         self.seed_matrix = None
         self.pretrained_param_file = pretrained_param_file
         self.n_labels = n_labels
@@ -363,7 +363,7 @@ class SeqBowVEDTrainer(BaseTrainer):
     """
     def __init__(self, model_out_dir, train_data_path, 
                  test_data_path, aux_data_path=None, use_gpu=False, log_interval=10, rng_seed=1234):
-        super().__init__(None, train_data_path, test_data_path, aux_data_path, True, rng_seed)
+        super().__init__(None, train_data_path, test_data_path, aux_data_path, use_gpu, True, rng_seed)
         self.model_out_dir = model_out_dir
         self.use_gpu = use_gpu
         self.kld_wt = 1.0
