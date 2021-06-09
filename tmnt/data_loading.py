@@ -26,6 +26,25 @@ from sklearn.utils import shuffle as sk_shuffle
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 
 
+def to_label_matrix(yvs, num_labels=0):
+    """Convert [(id1, id2, ...), (id1,id2,...) ... ] to Numpy matrix with multi-labels
+    """
+    if num_labels == 0:
+        mx_val = 0
+        for yi in yvs:
+            for v in yi:
+                if v > mx_val:
+                    mx_val = v
+        num_labels = int(mx_val + 1)
+    li = []
+    for yi in yvs:
+        a = np.zeros(num_labels)
+        a[np.array(yi, dtype='int64')] = 1.0
+        li.append(a)
+    return np.array(li), num_labels
+
+
+
 class SparseMatrixDataIter(DataIter):
     def __init__(self, data, label=None, batch_size=1, shuffle=False,
                  last_batch_handle='pad', data_name='data',
