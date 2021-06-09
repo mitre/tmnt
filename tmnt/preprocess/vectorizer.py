@@ -248,7 +248,8 @@ class TMNTVectorizer(object):
     def write_to_vec_file(self, X, y, vec_file):
         if y is None:
             y = np.zeros(X.shape[0])
-        dump_svmlight_file(X, y, vec_file)
+        multilabel = len(y.shape) > 1
+        dump_svmlight_file(X, y, vec_file, multilabel=multilabel)
 
     def write_vocab(self, vocab_file):
         vocab = self.get_vocab()
