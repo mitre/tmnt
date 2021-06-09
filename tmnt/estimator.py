@@ -294,8 +294,8 @@ class BaseBowEstimator(BaseEstimator):
                 emb_size = config.derived_info.get('embedding_size')
             if not emb_size:
                 raise Exception("Embedding size must be provided as the 'size' attribute of 'embedding' or as 'derived_info.embedding_size'")
-        gamma = config.gamma
-        multilabel = config.multilabel
+        gamma = config.get('gamma', 1.0)
+        multilabel = config.get('multilabel', False)
         lr = config.lr
         latent_distrib = config.latent_distribution
         optimizer = config.optimizer

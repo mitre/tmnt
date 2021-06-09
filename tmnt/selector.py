@@ -32,7 +32,6 @@ class BaseSelector(object):
         scheduler (str): Scheduler for search (fifo, hyperband) (default = fifo)
         brackets (int): Number of brackets (if using hyperband) (default = 1)
         cpus_per_task (int): Number of cpus to evaluate each model (increase to limit concurrency); (default = 2)
-        use_gpu (bool): Whether to use GPUs when training each model (default = False)
         num_final_evals (int): Number of model refits and evaluations (with different random seeds) using the 
             best found configuration (default = 1)
         rng_seed (int): Random seed used for model selection evaluations (default = 1234)
@@ -81,7 +80,7 @@ class BaseSelector(object):
         'num_init_random': 2,
         'debug_log': True}
 
-        num_gpus = 1 if self.use_gpu else 0
+        num_gpus = 1 if trainer.use_gpu else 0
         if self.scheduler == 'hyperband':
             hpb_scheduler = ag.scheduler.HyperbandScheduler(
                 exec_train_fn,
@@ -155,15 +154,14 @@ def model_select_bow_vae(c_args):
     tmnt_config = TMNTConfigBOW(c_args.config_space).get_configspace()
     trainer = BowVAETrainer.from_arguments(c_args, val_each_epoch = (not (c_args.searcher == 'random')))
     selector = BaseSelector(tmnt_config,
-                            c_args.iterations,
-                            c_args.searcher,
-                            c_args.scheduler,
-                            c_args.brackets,
-                            c_args.cpus_per_task,
-                            c_args.use_gpu,
-                            c_args.num_final_evals,
-                            c_args.seed,
-                            trainer.log_out_dir)
+                            iterations      = c_args.iterations,
+                            searcher        = c_args.searcher,
+                            scheduler       = c_args.scheduler,
+                            brackets        = c_args.brackets,
+                            cpus_per_task   = c_args.cpus_per_task,
+                            num_final_evals = c_args.num_final_evals,
+                            rng_seed        = c_args.seed,
+                            log_dir         = trainer.log_out_dir)
     sources = [ e['source'] for e in tmnt_config.get('embedding').data if e['source'] != 'random' ]
     logging.info('>> Pre-caching pre-trained embeddings/vocabularies: {}'.format(sources))
     trainer.pre_cache_vocabularies(sources)
@@ -175,15 +173,14 @@ def model_select_seq_bow(c_args):
     tmnt_config = TMNTConfigSeqBOW(c_args.config_space).get_configspace()
     trainer = SeqBowVEDTrainer.from_arguments(c_args, tmnt_config)
     selector = BaseSelector(tmnt_config,
-                            c_args.iterations,
-                            c_args.searcher,
-                            c_args.scheduler,
-                            c_args.brackets,
-                            c_args.cpus_per_task,
-                            c_args.use_gpu,
-                            c_args.num_final_evals,
-                            c_args.seed,
-                            trainer.model_out_dir)
+                            iterations=c_args.iterations,
+                            searcher=c_args.searcher,
+                            scheduler=c_args.scheduler,
+                            brackets=c_args.brackets,
+                            cpus_per_task=c_args.cpus_per_task,
+                            num_final_evals=c_args.num_final_evals,
+                            rng_seed=c_args.seed,
+                            log_dir=trainer.model_out_dir)
     selector.select_model(trainer)
     
         

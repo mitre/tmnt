@@ -263,11 +263,13 @@ class BowVAETrainer(BaseTrainer):
         n_labels = int(float(np.max(y)) + 1)
         if not os.path.exists(model_out_dir):
             os.mkdir(model_out_dir)
-        return cls(log_out_dir, model_out_dir, vocab, wd_freqs, c_args.tr_vec_file, c_args.val_vec_file,
+        return cls(vocab, c_args.tr_vec_file, c_args.val_vec_file,
                    coherence_via_encoder=c_args.encoder_coherence,
+                   log_out_dir=log_out_dir,
+                   model_out_dir=model_out_dir,
                    pretrained_param_file=c_args.pretrained_param_file, topic_seed_file=c_args.topic_seed_file,
                    use_labels_as_covars=c_args.use_labels_as_covars,
-                                use_gpu=c_args.use_gpu, n_labels=n_labels, val_each_epoch=val_each_epoch)
+                   use_gpu=c_args.use_gpu, n_labels=n_labels, val_each_epoch=val_each_epoch)
 
 
     def pre_cache_vocabularies(self, sources):
@@ -365,7 +367,6 @@ class SeqBowVEDTrainer(BaseTrainer):
                  test_data_path, aux_data_path=None, use_gpu=False, log_interval=10, rng_seed=1234):
         super().__init__(None, train_data_path, test_data_path, aux_data_path, use_gpu, True, rng_seed)
         self.model_out_dir = model_out_dir
-        self.use_gpu = use_gpu
         self.kld_wt = 1.0
         self.log_interval = log_interval
 
@@ -458,7 +459,7 @@ def train_bow_vae(args):
     trainer = BowVAETrainer.from_arguments(args, val_each_epoch=args.eval_each_epoch)
     config = ag.space.Dict(**config_dict)
     estimator, obj = trainer.train_with_single_config(config, args.num_final_evals)
-    trainer.write_model(estimator, config_dict)
+    trainer.write_model(estimator)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
         
