@@ -53,12 +53,14 @@ class TMNTVectorizer(object):
     def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1, label_remap=None,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
                  additional_feature_keys=None, stop_word_file=None, label_min_cnt=1, unknown_label=None,
+                 multilabel=False,
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
         self.label_key = label_key
         self.label_prefix = label_prefix
         self.label_remap = label_remap
+        self.multilabel  = multilabel
         self.min_doc_size = min_doc_size
         self.json_rewrite = json_out_dir is not None
         self.json_out_dir = json_out_dir

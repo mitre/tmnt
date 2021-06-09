@@ -92,7 +92,7 @@ class BowVAEInferencer(BaseInferencer):
 
 
     def get_model_details(self, sp_vec_file):
-        data_csr, labels = load_svmlight_file(sp_vec_file)
+        data_csr, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab))
         data_csr = mx.nd.sparse.csr_matrix(data_csr, dtype='float32')
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
