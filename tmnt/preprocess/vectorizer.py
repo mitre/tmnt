@@ -47,20 +47,21 @@ class TMNTVectorizer(object):
         label_min_cnt (int): Minimum number of occurrences of label; instance provided label id -1 if label occurs less than this value
         unknown_label (str): Label value that corresponds to label UNKNOWN.  Note that in addition to specifying this, if the label key
             is not found, the label will be treated as unknown (i.e. value of -1)
+        split_char (str): Single character string used to split label string into multiple labels (for multilabel classification tasks)
         count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
     """
 
     def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1, label_remap=None,
                  json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
                  additional_feature_keys=None, stop_word_file=None, label_min_cnt=1, unknown_label=None,
-                 multilabel=False,
+                 split_char=',',
                  count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
         self.label_key = label_key
         self.label_prefix = label_prefix
         self.label_remap = label_remap
-        self.multilabel  = multilabel
+        self.split_char  = split_char
         self.min_doc_size = min_doc_size
         self.json_rewrite = json_out_dir is not None
         self.json_out_dir = json_out_dir
@@ -182,14 +183,15 @@ class TMNTVectorizer(object):
         return rr
 
     def _get_y_strs(self, json_file):
-        ys = []
+        ys = [] # ys will be a list of lists of strings to accomodate multilabel data
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for j in fp:
                 js = json.loads(j)
                 label_string = js.get(self.label_key) or self.unknown_label
+                label_string_list = label_string.split(self.split_char)
                 if self.label_remap:
-                    label_string = self.label_remap.get(label_string) or label_string
-                ys.append(label_string)
+                    label_string_list = [ self.label_remap.get(label_string) or label_string for label_string in label_string_list ]
+                ys.append(label_string_list) 
         return ys
 
     def _get_y_strs_dir(self, json_dir):
@@ -201,6 +203,7 @@ class TMNTVectorizer(object):
         return ys
 
     def _get_y_ids(self, y_strs):
+        # y_strs is a list of lists of strings
         fixed = len(self.label_map) > 1
         lab_map = self.label_map
         def _update(s):
@@ -214,10 +217,21 @@ class TMNTVectorizer(object):
                 else:
                     i = -1
             return i
-        cnts = collections.Counter(y_strs)
-        y_ids = [ (_update(ys) if cnts[ys] >= self.label_min_cnt else -1) for ys in y_strs ]
+        cnts = collections.Counter([s for yi in y_strs for s in yi])
+        y_ids = [ [ (_update(ys) if cnts[ys] >= self.label_min_cnt else -1) for ys in y_str_list ] for y_str_list in y_strs ]
+        max_ids_per_instance = max([ len(yi_s) for yi_s in y_ids ])
+        if max_ids_per_instance == 1:
+            y_ids = np.array([ i for yi in y_ids for i in yi ]) ## flatten if we only have single label classification (most situations)
+        else:
+            li = []
+            for yi in y_ids:
+                a = np.zeros(len(lab_map))
+                a[np.array(yi, dtype='int64')] = 1.0
+                li.append(a)
+            y_ids = np.array(li)
         self.label_map = lab_map
         return y_ids
+
 
     def _get_ys(self, json_file):
         if self.label_key is not None:
