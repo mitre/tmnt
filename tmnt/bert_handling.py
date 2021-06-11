@@ -17,6 +17,7 @@ from gluonnlp.data.dataset import SimpleDataset, Dataset
 import json
 import collections
 from tmnt.preprocess.vectorizer import TMNTVectorizer
+from tmnt.data_loading import to_label_matrix
 
 from gluonnlp.data import BERTSentenceTransform
 
@@ -117,6 +118,8 @@ class BERTDatasetTransform(object):
         TMNTVectorizer to generate bag of words
     bert_vocab_size: int
         Use the raw BERT word-pieces as the bag-of-words vocabulary
+    num_classes: int
+        Must be provided if class_labels isn't provided
     """
 
     def __init__(self,
@@ -128,12 +131,14 @@ class BERTDatasetTransform(object):
                  pair=True,
                  has_label=True,
                  vectorizer=None,
-                 bert_vocab_size=0):
+                 bert_vocab_size=0,
+                 num_classes=None):
         self.class_labels = class_labels
         self.has_label = has_label
         self.use_bert_bow = bert_vocab_size > 0
         self.bert_vocab_size = bert_vocab_size
         self._label_dtype = 'int32' if class_labels else 'float32'
+        self.num_classes = len(class_labels) if class_labels else num_classes
         if has_label and class_labels:
             self._label_map = {}
             for (i, label) in enumerate(class_labels):
@@ -197,7 +202,7 @@ class BERTDatasetTransform(object):
         np.array: input token ids in 'int32', shape (seq_length,)
         np.array: valid length in 'int32', shape (1,)
         np.array: input token type ids in 'int32', shape (seq_length,)
-        np.array: classification task: label id in 'int32', shape (1,),
+        np.array: classification task: label id in 'int32', shape (num_classes,),
             regression task: label in 'float32', shape (1,)
         """
         if self.has_label:
@@ -206,11 +211,12 @@ class BERTDatasetTransform(object):
             # map to int if class labels are available
             if self.class_labels:
                 labels = [ self._label_map.get(label) for label in label_str.split(',') ]
-                if label is None:
+                if labels is None:
                     labels = [-1]
             else:
-                raise Exception("Class labels must be provided")
-            label = np.array(labels, dtype=self._label_dtype)
+                labels=[int(label_str)]
+            #label = np.array(labels, dtype=self._label_dtype)
+            label_mat, _ = to_label_matrix([labels], num_labels=self.num_classes)
             bow = None
             if self.use_bert_bow:
                 bow = np.zeros(self.bert_vocab_size)
@@ -220,51 +226,11 @@ class BERTDatasetTransform(object):
             elif self.vectorizer:
                 bow,_ = self.vectorizer.transform(line[:-1])
                 bow = mx.nd.array(bow, dtype='float32')
-            return input_ids, valid_length, segment_ids, bow, label
+            return input_ids, valid_length, segment_ids, bow, label_mat[0]
         else:
             return self._bert_xform(line)
 
 
-def preprocess_data(trans, class_labels, train_ds, dev_ds, batch_size, max_len,
-                    pad=False):
-    """Train/eval Data preparation function."""
-    pool = multiprocessing.Pool()
-
-    # transformation for data train and dev
-    label_dtype = 'float32' # if not task.class_labels else 'int32'
-    bow_count_dtype = 'float32'
-    # data train
-    data_train = mx.gluon.data.SimpleDataset(pool.map(trans, train_ds))
-    data_train_len = data_train.transform(
-        lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
-    # bucket sampler for training
-    batchify_fn = nlp.data.batchify.Tuple(
-        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
-    num_buckets = min(6, len(train_ds) // batch_size)
-    batch_sampler = nlp.data.sampler.FixedBucketSampler(
-        data_train_len,
-        batch_size=batch_size,
-        num_buckets=num_buckets,
-        ratio=0.2, # may avoid batches with size = 1 (which triggers a bug)
-        shuffle=True)
-    # data loader for training
-    loader_train = gluon.data.DataLoader(
-        dataset=data_train,
-        num_workers=4,
-        batch_sampler=batch_sampler,
-        batchify_fn=batchify_fn)
-
-    data_dev = mx.gluon.data.SimpleDataset(pool.map(trans, dev_ds))
-    loader_dev = mx.gluon.data.DataLoader(
-            data_dev,
-            batch_size=batch_size,
-            num_workers=4,
-            shuffle=False,
-            batchify_fn=batchify_fn)
-
-    loader_test = None
-    return loader_train, loader_dev, loader_test, len(data_train)
 
 def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train_mode=True, pad=False):
     pool = multiprocessing.Pool()
@@ -315,7 +281,10 @@ def get_bert_datasets(class_labels,
                       pad=False,
                       use_bert_vocab=False,
                       label_alias=None,
+                      num_classes = None,
                       ctx=mx.cpu()):
+    if class_labels is None and num_classes is None:
+        raise Exception("Must provide class_labels or num_classes")
     bert, bert_vocabulary = get_model(
         name=bert_model_name,
         dataset_name=bert_dataset,
@@ -332,7 +301,8 @@ def get_bert_datasets(class_labels,
                                  pad=pad, pair=False,
                                  has_label=True,
                                  vectorizer=vectorizer,
-                                 bert_vocab_size = len(bert_vocabulary) if use_bert_vocab else 0)
+                                 bert_vocab_size = len(bert_vocabulary) if use_bert_vocab else 0,
+                                 num_classes = num_classes)
     train_data, num_train_examples = preprocess_seq_data(trans, class_labels, train_ds, batch_size, max_len, train_mode=True, pad=pad)
     dev_data, _ = preprocess_seq_data(trans, class_labels, dev_ds, batch_size, max_len, train_mode=False, pad=pad)
     if aux_ds:

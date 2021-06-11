@@ -868,7 +868,7 @@ class SeqBowEstimator(BaseEstimator):
         self.metric = mx.metric.Accuracy()
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
-        self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
+        self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss(sparse_label=False)
         self.gamma = gamma
         self.decoder_lr = decoder_lr
         self._bow_matrix = None
@@ -1028,11 +1028,15 @@ class SeqBowEstimator(BaseEstimator):
             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
         if self.has_classifier:
             label = label.as_in_context(self.ctx)
+            print("Label: {}".format(label))
             label_ls = self.loss_function(out, label)
             label_ls = label_ls.mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
             ## update label metric (e.g. accuracy)
-            self.metric.update(labels=[label], preds=[out])
+            ## labels are assumed to be one-hot (or k-hot for multilabel)
+            if int(label.sum().asscalar()) == label.shape[0]:
+                label_ind = label.argmax(axis=1)
+                self.metric.update(labels=[label_ind], preds=[out])
         else:
             total_ls = elbo_ls.mean()
             label_ls = mx.nd.zeros(total_ls.shape)        
