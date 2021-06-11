@@ -202,13 +202,15 @@ class BERTDatasetTransform(object):
         """
         if self.has_label:
             input_ids, valid_length, segment_ids = self._bert_xform(line[:-1])
-            label = line[-1]
+            label_str = line[-1]
             # map to int if class labels are available
             if self.class_labels:
-                label = self._label_map.get(label)
+                labels = [ self._label_map.get(label) for label in label_str.split(',') ]
                 if label is None:
-                    label = -1
-            label = np.array([label], dtype=self._label_dtype)
+                    labels = [-1]
+            else:
+                raise Exception("Class labels must be provided")
+            label = np.array(labels, dtype=self._label_dtype)
             bow = None
             if self.use_bert_bow:
                 bow = np.zeros(self.bert_vocab_size)

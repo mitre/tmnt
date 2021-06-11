@@ -462,6 +462,7 @@ class BaseBowEstimator(BaseEstimator):
                 val_y = val_y[:50000]
             npmi, redundancy = self._npmi(val_X, val_y)
         v_res = {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
+        prediction_arrays = []
         if self.has_classifier:
             tot_correct = 0
             tot = 0
@@ -469,15 +470,29 @@ class BaseBowEstimator(BaseEstimator):
             num_std_batches = val_X.shape[0] // bs
             last_batch_size = val_X.shape[0] % bs
             for i, (data, labels) in enumerate(val_dataloader):
-                if i < num_std_batches - 1:
-                    data = data.as_in_context(self.ctx)
-                    labels = labels.as_in_context(self.ctx)
-                    predictions = self.model.predict(data)
+                data = data.as_in_context(self.ctx)
+                labels = labels.as_in_context(self.ctx)
+                if i == num_std_batches - 1 and last_batch_size > 0:
+                    data = data[:last_batch_size]
+                    labels = labels[:last_batch_size]
+                predictions = self.model.predict(data)    
+                predictions_lists = [ p.asnumpy() for p in list(predictions) ]
+                prediction_arrays.extend(predictions_lists)
+                if len(labels.shape) == 1:  ## standard single-label classification
                     correct = mx.nd.argmax(predictions, axis=1) == labels
                     tot_correct += mx.nd.sum(correct).asscalar()
-                    tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0
+                tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0 (for unlabeled data)
             acc = float(tot_correct) / float(tot)
             v_res['accuracy'] = acc
+            prediction_mat = np.array(prediction_arrays)
+            ap_scores = []
+            for c in range(self.n_labels):
+                y_vec = val_y[:,c]
+                pred_vec = prediction_mat[:,c]
+                ap_c = average_precision_score(y_vec, pred_vec)
+                ap_scores.append((ap_c, int(y_vec.sum())))
+            prediction_np_mat = np.array(prediction_arrays)
+            v_res['ap_scores_and_support'] = ap_scores
         return v_res
     
 

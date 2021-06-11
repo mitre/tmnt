@@ -96,7 +96,7 @@ class TMNTVectorizer(object):
         wds = []
         with io.open(f, 'r', encoding=self.encoding) as fp:
             for w in fp:
-                wds.append(w)
+                wds.append(w.strip())
         return list(set(wds))
 
     
