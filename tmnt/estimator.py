@@ -25,7 +25,7 @@ import umap
 #import umap.plot
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score
+from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, f1_score
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
@@ -34,7 +34,26 @@ from tmnt.distribution import HyperSphericalDistribution
 import autogluon.core as ag
 from itertools import cycle
 
-MAX_DESIGN_MATRIX = 250000000 
+MAX_DESIGN_MATRIX = 250000000
+
+
+def multilabel_eval_fn(cutoff):
+    
+    def multilabel_eval_fn_x(label, pred):
+        num_labels = label[0].shape[0]
+        w_sum = 0
+        total = 0
+        for c in range(num_labels):
+            y_vec = label[0,:,c].asnumpy()
+            pred_vec = pred[0,:,c].asnumpy()
+            pred_decision = np.where(pred_vec >= cutoff, 1.0, 0.0)
+            f1_score = f1_score(y_vec, pred_decision)
+            #ap_c = average_precision_score(y_vec, pred_vec)
+            support = y_vec.shape[0]
+            w_sum += f1_score * support
+            total += support
+        return w_sum / total
+    
 
 
 class BaseEstimator(object):
@@ -865,7 +884,7 @@ class SeqBowEstimator(BaseEstimator):
         self.classifier_dropout = classifier_dropout
         self.multilabel = multilabel
         self.n_labels = n_labels
-        self.metric = mx.metric.Accuracy()
+        self.metric = mx.metric.CustomMetric(feval=multilabel_eval_fn) if multilabel else mx.metric.Accuracy()
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss(sparse_label=False)
@@ -1036,6 +1055,9 @@ class SeqBowEstimator(BaseEstimator):
             if int(label.sum().asscalar()) == label.shape[0]:
                 label_ind = label.argmax(axis=1)
                 self.metric.update(labels=[label_ind], preds=[out])
+            else:
+                # here we assume labels are k-hot vectors for multilabel classification
+                self.metric.update(labels=[label], preds=[out])
         else:
             total_ls = elbo_ls.mean()
             label_ls = mx.nd.zeros(total_ls.shape)        
