@@ -1028,7 +1028,6 @@ class SeqBowEstimator(BaseEstimator):
             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
         if self.has_classifier:
             label = label.as_in_context(self.ctx)
-            print("Label: {}".format(label))
             label_ls = self.loss_function(out, label)
             label_ls = label_ls.mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
