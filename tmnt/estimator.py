@@ -497,10 +497,8 @@ class BaseBowEstimator(BaseEstimator):
         if self.coherence_via_encoder:
             npmi, redundancy = self._npmi_with_dataloader(val_dataloader)
         else:
-            if val_X.shape[0] > 50000:
-                val_X = val_X[:50000]
-                val_y = val_y[:50000]
-            npmi, redundancy = self._npmi(val_X, val_y)
+            n = min(val_X.shape[0], 50000)
+            npmi, redundancy = self._npmi(val_X[:n], val_y[:n])
         v_res = {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
         prediction_arrays = []
         if self.has_classifier:
