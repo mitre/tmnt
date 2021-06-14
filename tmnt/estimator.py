@@ -145,6 +145,12 @@ class BaseEstimator(object):
         self.pretrained_param_file = pretrained_param_file
         self.warm_start = warm_start
         self.num_val_words = -1 ## will be set later for computing Perplexity on validation dataset
+
+
+    def _np_one_hot(self, vec, n_outputs):
+        ovec = np.zeros((vec.size, n_outputs))
+        ovec[np.arange(vec.size), vec] = 1
+        return ovec
         
 
     def _output_status(self, status_string):
@@ -521,7 +527,7 @@ class BaseBowEstimator(BaseEstimator):
             prediction_mat = np.array(prediction_arrays)
             ap_scores = []
             if len(val_y.shape) == 1:
-                val_y = val_y.one_hot(self.n_labels)
+                val_y = self._np_one_hot(val_y, self.n_labels)
             for c in range(self.n_labels):
                 y_vec = val_y[:,c]
                 pred_vec = prediction_mat[:,c]
