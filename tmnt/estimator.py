@@ -520,7 +520,7 @@ class BaseBowEstimator(BaseEstimator):
             v_res['accuracy'] = acc
             prediction_mat = np.array(prediction_arrays)
             ap_scores = []
-            if len(y_val.shape) == 1:
+            if len(val_y.shape) == 1:
                 val_y = val_y.one_hot(self.n_labels)
             for c in range(self.n_labels):
                 y_vec = val_y[:,c]
