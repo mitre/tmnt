@@ -38,9 +38,9 @@ if __name__ == '__main__':
         'tabulate>=0.8.7'
     ]
     if(environ.get('USE_CUDA') == '1'):
-        install_requires.append('mxnet-cu101<2.0.0,>=1.6.0')
+        install_requires.append('mxnet-cu101<1.8.0,>=1.6.0')
     else:
-        install_requires += ['mxnet<2.0.0,>=1.6.0']
+        install_requires += ['mxnet<1.8.0,>=1.6.0']
 
     class GPUCommand(install):
         user_options = install.user_options + [

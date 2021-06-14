@@ -25,7 +25,7 @@ import umap
 #import umap.plot
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, f1_score
+from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, f1_score, precision_recall_fscore_support
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
@@ -37,23 +37,38 @@ from itertools import cycle
 MAX_DESIGN_MATRIX = 250000000
 
 
-def multilabel_eval_fn(cutoff):
+def multilabel_pr_fn(cutoff, recall=False):
+
+    def get_recall_or_precision(yvec, pvec):
+        prec, rec, _, support = precision_recall_fscore_support(yvec, pvec, zero_division=0, average='samples')
+        if recall:
+            return rec
+        else:
+            return prec
     
-    def multilabel_eval_fn_x(label, pred):
+    def multilabel_recall_fn_x(label, pred):
         num_labels = label[0].shape[0]
-        w_sum = 0
-        total = 0
-        for c in range(num_labels):
-            y_vec = label[0,:,c].asnumpy()
-            pred_vec = pred[0,:,c].asnumpy()
-            pred_decision = np.where(pred_vec >= cutoff, 1.0, 0.0)
-            f1_score = f1_score(y_vec, pred_decision)
-            #ap_c = average_precision_score(y_vec, pred_vec)
-            support = y_vec.shape[0]
-            w_sum += f1_score * support
-            total += support
-        return w_sum / total
-    
+        #for c in range(num_labels):
+        #    y_vec = label[:,c]
+        #    pred_vec = pred[:,c]
+        #    pred_decision = np.where(pred_vec >= cutoff, 1.0, 0.0)
+        #    metric = get_recall_or_precision(y_vec, pred_decision)
+        #    w_sum += metric
+        #    total += y_vec.shape[0]
+        pred_decision = np.where(pred >= cutoff, 1.0, 0.0)
+        w_sum = get_recall_or_precision(label, pred_decision)
+        return w_sum, label.shape[0]
+
+    return multilabel_recall_fn_x
+
+def get_composite_p_and_r_metric():
+    metrics = mx.metric.CompositeEvalMetric()
+    prec_metric = mx.metric.CustomMetric(feval=multilabel_pr_fn(0.5, recall=False))
+    rec_metric = mx.metric.CustomMetric(feval=multilabel_pr_fn(0.5, recall=True))
+    metrics.add(prec_metric)
+    metrics.add(rec_metric)
+    return metrics
+
 
 
 class BaseEstimator(object):
@@ -884,7 +899,7 @@ class SeqBowEstimator(BaseEstimator):
         self.classifier_dropout = classifier_dropout
         self.multilabel = multilabel
         self.n_labels = n_labels
-        self.metric = mx.metric.CustomMetric(feval=multilabel_eval_fn) if multilabel else mx.metric.Accuracy()
+        self.metric = get_composite_p_and_r_metric() if multilabel else mx.metric.Accuracy()
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss(sparse_label=False)
@@ -995,9 +1010,9 @@ class SeqBowEstimator(BaseEstimator):
         metric_nm, metric_val = metric.get()
         if not isinstance(metric_nm, list):
             metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), (red_loss = {}), (class_loss = {}) lr={:.10f}, metrics: {:.10f}"
+        self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), (red_loss = {}), (class_loss = {}) lr={:.10f}, metrics[{}]: {}"
               .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, red_loss/log_interval,
-                      class_loss/log_interval, learning_rate, *metric_val))
+                      class_loss/log_interval, learning_rate, metric_nm, metric_val))
 
     def log_eval(self, batch_id, batch_num, metric, step_loss, rec_loss, log_interval):
         metric_nm, metric_val = metric.get()
@@ -1051,12 +1066,10 @@ class SeqBowEstimator(BaseEstimator):
             label_ls = label_ls.mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
             ## update label metric (e.g. accuracy)
-            ## labels are assumed to be one-hot (or k-hot for multilabel)
-            if int(label.sum().asscalar()) == label.shape[0]:
+            if not self.multilabel:
                 label_ind = label.argmax(axis=1)
                 self.metric.update(labels=[label_ind], preds=[out])
             else:
-                # here we assume labels are k-hot vectors for multilabel classification
                 self.metric.update(labels=[label], preds=[out])
         else:
             total_ls = elbo_ls.mean()
