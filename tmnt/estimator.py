@@ -490,11 +490,13 @@ class BaseBowEstimator(BaseEstimator):
         return val_dataloader
 
     def validate(self, val_X, val_y):
+        logging.info("Entering validate method")
         val_dataloader = self._get_val_dataloader(val_X, val_y)
         total_val_words = val_X.sum()
         if self.num_val_words < 0:
             self.num_val_words = total_val_words
         ppl = self._perplexity(val_dataloader, total_val_words)
+        logging.info("Validation ppl = {}".format(ppl))
         if self.coherence_via_encoder:
             npmi, redundancy = self._npmi_with_dataloader(val_dataloader)
         else:
@@ -633,6 +635,7 @@ class BaseBowEstimator(BaseEstimator):
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
             mx.nd.waitall()
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
+                logging.info('Performing validation ....')
                 v_res = self.validate(val_X, val_y)
                 sc_obj = self._get_objective_from_validation_result(v_res)
                 if self.has_classifier:
