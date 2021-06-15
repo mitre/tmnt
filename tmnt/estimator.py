@@ -502,6 +502,7 @@ class BaseBowEstimator(BaseEstimator):
             npmi, redundancy = self._npmi(val_X[:n])
         v_res = {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
         prediction_arrays = []
+        logging.info("Performing validation .. has_classifier = {}".format(self.has_classifier))
         if self.has_classifier:
             tot_correct = 0
             tot = 0
@@ -551,7 +552,12 @@ class BaseBowEstimator(BaseEstimator):
         b_obj = max(min(obj, 100.0), -100.0)
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         if self.has_classifier:
+            orig_obj = sc_obj
             sc_obj = (sc_obj + self.gamma * val_result['accuracy']) / (1.0 + self.gamma)
+            logging.info("Objective via classifier: {} based on accuracy = {} and topic objective = {}"
+                         .format(sc_obj, val_result['accuracy'], orig_obj))
+        else:
+            logging.info("Pure topic model objective: {} (has classifier = {})".format(sc_obj, self.has_classifier))
         return sc_obj
 
 
