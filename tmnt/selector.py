@@ -105,7 +105,7 @@ class BaseSelector(object):
                 reward_attr='objective',
                 )
         hpb_scheduler.run()
-        hpb_scheduler.join_jobs(timeout=self.max_task_time)
+        hpb_scheduler.join_jobs()
         return hpb_scheduler
 
 
