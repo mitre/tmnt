@@ -1063,7 +1063,9 @@ class SeqBowEstimator(BaseEstimator):
             orig_obj = sc_obj
             sc_obj = (sc_obj + self.gamma * val_result['accuracy']) / (1.0 + self.gamma)
             logging.info("Objective via classifier: {} based on accuracy = {} and topic objective = {}"
-                         .format(sc_obj, val_result['accuracy'], orig_obj))                                                    
+                         .format(sc_obj, val_result['accuracy'], orig_obj))
+        else:
+            logging.info("Pure topic model objective: {} (has classifier = {})".format(sc_obj, self.has_classifier))
         return sc_obj
 
     def _get_losses(self, model, batch_data):
