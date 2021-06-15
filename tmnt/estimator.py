@@ -531,7 +531,10 @@ class BaseBowEstimator(BaseEstimator):
             for c in range(self.n_labels):
                 y_vec = val_y[:,c]
                 pred_vec = prediction_mat[:,c]
-                ap_c = average_precision_score(y_vec, pred_vec)
+                if not np.any(np.isnan(pred_vec)):
+                    ap_c = average_precision_score(y_vec, pred_vec)
+                else:
+                    ap_c = 0.0
                 ap_scores.append((ap_c, int(y_vec.sum())))
             prediction_np_mat = np.array(prediction_arrays)
             v_res['ap_scores_and_support'] = ap_scores
@@ -1415,7 +1418,10 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
-        avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
+        if not np.any(np.isnan(posteriors)):
+            avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
+        else:
+            avg_prec = 0.0
         logging.info('EVALUTAION: Ground truth indices: {}'.format(list(ground_truth_idx)))
         try:
             auroc = roc_auc_score(ground_truth, posteriors, average='weighted')
