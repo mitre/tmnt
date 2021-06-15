@@ -149,7 +149,7 @@ class BaseEstimator(object):
 
     def _np_one_hot(self, vec, n_outputs):
         ovec = np.zeros((vec.size, n_outputs))
-        ovec[np.arange(vec.size), vec] = 1
+        ovec[np.arange(vec.size), vec.astype('int32')] = 1.0
         return ovec
         
 
