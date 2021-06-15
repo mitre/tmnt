@@ -453,7 +453,7 @@ class BaseBowEstimator(BaseEstimator):
             data = data.as_in_context(self.ctx)
             labels = labels.as_in_context(self.ctx)
             _, kl_loss, rec_loss, _, _, _, _ = self._forward(self.model, data, labels)
-            if i == num_batches - 1:
+            if i == num_batches - 1 and last_batch_size > 0:
                 total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
                 total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
             else:
@@ -490,13 +490,11 @@ class BaseBowEstimator(BaseEstimator):
         return val_dataloader
 
     def validate(self, val_X, val_y):
-        logging.info("Entering validate method")
         val_dataloader = self._get_val_dataloader(val_X, val_y)
         total_val_words = val_X.sum()
         if self.num_val_words < 0:
             self.num_val_words = total_val_words
         ppl = self._perplexity(val_dataloader, total_val_words)
-        logging.info("Validation ppl = {}".format(ppl))
         if self.coherence_via_encoder:
             npmi, redundancy = self._npmi_with_dataloader(val_dataloader)
         else:
@@ -504,7 +502,6 @@ class BaseBowEstimator(BaseEstimator):
             npmi, redundancy = self._npmi(val_X[:n])
         v_res = {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
         prediction_arrays = []
-        logging.info("Performing validation .. has_classifier = {}".format(self.has_classifier))
         if self.has_classifier:
             tot_correct = 0
             tot = 0
