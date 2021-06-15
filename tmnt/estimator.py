@@ -632,7 +632,11 @@ class BaseBowEstimator(BaseEstimator):
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 v_res = self.validate(val_X, val_y)
                 sc_obj = self._get_objective_from_validation_result(v_res)
-                self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                if self.has_classifier:
+                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
+                                        .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
+                else:
+                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
                                         .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
                 if self.reporter:
                     self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
