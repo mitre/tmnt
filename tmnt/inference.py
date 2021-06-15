@@ -75,6 +75,9 @@ class BowVAEInferencer(BaseInferencer):
         n_encoding_layers = config.get('num_enc_layers', 0)
         enc_dr= float(config.get('enc_dr', 0.0))
         emb_size = config['derived_info']['embedding_size']
+        n_labels = config.get('n_labels') or 0
+        gamma    = config.get('gamma') or 1.0
+        multilabel = config.get('multilabel') or False
         if 'n_covars' in config:
             n_covars = config['n_covars']
             covar_net_layers = config.get('covar_net_layers')
@@ -84,7 +87,8 @@ class BowVAEInferencer(BaseInferencer):
                                          n_latent=n_latent,
                                          ctx=ctx)
         else:
-            model = BowVAEModel(enc_dim, emb_size, n_encoding_layers, enc_dr, False,
+            model = BowVAEModel(enc_dim, emb_size, n_encoding_layers, enc_dr, False, n_labels=n_labels, gamma=gamma,
+                                multilabel=multilabel,
                                 vocabulary=vocab, latent_distrib=lat_distrib, n_latent=n_latent,
                                 ctx=ctx)
         model.load_parameters(str(param_file), allow_missing=False)

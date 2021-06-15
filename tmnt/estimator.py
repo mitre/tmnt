@@ -172,7 +172,7 @@ class BaseEstimator(object):
         raise NotImplementedError()
 
 
-    def _npmi(self, X, y, k=10):
+    def _npmi(self, X, k=10):
         """
         Calculate NPMI(Normalized Pointwise Mutual Information) for data X
 
@@ -291,6 +291,7 @@ class BaseBowEstimator(BaseEstimator):
         self.n_labels = n_labels
         self.has_classifier = n_labels > 1
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
+        logging.info("Bow estimator constructed .. has_classifier = {}".format(self.has_classifier))
 
     @classmethod
     def from_config(cls, config, vocabulary,
@@ -498,7 +499,7 @@ class BaseBowEstimator(BaseEstimator):
             npmi, redundancy = self._npmi_with_dataloader(val_dataloader)
         else:
             n = min(val_X.shape[0], 50000)
-            npmi, redundancy = self._npmi(val_X[:n], val_y[:n])
+            npmi, redundancy = self._npmi(val_X[:n])
         v_res = {'ppl': ppl, 'npmi': npmi, 'redundancy': redundancy}
         prediction_arrays = []
         if self.has_classifier:
@@ -649,7 +650,7 @@ class BowEstimator(BaseBowEstimator):
         return super().from_config(*args, **kwargs)
 
     def npmi(self, X, k=10):
-        return self._npmi(X, None, k=k)
+        return self._npmi(X, k=k)
 
     def perplexity(self, X):
         """
@@ -842,15 +843,15 @@ class CovariateBowEstimator(BaseBowEstimator):
             npmi_total += npmi
         return npmi_total / len(covars)
 
-    def _npmi(self, X, y, k=10):
-        return super()._npmi(X, y, k)
+    def _npmi(self, X, k=10):
+        return super()._npmi(X, k=k)
         #return self._npmi_per_covariate(X, y, k)
 
     def _get_objective_from_validation_result(self, v_res):
         return v_res['npmi']
 
     def validate(self, X, y):
-        npmi, redundancy = self._npmi(X, y)
+        npmi, redundancy = self._npmi(X)
         return {'npmi': npmi, 'redundancy': redundancy, 'ppl': 0.0}
 
     def get_topic_vectors(self):
@@ -916,7 +917,8 @@ class SeqBowEstimator(BaseEstimator):
 
 
     @classmethod
-    def from_config(cls, config, bert_base, bow_vocab, n_labels=0, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
+    def from_config(cls, config, bert_base, bow_vocab,
+                    n_labels=0, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
         if isinstance(config, str):
             try:
                 with open(config, 'r') as f:
@@ -1058,7 +1060,10 @@ class SeqBowEstimator(BaseEstimator):
         b_obj = max(min(obj, 100.0), -100.0)
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         if self.has_classifier and self.gamma >= 0.0:
+            orig_obj = sc_obj
             sc_obj = (sc_obj + self.gamma * val_result['accuracy']) / (1.0 + self.gamma)
+            logging.info("Objective via classifier: {} based on accuracy = {} and topic objective = {}"
+                         .format(sc_obj, val_result['accuracy'], orig_obj))                                                    
         return sc_obj
 
     def _get_losses(self, model, batch_data):
@@ -1510,7 +1515,7 @@ class DeepAveragingBowEstimator(BaseEstimator):
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
             if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
               _, val_X_sp = val_X
-              npmi, redundancy = self._npmi(val_X_sp, None)
+              npmi, redundancy = self._npmi(val_X_sp)
               self._output_status("NPMI ==> {}".format(npmi))
                 #ppl, npmi, redundancy = self.validate(val_X, val_y)
                 #if self.reporter:
