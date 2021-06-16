@@ -214,9 +214,15 @@ class BERTDatasetTransform(object):
                 if labels is None:
                     labels = [-1]
             else:
-                labels=[int(label_str)]
+                try:
+                    labels=[int(label_str)]
+                except:
+                    labels=[0]
             #label = np.array(labels, dtype=self._label_dtype)
-            label_mat, _ = to_label_matrix([labels], num_labels=self.num_classes)
+            if self.num_classes > 1:
+                label_mat, _ = to_label_matrix([labels], num_labels=self.num_classes)
+            else:
+                label_mat = np.array([[0.0]]) # just fill with zeros; will be ignored
             bow = None
             if self.use_bert_bow:
                 bow = np.zeros(self.bert_vocab_size)

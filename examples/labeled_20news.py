@@ -31,7 +31,7 @@ _ = l_estimator.fit(X, y) # fit a joint topic + classification model using y
 v_results = l_estimator.validate(X, y)
 l_inferencer = BowVAEInferencer(l_estimator.model)
 embeddings = l_inferencer.get_umap_embeddings(X)
-l_inferencer.plot_to(embeddings, y, f)
+l_inferencer.plot_to(embeddings, y, None)
 
 
 

@@ -33,12 +33,16 @@ vectorizer.fit_transform(train_data)
 
 ctx = mx.cpu() ## or mx.gpu(N) if using GPU device=N
 
-tr_dataset, dev_dataset, num_examples, bert_base, _ = get_bert_datasets(None, vectorizer,
+#num_classes = int(np.max(y) + 1)
+num_classes = 0
+
+tr_dataset, dev_dataset, num_examples, bert_base, bert_vocab, _ = get_bert_datasets(None, vectorizer, 
                                                                         tr_ds, dev_ds, batch_size, seq_len,
                                                                         bert_model_name=model_name,
                                                                         bert_dataset=dataset,
-                                                                        pad=False, ctx=ctx)
-num_classes = int(np.max(y) + 1)
+                                                                        num_classes=num_classes,
+                                                                        ctx=ctx)
+
 
 estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_name = dataset,
                             n_labels = num_classes,

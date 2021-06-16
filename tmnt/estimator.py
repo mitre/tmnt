@@ -909,8 +909,10 @@ class SeqBowEstimator(BaseEstimator):
                  checkpoint_dir = None,
                  optimizer = 'bertadam',
                  classifier_dropout = 0.0,
+                 pure_classifier_objective = False,
                  **kwargs):
         super(SeqBowEstimator, self).__init__(*args, optimizer=optimizer, **kwargs)
+        self.pure_classifier_objective = pure_classifier_objective
         self.minimum_lr = 1e-9
         self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
@@ -1029,12 +1031,17 @@ class SeqBowEstimator(BaseEstimator):
     def log_train(self, batch_id, batch_num, metric, step_loss, rec_loss, red_loss, class_loss,
                   log_interval, epoch_id, learning_rate):
         """Generate and print out the log message for training. """
-        metric_nm, metric_val = metric.get()
-        if not isinstance(metric_nm, list):
-            metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), (red_loss = {}), (class_loss = {}) lr={:.10f}, metrics[{}]: {}"
-              .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, red_loss/log_interval,
-                      class_loss/log_interval, learning_rate, metric_nm, metric_val))
+        if self.has_classifier:
+            metric_nm, metric_val = metric.get()
+            if not isinstance(metric_nm, list):
+                metric_nm, metric_val = [metric_nm], [metric_val]
+            self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), (red_loss = {}), (class_loss = {}) lr={:.10f}, metrics[{}]: {}"
+                                .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, red_loss/log_interval,
+                                        class_loss/log_interval, learning_rate, metric_nm, metric_val))
+        else:
+            self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), (red_loss = {}), (class_loss = {}) lr={:.10f}"
+                                .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, red_loss/log_interval,
+                                        class_loss/log_interval, learning_rate))
 
     def log_eval(self, batch_id, batch_num, metric, step_loss, rec_loss, log_interval):
         metric_nm, metric_val = metric.get()
@@ -1075,11 +1082,9 @@ class SeqBowEstimator(BaseEstimator):
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         if self.has_classifier and self.gamma >= 0.0:
             orig_obj = sc_obj
-            sc_obj = (sc_obj + self.gamma * val_result['accuracy']) / (1.0 + self.gamma)
+            sc_obj = val_result['accuracy'] if self.pure_classifier_objective else (sc_obj + self.gamma * val_result['accuracy']) / (1.0 + self.gamma)
             logging.info("Objective via classifier: {} based on accuracy = {} and topic objective = {}"
                          .format(sc_obj, val_result['accuracy'], orig_obj))
-        else:
-            logging.info("Pure topic model objective: {} (has classifier = {})".format(sc_obj, self.has_classifier))
         return sc_obj
 
     def _get_losses(self, model, batch_data):
@@ -1089,6 +1094,8 @@ class SeqBowEstimator(BaseEstimator):
             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
         if self.has_classifier:
             label = label.as_in_context(self.ctx)
+            print("has classifier = {}".format(self.has_classifier))
+            print("label shape = {}".format(label.shape))
             label_ls = self.loss_function(out, label)
             label_ls = label_ls.mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
