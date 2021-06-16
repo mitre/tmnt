@@ -409,11 +409,11 @@ class SeqBowVEDTrainer(BaseTrainer):
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         vectorizer = TMNTVectorizer(vocab_size=4000, text_key="text", label_key="label")
-        _, _ = vectorizer.fit_transform_json(self.train_data_path)
+        _, _ = vectorizer.fit_transform_json(self.train_data_or_path)
         classes = list(vectorizer.label_map) if config.use_labels else None
-        tr_ds = JsonlDataset(self.train_data_path, txt_key="text", label_key="label")
-        val_ds = JsonlDataset(self.test_data_path, txt_key="text", label_key="label")
-        aux_ds = JsonlDataset(self.aux_data_path, txt_key="text", label_key="label") if self.aux_data_path else None
+        tr_ds = JsonlDataset(self.train_data_or_path, txt_key="text", label_key="label")
+        val_ds = JsonlDataset(self.test_data_or_path, txt_key="text", label_key="label")
+        aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_path else None
 
         bert_model_name = config.bert_model_name
         bert_dataset    = config.bert_dataset
