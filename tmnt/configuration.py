@@ -169,7 +169,7 @@ class TMNTConfigSeqBOW(BaseTMNTConfig):
         sp_dict['max_seq_len'] = self._get_range_integer('max_seq_len', cd)
         sp_dict['bert_model_name'] = self._get_categorical('bert_model_name', cd)
         sp_dict['bert_dataset'] = self._get_categorical('bert_dataset', cd)
-        sp_dict['use_labels'] = self._get_atomic('use_labels')
+        sp_dict['use_labels'] = self._get_atomic('use_labels', cd)
         sp_dict['classifier_dropout'] = self._get_range_uniform('classifier_dropout', cd)
         latent_types = cd['latent_distribution']
         latent_space = []
