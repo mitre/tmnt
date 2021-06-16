@@ -413,7 +413,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         classes = list(vectorizer.label_map) if config.use_labels else None
         tr_ds = JsonlDataset(self.train_data_or_path, txt_key="text", label_key="label")
         val_ds = JsonlDataset(self.test_data_or_path, txt_key="text", label_key="label")
-        aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_path else None
+        aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_or_path else None
 
         bert_model_name = config.bert_model_name
         bert_dataset    = config.bert_dataset
