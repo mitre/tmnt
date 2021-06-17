@@ -434,12 +434,11 @@ class SeqBowVEDTrainer(BaseTrainer):
         return seq_ved_estimator, obj, v_res
 
 
-    def write_model(self, estimator, config, epoch_id=0):
+    def write_model(self, estimator, epoch_id=0):
         """Method to write an estimated model to disk along with configuration used to train the model and the vocabulary.
 
         Parameters:
             model (tmnt.modeling.BowVAEModel): Bag-of-words model (itself a gluon.block.Block)
-            config (tmnt.configuration.TMNTConfigBOW): Configuration for models of tmnt.modeling.BowVAEModel type
             epoch_id (int): Id for printing out current epoch as checkpoint
         """
         model_dir = self.model_out_dir
@@ -475,5 +474,5 @@ def train_seq_bow(c_args):
     config = ag.space.Dict(**config_dict)    
     trainer = SeqBowVEDTrainer.from_arguments(c_args, config)
     estimator, obj = trainer.train_with_single_config(config, 1)
-    trainer.write_model(estimator, config_dict)
+    trainer.write_model(estimator)
     
