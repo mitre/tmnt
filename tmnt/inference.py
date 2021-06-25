@@ -13,6 +13,7 @@ import os
 import scipy
 import umap
 import logging
+import pickle
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
@@ -20,6 +21,7 @@ from tmnt.distribution import HyperSphericalDistribution
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from sklearn.datasets import load_svmlight_file
+
 
 MAX_DESIGN_MATRIX = 250000000 
 
@@ -43,11 +45,11 @@ class BaseInferencer(object):
 class BowVAEInferencer(BaseInferencer):
     """
     """
-    def __init__(self, model):
+    def __init__(self, model, pre_vectorizer=None):
         super().__init__(model.model_ctx)
         self.max_batch_size = 16
         self.vocab = model.vocabulary
-        self.vectorizer = TMNTVectorizer(initial_vocabulary=model.vocabulary)
+        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=model.vocabulary)
         self.n_latent = model.n_latent
         self.model = model
         if isinstance(model, CovariateBowVAEModel):
@@ -64,10 +66,12 @@ class BowVAEInferencer(BaseInferencer):
             param_file = os.path.join(model_dir,'model.params')
             vocab_file = os.path.join(model_dir,'vocab.json')
             config_file = os.path.join(model_dir,'model.config')
+            serialized_vectorizer_file = os.path.join(model_dir,'vectorizer.pkl')
         with open(config_file) as f:
             config = json.loads(f.read())
         with open(vocab_file) as f:
             voc_js = f.read()
+        vectorizer = pickle.load(serialized_vectorizer_file) if os.exists(serialized_vectorizer_file) else None
         vocab = nlp.Vocab.from_json(voc_js)
         n_latent = config['n_latent']
         enc_dim = config['enc_hidden_dim']
@@ -92,7 +96,7 @@ class BowVAEInferencer(BaseInferencer):
                                 vocabulary=vocab, latent_distrib=lat_distrib, n_latent=n_latent,
                                 ctx=ctx)
         model.load_parameters(str(param_file), allow_missing=False)
-        return cls(model)
+        return cls(model, pre_vectorizer=vectorizer)
 
 
     def get_model_details(self, sp_vec_file):
@@ -259,9 +263,22 @@ class BowVAEInferencer(BaseInferencer):
             topic_terms.append(cv_i_terms)
         return topic_terms
 
-
     def get_top_k_words_per_topic_over_scalar_covariate(self, k, min_v=0.0, max_v=1.0, step=0.1):
         raise NotImplemented
+
+    def predict_text(self, txt, pred_threshold=0.5):
+        X, _      = self.vectorizer.transform(txt)
+        encodings = self.encode_data(X, None, use_probs=True, include_bn=False)
+        preds     = self.predict(X).asnumpy()
+        inv_map = [0] * len(self.vectorizer.label_map)
+        for k in self.vectorizer.label_map:
+            inv_map[self.vectorizer.label_map[k]] = k
+        if not self.multilabel:
+            best = np.argmax(preds)
+            best_strs = [ inv_map[best] ]
+        else:
+            best_strs = [ inv_map[i] for i in list(np.where(preds > pred_threshold)[0]) ]
+        return best_strs, encodings
     
 
 
