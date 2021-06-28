@@ -1140,12 +1140,14 @@ class SeqBowEstimator(BaseEstimator):
         #if args.dtype == 'float16':
         #    amp.init_trainer(trainer)
 
+        num_effective_samples = max(len(train_data), len(_aux_data)) if _aux_data is not None else len(train_data)
+
         step_size = self.batch_size * accumulate if accumulate else self.batch_size
-        num_train_steps = int((num_train_examples / step_size) * self.epochs) + 1
+        num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
         warmup_ratio = self.warmup_ratio
         num_warmup_steps = int(num_train_steps * warmup_ratio)
         logging.info("Number of warmup steps = {}, num total train steps = {}, train examples = {}, batch_size = {}, epochs = {}"
-                     .format(num_warmup_steps, num_train_steps, num_train_examples, self.batch_size, self.epochs))
+                     .format(num_warmup_steps, num_train_steps, num_effective_samples, self.batch_size, self.epochs))
         step_num = 0
 
         # Do not apply weight decay on LayerNorm and bias terms
@@ -1212,7 +1214,7 @@ class SeqBowEstimator(BaseEstimator):
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    self.log_train(batch_id, len(train_data), self.metric, loss_details['step_loss'],
+                    self.log_train(batch_id, num_effective_samples, self.metric, loss_details['step_loss'],
                                    loss_details['elbo_loss'], loss_details['red_loss'], loss_details['class_loss'], self.log_interval,
                                    epoch_id, trainer.learning_rate)
                     ## reset loss details
