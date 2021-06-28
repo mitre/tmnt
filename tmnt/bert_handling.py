@@ -210,9 +210,9 @@ class BERTDatasetTransform(object):
             label_str = line[-1]
             # map to int if class labels are available
             if self.class_labels:
-                labels = [ self._label_map.get(label) for label in label_str.split(',') ]
-                if labels is None:
-                    labels = [-1]
+                labels = [ self._label_map.get(label,0) for label in label_str.split(',') ]
+                if labels is None or len(labels) == 0:
+                    labels = [0]
             else:
                 try:
                     labels=[int(label_str)]
@@ -222,7 +222,7 @@ class BERTDatasetTransform(object):
             if self.num_classes > 1:
                 label_mat, _ = to_label_matrix([labels], num_labels=self.num_classes)
             else:
-                label_mat = np.array([[0.0]]) # just fill with zeros; will be ignored
+                label_mat = np.array([[0.0]]) # just fill with zeros; assumption is that labels will be ignored
             bow = None
             if self.use_bert_bow:
                 bow = np.zeros(self.bert_vocab_size)
