@@ -262,6 +262,7 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
         # data loader for training
         loader = gluon.data.DataLoader(
             dataset=data_ds,
+            thread_pool = True,
             num_workers=4,
             batch_sampler=batch_sampler,
             batchify_fn=batchify_fn)
@@ -269,6 +270,7 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
         loader = gluon.data.DataLoader(
             dataset=data_ds,
             batch_size=batch_size,
+            thread_pool = True,
             num_workers=4,
             shuffle=False,
             batchify_fn=batchify_fn)
