@@ -246,7 +246,7 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
     # data train
     data_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
     if aux_dataset is None:
-        final_ds = data_ds.transform(lambda x: (x,)) # create a singleton tuple to keep data iterators simple
+        final_ds = data_ds.transform( lambda a,b,c,d,e: ((a,b,c,d,e),) ) # create a singleton tuple to keep data iterators simple
         data_ds_len = data_ds.transform(
             lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
         batchify_fn = nlp.data.batchify.Tuple(
