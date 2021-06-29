@@ -1055,7 +1055,8 @@ class SeqBowEstimator(BaseEstimator):
         max_rows = 2000000000 / len(self.bow_vocab)
         logging.info("Maximum rows for BOW matrix = {}".format(max_rows))
         rows = 0
-        for i, seqs in enumerate(dataloader):
+        for i, data_batch in enumerate(dataloader):
+            seqs = data_batch[0]
             bow_batch = list(seqs[3].squeeze(axis=1))
             rows += len(bow_batch)
             if i >= max_rows:
@@ -1068,7 +1069,8 @@ class SeqBowEstimator(BaseEstimator):
 
     def _get_bow_wd_counts(self, dataloader):
         sums = mx.nd.zeros(len(self.bow_vocab))
-        for i, seqs in enumerate(dataloader):
+        for i, data_batch in enumerate(dataloader):
+            seqs = data_batch[0]
             bow_batch = seqs[3].squeeze(axis=1)
             sums += bow_batch.sum(axis=0)
         return sums
@@ -1117,7 +1119,7 @@ class SeqBowEstimator(BaseEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
         
 
-    def fit_with_validation(self, train_data, dev_data, num_train_examples, aux_data=None):
+    def fit_with_validation(self, train_data, dev_data, num_train_examples, aux_data=True):
         """Training function."""
         if self.model is None or not self.warm_start:
             model = self._get_model_bias_initialize(train_data)
@@ -1138,7 +1140,7 @@ class SeqBowEstimator(BaseEstimator):
         #if args.dtype == 'float16':
         #    amp.init_trainer(trainer)
 
-        num_effective_samples = max(len(train_data), len(aux_data)) * self.batch_size if aux_data is not None else len(train_data) * self.batch_size
+        num_effective_samples = num_train_examples
 
         step_size = self.batch_size * accumulate if accumulate else self.batch_size
         num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
@@ -1159,7 +1161,7 @@ class SeqBowEstimator(BaseEstimator):
                 clipped_params.append(p)
         
         # Set grad_req if gradient accumulation is required
-        if (accumulate and accumulate > 1) or (aux_data is not None):
+        if (accumulate and accumulate > 1) or aux_data:
             for p in params:
                 p.grad_req = 'add'
 
@@ -1174,10 +1176,14 @@ class SeqBowEstimator(BaseEstimator):
         for epoch_id in range(self.epochs):
             self.metric.reset()
             all_model_params.zero_grad()
-            _aux_data = [None] if aux_data is None else aux_data
-            paired_dataloaders = zip(train_data, cycle(_aux_data)) if len(train_data) > len(_aux_data) else zip(cycle(train_data), _aux_data)
-            #for (batch_id, seqs) in enumerate(train_data):
-            for (batch_id, (seqs, aux_seqs)) in enumerate(paired_dataloaders):
+            
+            for (batch_id, data_batch) in enumerate(train_data):
+                # data_batch is either a 2-tuple of: (labeled, unlabeled)
+                # OR a 1-tuple of (labeled,)
+                if len(data_batch) == 2:
+                    seqs, aux_seqs = data_batch
+                else:
+                    seqs, aux_seqs = data_batch[0], None
                 # learning rate schedule
                 if step_num < num_warmup_steps:
                     new_lr = self.lr * (step_num+1) / num_warmup_steps
@@ -1208,7 +1214,7 @@ class SeqBowEstimator(BaseEstimator):
                     trainer.update(accumulate if accumulate else 1)
                     dec_trainer.update(accumulate if accumulate else 1)
                     step_num += 1
-                    if (accumulate and accumulate > 1) or (aux_data is not None):
+                    if (accumulate and accumulate > 1) or aux_data:
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:

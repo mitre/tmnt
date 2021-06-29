@@ -238,19 +238,33 @@ class BERTDatasetTransform(object):
 
 
 
-def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train_mode=True, pad=False):
+def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train_mode=True, pad=False, aux_dataset=None):
     pool = multiprocessing.Pool()
     # transformation for data train and dev
     label_dtype = 'float32' # if not task.class_labels else 'int32'
     bow_count_dtype = 'float32'
     # data train
     data_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
-    batchify_fn = nlp.data.batchify.Tuple(
-        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
-    if train_mode:
+    if aux_dataset is None:
+        final_ds = data_ds
         data_ds_len = data_ds.transform(
             lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
+        batchify_fn = nlp.data.batchify.Tuple(
+            nlp.data.batchify.Tuple(
+                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
+    else:
+        aux_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
+        final_ds = UnevenArrayDataset(data_ds, aux_ds)
+        data_ds_len = final_ds.transform( lambda a, b: a[1] + b[1], lazy=False )
+        batchify_fn = nlp.data.batchify.Tuple(
+            nlp.data.batchify.Tuple(
+                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)),
+            nlp.data.batchify.Tuple(
+                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
+    if train_mode:
         # bucket sampler 
         num_buckets = min(6, len(data_ds) // batch_size)
         batch_sampler = nlp.data.sampler.FixedBucketSampler(
@@ -261,18 +275,18 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
             shuffle=True)
         # data loader for training
         loader = gluon.data.DataLoader(
-            dataset=data_ds,
+            dataset=final_ds,
             num_workers=4,
             batch_sampler=batch_sampler,
             batchify_fn=batchify_fn)
     else:
         loader = gluon.data.DataLoader(
-            dataset=data_ds,
+            dataset=final_ds,
             batch_size=batch_size,
             num_workers=4,
             shuffle=False,
             batchify_fn=batchify_fn)
-    return loader, len(data_ds)
+    return loader, len(final_ds)
 
 
 def get_bert_datasets(class_labels,
@@ -309,13 +323,10 @@ def get_bert_datasets(class_labels,
                                  vectorizer=vectorizer,
                                  bert_vocab_size = len(bert_vocabulary) if use_bert_vocab else 0,
                                  num_classes = num_classes)
-    train_data, num_train_examples = preprocess_seq_data(trans, class_labels, train_ds, batch_size, max_len, train_mode=True, pad=pad)
+    train_data, num_train_examples = preprocess_seq_data(trans, class_labels, train_ds, batch_size, max_len, train_mode=True, pad=pad,
+                                                         aux_dataset=aux_ds)
     dev_data, _ = preprocess_seq_data(trans, class_labels, dev_ds, batch_size, max_len, train_mode=False, pad=pad)
-    if aux_ds:
-        aux_data, _ = preprocess_seq_data(trans, class_labels, aux_ds, batch_size, max_len, train_mode=False, pad=pad)
-    else:
-        aux_data = None
-    return train_data, dev_data, num_train_examples, bert, bert_vocabulary, aux_data
+    return train_data, dev_data, num_train_examples, bert, bert_vocabulary
 
 
 ############

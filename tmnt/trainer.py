@@ -420,7 +420,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         batch_size      = config.batch_size
         max_seq_len     = config.max_seq_len
         
-        tr_dataset, val_dataset, num_examples, bert_base, bert_vocab, aux_dataset = \
+        tr_dataset, val_dataset, num_examples, bert_base, bert_vocab  = \
             get_bert_datasets(classes, vectorizer, tr_ds, val_ds, batch_size, max_seq_len, aux_ds = aux_ds, 
                               bert_model_name=bert_model_name, bert_dataset=bert_dataset, ctx=ctx)
         n_labels = len(classes) if classes else 0
@@ -430,7 +430,7 @@ class SeqBowVEDTrainer(BaseTrainer):
                                                         log_interval=self.log_interval,
                                                         reporter=reporter, ctx=ctx)
         obj, v_res = \
-            seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples, aux_data=aux_dataset)
+            seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples, aux_data=(aux_ds is not None))
         return seq_ved_estimator, obj, v_res
 
 
