@@ -1138,7 +1138,7 @@ class SeqBowEstimator(BaseEstimator):
         #if args.dtype == 'float16':
         #    amp.init_trainer(trainer)
 
-        num_effective_samples = max(len(train_data), len(aux_data)) if aux_data is not None else len(train_data)
+        num_effective_samples = max(len(train_data), len(aux_data)) * self.batch_size if aux_data is not None else len(train_data) * self.batch_size
 
         step_size = self.batch_size * accumulate if accumulate else self.batch_size
         num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
