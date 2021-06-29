@@ -1218,7 +1218,7 @@ class SeqBowEstimator(BaseEstimator):
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    self.log_train(batch_id, num_effective_samples, self.metric, loss_details['step_loss'],
+                    self.log_train(batch_id, (num_effective_samples / step_size), self.metric, loss_details['step_loss'],
                                    loss_details['elbo_loss'], loss_details['red_loss'], loss_details['class_loss'], self.log_interval,
                                    epoch_id, trainer.learning_rate)
                     ## reset loss details
@@ -1286,7 +1286,8 @@ class SeqBowEstimator(BaseEstimator):
         elbo_loss  = 0
         total_rec_loss = 0.0
         total_kl_loss  = 0.0
-        for batch_id, seqs in enumerate(dataloader):
+        for batch_id, data_batch in enumerate(dataloader):
+            seqs = data_batch[0]
             elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
             total_rec_loss += rec_ls.sum().asscalar()
             total_kl_loss  += kl_ls.sum().asscalar()
