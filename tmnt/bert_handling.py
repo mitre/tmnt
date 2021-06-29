@@ -246,7 +246,7 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
     # data train
     data_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
     if aux_dataset is None:
-        final_ds = data_ds
+        final_ds = data_ds.transform(lambda t: tuple(t)) # create a singleton tuple to keep data iterators simple
         data_ds_len = data_ds.transform(
             lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
         batchify_fn = nlp.data.batchify.Tuple(
@@ -256,6 +256,7 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
     else:
         aux_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
         final_ds = UnevenArrayDataset(data_ds, aux_ds)
+        logging.info("Uneven dataset created, size = {} (from data_ds = {}, aux_ds = {})".format(len(final_ds), len(data_ds), len(aux_ds)))
         data_ds_len = final_ds.transform( lambda a, b: a[1] + b[1], lazy=False )
         batchify_fn = nlp.data.batchify.Tuple(
             nlp.data.batchify.Tuple(
