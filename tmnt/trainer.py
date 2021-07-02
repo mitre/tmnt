@@ -160,6 +160,7 @@ class BaseTrainer(object):
             ntimes = int(num_evals)
             for i in range(ntimes):
                 seed_rng(rng_seed) # update RNG
+                logging.info("Setting rng seed to {}".format(rng_seed))
                 rng_seed += 1
                 model, obj, v_res = self.train_model(config, FakeReporter())
                 npmis.append(v_res['npmi'])

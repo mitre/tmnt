@@ -1356,7 +1356,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
-        for _, seqs in enumerate(dataloader):
+        for _, data_batch in enumerate(dataloader):
+            seqs = data_batch[0]
             if self.fixed_batch:
                 batch_1 = seqs
             else:
@@ -1394,8 +1395,11 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def _get_losses(self, model, batch_data):
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
-        label1 = label1.as_in_context(self.ctx)
-        label2 = label2.as_in_context(self.ctx)
+        ## convert back to label indices rather than 1-hot vecs
+        label1_ind = label1.argmax(axis=1)
+        label2_ind = label2.argmax(axis=1)
+        label1 = label1_ind.as_in_context(self.ctx)
+        label2 = label2_ind.as_in_context(self.ctx)
         label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
         label_ls = label_ls.mean()
         total_ls = (self.gamma * label_ls) + elbo_ls.mean()
@@ -1415,7 +1419,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         ground_truth_idx = []
         emb2 = None
         emb1 = []
-        for batch_id, seqs in enumerate(dataloader):
+        for batch_id, data_batch in enumerate(dataloader):
+            seqs = data_batch[0]
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs, on_test=True)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
