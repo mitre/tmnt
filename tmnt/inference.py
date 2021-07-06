@@ -285,13 +285,14 @@ class BowVAEInferencer(BaseInferencer):
 class SeqVEDInferencer(BaseInferencer):
     """Inferencer for sequence variational encoder-decoder models using BERT
     """
-    def __init__(self, model, bert_vocab, max_length, bow_vocab=None, ctx=mx.cpu()):
+    def __init__(self, model, bert_vocab, max_length, bow_vocab=None, pre_vectorizer=None, ctx=mx.cpu()):
         super().__init__(ctx)
         self.model     = model
         self.bert_base = model.bert
         self.tokenizer = BERTTokenizer(bert_vocab)
         self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
         self.bow_vocab = bow_vocab
+        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=bow_vocab)
 
 
     @classmethod
@@ -300,15 +301,17 @@ class SeqVEDInferencer(BaseInferencer):
             param_file = os.path.join(model_dir, 'model.params')
             vocab_file = os.path.join(model_dir, 'vocab.json')
             config_file = os.path.join(model_dir, 'model.config')
+            serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
         with open(config_file) as f:
             config = json.loads(f.read())
         with open(vocab_file) as f:
             voc_js = f.read()
+        vectorizer = pickle.load(serialized_vectorizer_file) if os.exists(serialized_vectorizer_file) else None
         bow_vocab = nlp.Vocab.from_json(voc_js)
         bert_base, vocab = nlp.model.get_model(config['bert_model_name'],  
                                                dataset_name=config['bert_data_name'],
                                                pretrained=True, ctx=ctx, use_pooler=True,
-                                               use_decoder=False, use_classifier=False) #, output_attention=True)
+                                               use_decoder=False, use_classifier=False)
         latent_dist_t = config['latent_distribution']['dist_type']       
         n_latent    = config['n_latent']
         kappa       = config['latent_distribution']['kappa']
@@ -319,7 +322,7 @@ class SeqVEDInferencer(BaseInferencer):
         model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
                           dropout=classifier_dropout)
         model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
-        return cls(model, vocab, max_length, bow_vocab, ctx)
+        return cls(model, vocab, max_length, bow_vocab, pre_vectorizer=vectorizer, ctx=ctx)
 
 
     def _embed_sequence(self, ids, segs):
@@ -338,7 +341,10 @@ class SeqVEDInferencer(BaseInferencer):
     def prep_text(self, txt):    # used for integrated gradients
         tokens = self.tokenizer(txt)
         ids, lens, segs = self.transform((txt,))
-        return tokens, mx.nd.array([ids], dtype='int32'), mx.nd.array([lens], dtype='float32'), mx.nd.array([segs], dtype='int32')
+        return ( tokens,
+                 mx.nd.array([ids], dtype='int32'),
+                 mx.nd.array([lens], dtype='float32'),
+                 mx.nd.array([segs], dtype='int32') )
     
 
     def encode_text(self, txt):                   
@@ -351,7 +357,20 @@ class SeqVEDInferencer(BaseInferencer):
     def predict_text(self, txt):
         encoding, _ = self.encode_text(txt)
         return self.model.classifier(encoding)
-    
+
+    def get_likelihood_stats(self, txt, n_samples=50):
+        tokens, ids, lens, segs = self.prep_text(txt)
+        bow_vector = self.vectorizer.vectorizer.transform([txt])
+        elbos = []
+        for s in range(n_samples):
+            elbo, _, _, _, _ = self.model(tokens, segs, lens, bow_vector)
+            elbos.append(list(elbo.asnumpy()))
+        wd_cnts = bow.sum(axis=1).asnumpy()
+        elbos_np = np.array(elbos) / (wd_cnts + 1)
+        elbos_means = list(elbos_np.mean(axis=0))
+        elbos_var   = list(elbos_np.var(axis=0))
+        return elbos_means, elbos_var
+        
 
     def encode_data(self, dataloader, use_probs=False):
         encodings = []

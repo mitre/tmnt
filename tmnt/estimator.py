@@ -1015,7 +1015,7 @@ class SeqBowEstimator(BaseEstimator):
         config['classifier_dropout'] = self.classifier_dropout
         return config
 
-    def write_model(self, model_dir, suf=''):
+    def write_model(self, model_dir, suffix=''):
         pfile = os.path.join(model_dir, ('model.params' + suf))
         conf_file = os.path.join(model_dir, ('model.config' + suf))
         vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
