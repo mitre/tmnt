@@ -1016,9 +1016,9 @@ class SeqBowEstimator(BaseEstimator):
         return config
 
     def write_model(self, model_dir, suffix=''):
-        pfile = os.path.join(model_dir, ('model.params' + suf))
-        conf_file = os.path.join(model_dir, ('model.config' + suf))
-        vocab_file = os.path.join(model_dir, ('vocab.json' + suf))
+        pfile = os.path.join(model_dir, ('model.params' + suffix))
+        conf_file = os.path.join(model_dir, ('model.config' + suffix))
+        vocab_file = os.path.join(model_dir, ('vocab.json' + suffix))
         self.model.save_parameters(pfile)
         config = self._get_config()
         specs = json.dumps(config, sort_keys=True, indent=4)
@@ -1232,7 +1232,7 @@ class SeqBowEstimator(BaseEstimator):
             else:
                 sc_obj, v_res = None, None
             if self.checkpoint_dir:
-                self.write_model(self.checkpoint_dir, suf=str(epoch_id))
+                self.write_model(self.checkpoint_dir, suffix=str(epoch_id))
         return sc_obj, v_res
 
 
