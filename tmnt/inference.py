@@ -71,7 +71,11 @@ class BowVAEInferencer(BaseInferencer):
             config = json.loads(f.read())
         with open(vocab_file) as f:
             voc_js = f.read()
-        vectorizer = pickle.load(serialized_vectorizer_file) if os.path.exists(serialized_vectorizer_file) else None
+        if os.path.exists(serialized_vectorizer_file):
+            with open(serialized_vectorizer_file, 'rb') as fp:
+                vectorizer = pickle.load(fp)
+        else:
+            vectorizer = None
         vocab = nlp.Vocab.from_json(voc_js)
         n_latent = config['n_latent']
         enc_dim = config['enc_hidden_dim']
