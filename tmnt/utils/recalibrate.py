@@ -14,11 +14,20 @@ def rescale(x, t):
     x0 = x ** t
     return x0 / np.sum(x0)
 
-def recalibrate(x, target_entropy_ratio=0.5):
-    target_e = np.log(x.shape[0]) * target_entropy_ratio
+def recalibrate_scores(x, target_entropy=1.0):
     ## line search
     def obj_fn(t):
-        return abs( entropy(rescale(x, t)) - target_e )
-    res = minimize_scalar(obj_fn, method='bounded', bounds=(0.01, 20.0), tol=0.1)
+        rescaled = rescale(x, t)
+        mval = np.min(rescaled)
+        mxval = np.max(rescaled)
+        if mval < 1e-50 or (1.0 - mxval) < 1e-50:
+            return target_entropy
+        else:
+            return abs( entropy(rescale(x, t)) - target_entropy )
+    if entropy(x) < target_entropy:
+        bounds = (0.001, 1.0)
+    else:
+        bounds = (1.0, 100.0)
+    res = minimize_scalar(obj_fn, method='bounded', bounds=bounds)
     return rescale(x, res.x)
 

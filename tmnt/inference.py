@@ -18,7 +18,7 @@ from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSe
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.distribution import HyperSphericalDistribution
-from tmnt.utils.recalibrate import recalibrate
+from tmnt.utils.recalibrate import recalibrate_scores
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from sklearn.datasets import load_svmlight_file
@@ -198,7 +198,7 @@ class BowVAEInferencer(BaseInferencer):
             if use_probs:
                 e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
                 encs = list(mx.nd.softmax(e1).asnumpy())
-                encs = list(map(recalibrate, encs))
+                encs = list(map(recalibrate_scores, encs))
             else:
                 encs = list(encs.astype('float64').asnumpy())
             encodings.extend(encs)
@@ -215,7 +215,7 @@ class BowVAEInferencer(BaseInferencer):
             if use_probs:
                 e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
                 encs = list(mx.nd.softmax(e1).asnumpy())
-                encs = list(map(recalibrate, encs))
+                encs = list(map(recalibrate_scores, encs))
             else:
                 encs = list(encs.astype('float64').asnumpy())
             encodings.extend(encs)
