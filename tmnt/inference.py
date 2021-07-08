@@ -278,7 +278,7 @@ class BowVAEInferencer(BaseInferencer):
         inv_map = [0] * len(self.vectorizer.label_map)
         for k in self.vectorizer.label_map:
             inv_map[self.vectorizer.label_map[k]] = k
-        if not self.multilabel:
+        if not self.model.multilabel:
             best = np.argmax(preds)
             best_strs = [ inv_map[best] ]
         else:
