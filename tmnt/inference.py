@@ -273,7 +273,7 @@ class BowVAEInferencer(BaseInferencer):
     def predict_text(self, txt, pred_threshold=0.5):
         X, _      = self.vectorizer.transform(txt)
         encodings = self.encode_data(X, None, use_probs=True, include_bn=False)
-        preds     = self.predict(X).asnumpy()
+        preds     = self.model.predict(X).asnumpy()
         inv_map = [0] * len(self.vectorizer.label_map)
         for k in self.vectorizer.label_map:
             inv_map[self.vectorizer.label_map[k]] = k
