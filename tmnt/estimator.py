@@ -390,6 +390,7 @@ class BaseBowEstimator(BaseEstimator):
         config['enc_dr']             = self.enc_dr
         config['coherence_loss_wt']  = self.coherence_reg_penalty
         config['redundancy_loss_wt'] = self.redundancy_reg_penalty
+        config['n_labels']           = self.n_labels
         config['covar_net_layers']   = 1
         if self.latent_distrib == 'vmf':
             config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}

@@ -271,7 +271,8 @@ class BowVAEInferencer(BaseInferencer):
         raise NotImplemented
 
     def predict_text(self, txt, pred_threshold=0.5):
-        X, _      = self.vectorizer.transform(txt)
+        X_csr, _      = self.vectorizer.transform(txt)
+        X = mx.nd.sparse.csr_matrix(X_csr, dtype='float32')
         encodings = self.encode_data(X, None, use_probs=True, include_bn=False)
         preds     = self.model.predict(X).asnumpy()
         inv_map = [0] * len(self.vectorizer.label_map)
