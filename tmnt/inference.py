@@ -18,6 +18,7 @@ from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSe
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.distribution import HyperSphericalDistribution
+from tmnt.utils.recalibrate import recalibrate
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from sklearn.datasets import load_svmlight_file
@@ -184,7 +185,7 @@ class BowVAEInferencer(BaseInferencer):
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         return infer_iter, last_batch_size
 
-    def encode_data(self, data_mat, labels, use_probs=False, include_bn=False):
+    def encode_data(self, data_mat, labels, use_probs=True, include_bn=False):
         infer_iter, last_batch_size = self._get_data_iterator(data_mat, labels)
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):
@@ -195,8 +196,11 @@ class BowVAEInferencer(BaseInferencer):
             else:
                 encs = self.model.encode_data(data, include_bn=include_bn)
             if use_probs:
-                e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
-                encs = mx.nd.softmax(e1 ** 0.5)
+                e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
+                encs = list(mx.nd.softmax(e1).asnumpy())
+                encs = list(map(recalibrate, encs))
+            else:
+                encs = list(encs.astype('float64').asnumpy())
             encodings.extend(encs)
         ## handle the last batch explicitly as NDArrayIter doesn't do that for us
         if last_batch_size > 0:
@@ -209,8 +213,11 @@ class BowVAEInferencer(BaseInferencer):
             else:
                 encs = self.model.encode_data(data)
             if use_probs:
-                e1 = encs - mx.nd.min(encs, axis=1).expand_dims(1)
-                encs = mx.nd.softmax(e1 ** 0.5)
+                e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
+                encs = list(mx.nd.softmax(e1).asnumpy())
+                encs = list(map(recalibrate, encs))
+            else:
+                encs = list(encs.astype('float64').asnumpy())
             encodings.extend(encs)
         return encodings
 
@@ -311,7 +318,11 @@ class SeqVEDInferencer(BaseInferencer):
             config = json.loads(f.read())
         with open(vocab_file) as f:
             voc_js = f.read()
-        vectorizer = pickle.load(serialized_vectorizer_file) if os.exists(serialized_vectorizer_file) else None
+        if os.path.exists(serialized_vectorizer_file):
+            with open(serialized_vectorizer_file, 'rb') as fp:
+                vectorizer = pickle.load(fp)
+        else:
+            vectorizer = None
         bow_vocab = nlp.Vocab.from_json(voc_js)
         bert_base, vocab = nlp.model.get_model(config['bert_model_name'],  
                                                dataset_name=config['bert_data_name'],
@@ -383,8 +394,9 @@ class SeqVEDInferencer(BaseInferencer):
             ids, lens, segs, _, _ = seqs
             _, encs = self.model.bert(ids.as_in_context(self.ctx),
                                       segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
-            topic_encodings = self.model.latent_dist.get_mu_encoding(encs)
-            encodings.extend(list(topic_encodings))
+            raw_topic_encodings = list(self.model.latent_dist.get_mu_encoding(encs))
+            renormed_topic_encodings = map(recalibrate, raw_topic_encodings)
+            encodings.extend(renormed_topic_encod)
         return encodings
 
     def get_top_k_words_per_topic(self, k):
