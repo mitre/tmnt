@@ -286,8 +286,8 @@ class BowVAEInferencer(BaseInferencer):
         for k in self.vectorizer.label_map:
             inv_map[self.vectorizer.label_map[k]] = k
         if not self.model.multilabel:
-            best = np.argmax(preds)
-            best_strs = [ inv_map[best] ]
+            bests = np.argmax(preds, axis=1)
+            best_strs = [ inv_map[best] for best in bests ]
         else:
             best_strs = [ inv_map[i] for i in list(np.where(preds > pred_threshold)[0]) ]
         return best_strs, encodings
