@@ -15,18 +15,21 @@ Table of Contents
 =================
 
 .. toctree::
-   :caption: Intro
-   :maxdepth: 3
+   :glob:
+   :maxdepth: 2
+   :caption: Intro	      
 
    about/what_is
 
 .. toctree::
+   :glob:
    :caption: Installation
    :maxdepth: 3
 	      
    installing/installation
 
 .. toctree::
+   :glob:
    :caption: Guide
    :maxdepth: 3
 	      
@@ -39,12 +42,14 @@ Table of Contents
    inference/inference.rst
 
 .. toctree::
+   :glob:
    :caption: Examples
    :maxdepth: 3
 
    auto_examples/index.rst
 
 .. toctree::
+   :glob:
    :caption: Advanced Use
    :maxdepth: 3
 	      
@@ -53,12 +58,13 @@ Table of Contents
    
 
 .. toctree::
+   :glob:
    :caption: API
    :maxdepth: 1
 
    api
 
-
+   
 Indices and tables
 ==================
 

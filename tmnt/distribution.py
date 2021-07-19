@@ -1,6 +1,7 @@
 #coding: utf-8
-#Copyright (c) 2019-2020 The MITRE Corporation.
 """
+Copyright (c) 2019-2020 The MITRE Corporation.
+
 Variational latent distributions (e.g. Gaussian, Logistic Gaussian)
 """
 
@@ -16,9 +17,7 @@ __all__ = ['GaussianDistribution', 'GaussianUnitVarDistribution', 'LogisticGauss
 
 
 class BaseDistribution(nn.HybridBlock):
-    """Base probabilistic latent distribution.
-    """
-
+    
     def __init__(self, n_latent, ctx):
         super(BaseDistribution, self).__init__()
         self.n_latent = n_latent

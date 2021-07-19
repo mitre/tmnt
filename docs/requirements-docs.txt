@@ -1,15 +1,6 @@
-Sphinx==3.2.1
-sphinx-autoapi==1.4.0
-sphinx-gallery==0.2.0
-sphinx-rtd-theme==0.4.3
-sphinxcontrib-applehelp==1.0.2
-sphinxcontrib-bibtex==1.0.0
-sphinxcontrib-devhelp==1.0.2
-sphinxcontrib-htmlhelp==1.0.3
-sphinxcontrib-jsmath==1.0.1
-sphinxcontrib-qthelp==1.0.3
-sphinxcontrib-serializinghtml==1.1.4
-sphinxcontrib-svg2pdfconverter==1.1.0
-sphinxcontrib-websupport==1.1.0
+sphinx
+sphinx_rtd_theme
+sphinx_gallery
+sphinx_autoapi
 readthedocs-sphinx-ext
 

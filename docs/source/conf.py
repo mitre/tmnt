@@ -102,7 +102,7 @@ pygments_style = None
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+#html_theme = 'sphinx_rtd_theme'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
@@ -130,10 +130,16 @@ html_static_path = ['_static']
 
 html_theme = 'sphinx_rtd_theme'
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
-using_rtd_theme = True
 
-html_style = 'override.css'
-html_show_sphinx = False
+html_theme_options = {
+    "navigation_depth": 3
+}
+#using_rtd_theme = True
+
+html_static_path = ["_static"]
+html_css_files = [ 'css/tmnt.css' ]
+#html_style = 'css/tmnt.css'
+#html_show_sphinx = False
 
 
 # Output file base name for HTML help builder.
@@ -208,6 +214,10 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ['search.html']
 
+
+
+def setup(app):
+    app.add_css_file("css/tmnt.css")
 
 # -- Extension configuration -------------------------------------------------
 

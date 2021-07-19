@@ -1,4 +1,4 @@
-@import url("css/theme.css");
+@import url("theme.css");
 
 .wy-side-nav-search {
     background-color: #565656;
@@ -24,7 +24,4 @@
     border-color: #313131;
 }
 
-.wy-side-nav-search>a img.logo, .wy-side-nav-search .wy-dropdown>a img.logo {
-    max-width: 60%;
-}
 
