@@ -37,7 +37,7 @@ release = '0.5.rc'
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #
-# needs_sphinx = '1.0'
+needs_sphinx = '4.1.1'
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
@@ -94,7 +94,9 @@ language = None
 exclude_patterns = []
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = None
+pygments_style = "sphinx"
+
+add_module_names = False
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -131,15 +133,10 @@ html_static_path = ['_static']
 html_theme = 'sphinx_rtd_theme'
 html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
-html_theme_options = {
-    "navigation_depth": 3
-}
 using_rtd_theme = True
 
 html_static_path = ["_static"]
-html_css_files = [ 'css/tmnt.css' ]
-#html_style = 'css/tmnt.css'
-html_show_sphinx = False
+html_style = 'css/tmnt.css'
 
 
 # Output file base name for HTML help builder.
@@ -225,6 +222,5 @@ napoleon_numpy_docstring = False
 intersphinx_mapping = {'http://docs.python.org/': None}
 #autoapi_options = [ 'members', 'undoc-members', 'show-inheritance', 'show-module-summary', 'special-members', 'imported-members']
 #autoapi_dirs = ['../../tmnt']
-
 
 autosummary_generate = True
