@@ -134,12 +134,12 @@ html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 html_theme_options = {
     "navigation_depth": 3
 }
-#using_rtd_theme = True
+using_rtd_theme = True
 
 html_static_path = ["_static"]
 html_css_files = [ 'css/tmnt.css' ]
 #html_style = 'css/tmnt.css'
-#html_show_sphinx = False
+html_show_sphinx = False
 
 
 # Output file base name for HTML help builder.
@@ -214,10 +214,6 @@ epub_title = project
 # A list of files that should not be packed into the epub file.
 epub_exclude_files = ['search.html']
 
-
-
-def setup(app):
-    app.add_css_file("css/tmnt.css")
 
 # -- Extension configuration -------------------------------------------------
 
