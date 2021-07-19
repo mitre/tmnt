@@ -2,4 +2,5 @@ sphinx
 sphinx_rtd_theme
 sphinx_gallery
 sphinx_autoapi
+docutils<=0.16
 
