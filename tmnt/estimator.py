@@ -33,9 +33,9 @@ from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import HyperSphericalDistribution
 import autogluon.core as ag
 from itertools import cycle
+from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 MAX_DESIGN_MATRIX = 250000000
-
 
 def multilabel_pr_fn(cutoff, recall=False):
 
@@ -48,13 +48,6 @@ def multilabel_pr_fn(cutoff, recall=False):
     
     def multilabel_recall_fn_x(label, pred):
         num_labels = label[0].shape[0]
-        #for c in range(num_labels):
-        #    y_vec = label[:,c]
-        #    pred_vec = pred[:,c]
-        #    pred_decision = np.where(pred_vec >= cutoff, 1.0, 0.0)
-        #    metric = get_recall_or_precision(y_vec, pred_decision)
-        #    w_sum += metric
-        #    total += y_vec.shape[0]
         pred_decision = np.where(pred >= cutoff, 1.0, 0.0)
         w_sum = get_recall_or_precision(label, pred_decision)
         return w_sum, label.shape[0]
@@ -70,59 +63,57 @@ def get_composite_p_and_r_metric():
     return metrics
 
 
-
 class BaseEstimator(object):
     """Base class for all VAE-based estimators.
     
     Parameters:
-        log_method (str): Method for logging. 'print' | 'log', optional (default='log')
-        quiet (bool): Flag for whether to force minimal logging/ouput. optional (default=False)
-        coherence_coefficient (float): Weight to tradeoff influence of coherence vs perplexity in model 
+        log_method: Method for logging. 'print' | 'log', optional (default='log')
+        quiet: Flag for whether to force minimal logging/ouput. optional (default=False)
+        coherence_coefficient: Weight to tradeoff influence of coherence vs perplexity in model 
             selection objective (default = 8.0)
-        reporter (:class:`autogluon.core.scheduler.Reporter`): Callback reporter to include information for 
+        reporter: Callback reporter to include information for 
             model selection via AutoGluon
-        ctx (:class:`mxnet.context`): MXNet context for the estimator
-        latent_distribution (str): Latent distribution of the variational autoencoder.
+        ctx: MXNet context for the estimator
+        latent_distribution: Latent distribution of the variational autoencoder.
             'logistic_gaussian' | 'vmf' | 'gaussian' | 'gaussian_unitvar', optional (default="vmf")
-        optimizer (str): MXNet optimizer (default = "adam")
-        lr (float): Learning rate of training. (default=0.005)
-        n_latent (int): Size of the latent distribution. optional (default=20)
-        kappa (float): Distribution parameter for Von-Mises Fisher distribution, ignored if latent_distribution not 'vmf'. 
+        optimizer: MXNet optimizer (default = "adam")
+        lr: Learning rate of training. (default=0.005)
+        n_latent: Size of the latent distribution. optional (default=20)
+        kappa: Distribution parameter for Von-Mises Fisher distribution, ignored if latent_distribution not 'vmf'. 
             optional (default=64.0)
-        alpha (float): Prior parameter for Logistic Gaussian distribution, ignored if latent_distribution not 'logistic_gaussian'. 
+        alpha: Prior parameter for Logistic Gaussian distribution, ignored if latent_distribution not 'logistic_gaussian'. 
             optional (default=1.0)
-        coherence_reg_penalty (float): Regularization penalty for topic coherence. optional (default=0.0)
-        redundancy_reg_penalty (float): Regularization penalty for topic redundancy. optional (default=0.0)
-        batch_size (int): Batch training size. optional (default=128)
-        seed_matrix (mxnet matrix): Seed matrix for guided topic model. optional(default=None)
-        hybridize (bool): Hybridize underlying mxnet model. optional(default=False)
-        epochs (int): Number of training epochs. optional(default=40)
-        coherence_via_encoder (bool): Flag to use encoder to derive coherence scores (via gradient attribution)
-        pretrained_param_file (str): Path to pre-trained parameter file to initialize weights
-        warm_start (bool): Subsequent calls to `fit` will use existing model weights rather than reinitializing
+        coherence_reg_penalty: Regularization penalty for topic coherence. optional (default=0.0)
+        redundancy_reg_penalty: Regularization penalty for topic redundancy. optional (default=0.0)
+        batch_size: Batch training size. optional (default=128)
+        seed_matrix: Seed matrix for guided topic model. optional(default=None)
+        hybridize: Hybridize underlying mxnet model. optional(default=False)
+        epochs : Number of training epochs. optional(default=40)
+        coherence_via_encoder: Flag to use encoder to derive coherence scores (via gradient attribution)
+        pretrained_param_file: Path to pre-trained parameter file to initialize weights
+        warm_start: Subsequent calls to `fit` will use existing model weights rather than reinitializing
     """
-
     def __init__(self,
-                 log_method='log',
-                 quiet=False,
-                 coherence_coefficient=8.0,
-                 reporter=None,
-                 ctx=mx.cpu(),
-                 latent_distribution="vmf",
-                 optimizer="adam",
-                 lr = 0.005, 
-                 n_latent=20,
-                 kappa=64.0,
-                 alpha=1.0,
-                 coherence_reg_penalty=0.0,
-                 redundancy_reg_penalty=0.0,
-                 batch_size=128,
-                 seed_matrix=None,
-                 hybridize=False,
-                 epochs=40,
-                 coherence_via_encoder=False,
-                 pretrained_param_file=None,
-                 warm_start=False):
+                 log_method: str = 'log',
+                 quiet: bool = False,
+                 coherence_coefficient: float = 8.0,
+                 reporter: Optional[object] = None,
+                 ctx: Optional[mx.context.Context] = mx.cpu(),
+                 latent_distribution: str = "vmf",
+                 optimizer: str = "adam",
+                 lr: float = 0.005, 
+                 n_latent: int = 20,
+                 kappa: float = 64.0,
+                 alpha: float = 1.0,
+                 coherence_reg_penalty: float = 0.0,
+                 redundancy_reg_penalty: float = 0.0,
+                 batch_size: int = 128,
+                 seed_matrix: Optional[mx.nd.ndarray.NDArray] = None,
+                 hybridize: bool = False,
+                 epochs: int = 40,
+                 coherence_via_encoder: bool = False,
+                 pretrained_param_file: Optional[str] = None,
+                 warm_start: bool = False):
         self.log_method = log_method
         self.quiet = quiet
         self.model = None
@@ -168,7 +159,6 @@ class BaseEstimator(object):
         Returns:
             (:class:`mxnet.gluon.HybridBlock`): MXNet model initialized using provided hyperparameters
         """
-
         raise NotImplementedError()
 
 
@@ -208,27 +198,27 @@ class BaseEstimator(object):
         raise NotImplementedError()
     
 
-    def fit(self, X, y):
+    def fit(self, X: sp.csr.csr_matrix, y: np.ndarray) -> NoReturn:
         """
         Fit VAE model according to the given training data X with optional co-variates y.
   
         Parameters:
-            X (tensor): representing input data
-            y (tensor): representing covariate/labels associated with data elements
+            X: representing input data
+            y: representing covariate/labels associated with data elements
         """
         raise NotImplementedError()
     
 
-    def fit_with_validation(self, X, y, val_X, val_Y):
+    def fit_with_validation(self, X: sp.csr.csr_matrix, y: np.ndarray, val_X: sp.csr.csr_matrix, val_Y: np.ndarray) -> NoReturn:
         """
         Fit VAE model according to the given training data X with optional co-variates y;
         validate (potentially each epoch) with validation data val_X and optional co-variates val_Y
   
         Parameters:
-            X (tensor): representing training data
-            y (tensor): representing covariate/labels associated with data elements in training data
-            val_X (tensor): representing validation data
-            val_y (tensor): representing covariate/labels associated with data elements in validation data
+            X: representing training data
+            y: representing covariate/labels associated with data elements in training data
+            val_X: representing validation data
+            val_y: representing covariate/labels associated with data elements in validation data
         """
         raise NotImplementedError()
 
@@ -239,44 +229,33 @@ class BaseBowEstimator(BaseEstimator):
 
     Parameters:
         vocabulary (:class:`gluonnlp.Vocab`): GluonNLP Vocabulary object
-        lr (float): Learning rate of training. (default=0.005)
-        latent_distribution (str): Latent distribution of the variational autoencoder.
-            'logistic_gaussian' | 'vmf' | 'gaussian' | 'gaussian_unitvar', optional (default="vmf")
-        n_latent (int): Size of the latent distribution. optional (default=20)
-        kappa (float): Distribution parameter for Von-Mises Fisher distribution, ignored if latent_distribution not 'vmf'. 
-            optional (default=64.0)
-        alpha (float): Prior parameter for Logistic Gaussian distribution, ignored if latent_distribution not 'logistic_gaussian'. 
-            optional (default=1.0)
+        n_labels: Number of possible labels/classes when provided supervised data
+        gamma: Coefficient that controls how supervised and unsupervised losses are weighted against each other
         enc_hidden_dim (int): Size of hidden encoder layers. optional (default=150)
-        coherence_reg_penalty (float): Regularization penalty for topic coherence. optional (default=0.0)
-        redundancy_reg_penalty (float): Regularization penalty for topic redundancy. optional (default=0.0)
-        batch_size (int): Batch training size. optional (default=128)
         embedding_source (str): Word embedding source for vocabulary.
             'random' | 'glove' | 'fasttext' | 'word2vec', optional (default='random')
         embedding_size (int): Word embedding size, ignored if embedding_source not 'random'. optional (default=128)
         fixed_embedding (bool): Enable fixed embeddings. optional(default=False)
-        num_enc_layers (int): Number of layers in encoder. optional(default=1)
-        enc_dr (float): Dropout probability in encoder. optional(default=0.1)
-        seed_matrix (mxnet matrix): Seed matrix for guided topic model. optional(default=None)
-        hybridize (bool): Hybridize underlying mxnet model. optional(default=False)
-        epochs (int): Number of training epochs. optional(default=40)
-        log_method (str): Method for logging. 'print' | 'log', optional (default='log')
-        quiet (bool): Flag for whether to force minimal logging/ouput. optional (default=False)
-        coherence_via_encoder (bool): Flag 
-        pretrained_param_file (str): Path to pre-trained parameter file to initialize weights
-        warm_start (bool): Subsequent calls to `fit` will use existing model weights rather than reinitializing
+        num_enc_layers: Number of layers in encoder. optional(default=1)
+        enc_dr: Dropout probability in encoder. optional(default=0.1)
+        coherence_via_encoder: Flag 
+        validate_each_epoch: Perform validation of model against heldout validation 
+            data after each training epoch
+        multilabel: Assume labels are vectors denoting label sets associated with each document
     """
-    def __init__(self, vocabulary,
-                 n_labels=0,
-                 gamma=1.0,
-                 multilabel=False,
-                 validate_each_epoch=False,
-                 enc_hidden_dim=150,
-                 embedding_source="random",
-                 embedding_size=128,
-                 fixed_embedding=False,
-                 num_enc_layers=1,
-                 enc_dr=0.1, *args, **kwargs):
+    def __init__(self,
+                 vocabulary: nlp.Vocab,
+                 n_labels: int = 0,
+                 gamma: float = 1.0,
+                 multilabel: bool = False,
+                 validate_each_epoch: bool = False,
+                 enc_hidden_dim: int = 150,
+                 embedding_source: str = "random",
+                 embedding_size: int = 128,
+                 fixed_embedding: bool = False,
+                 num_enc_layers: int = 1,
+                 enc_dr: float = 0.1,
+                 *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.enc_hidden_dim = enc_hidden_dim
         self.fixed_embedding = fixed_embedding
@@ -294,22 +273,25 @@ class BaseBowEstimator(BaseEstimator):
         logging.info("Bow estimator constructed .. has_classifier = {}".format(self.has_classifier))
 
     @classmethod
-    def from_config(cls, config, vocabulary,
-                    n_labels=0,
-                    coherence_via_encoder=False,
-                    validate_each_epoch=False, pretrained_param_file=None, reporter=None, ctx=mx.cpu()):
+    def from_config(cls, config: Union[str, dict], vocabulary: Union[str, nlp.Vocab],
+                    n_labels: int = 0,
+                    coherence_via_encoder: bool = False,
+                    validate_each_epoch: bool = False,
+                    pretrained_param_file: Optional[str] = None,
+                    reporter: Optional[object] = None,
+                    ctx: mx.context.Context = mx.cpu()) -> 'BaseBowEstimator':
         """
         Create an estimator from a configuration file/object rather than by keyword arguments
         
         Parameters:
-            config (str or dict): Path to a json representation of a configuation or TMNT config dictionary
-            vocabulary(str or :class:`gluonnlp.Vocab`): Path to a json representation of a vocabulary or GluonNLP vocabulary object
-            pretrained_param_file (str): Path to pretrained parameter file if using pretrained model
-            reporter (:class:`autogluon.core.scheduler.Reporter`): Callback reporter to include information for model selection via AutoGluon
-            ctx (:class:`mxnet.context`): MXNet context for the estimator
+            config: Path to a json representation of a configuation or TMNT config dictionary
+            vocabulary: Path to a json representation of a vocabulary or GluonNLP vocabulary object
+            pretrained_param_file: Path to pretrained parameter file if using pretrained model
+            reporter: Callback reporter to include information for model selection via AutoGluon
+            ctx: MXNet context for the estimator
 
         Returns:
-            An estimator (:class:`tmnt.estimator.BaseBowEstimator`): Estimator for training and evaluation of a single model
+            An estimator for training and evaluation of a single model
         """
         if isinstance(config, str):
             try:
@@ -576,19 +558,22 @@ class BaseBowEstimator(BaseEstimator):
         return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
 
 
-    def fit_with_validation(self, X, y, val_X, val_y):
+    def fit_with_validation(self,
+                            X: sp.csr.csr_matrix,
+                            y: np.ndarray,
+                            val_X: sp.csr.csr_matrix,
+                            val_y: np.ndarray) -> Tuple[float, float, float, float]:
         """
         Fit a model according to the options of this estimator and optionally evaluate on validation data
 
         Parameters:
-            X (tensor): Input training tensor
-            y (array): Input labels/co-variates to use (optionally) for co-variate models
-            val_X (tensor): Validateion input tensor
-            val_y (array): Validation co-variates
+            X: Input training tensor
+            y: Input labels/co-variates to use (optionally) for co-variate models
+            val_X: Validateion input tensor
+            val_y: Validation co-variates
 
         Returns:
-            (tuple): Tuple of:
-               sc_obj, npmi, perplexity, redundancy
+            sc_obj, npmi, perplexity, redundancy
         """
         wd_freqs = self._get_wd_freqs(X)
         x_size = X.shape[0] * X.shape[1]
@@ -650,7 +635,17 @@ class BaseBowEstimator(BaseEstimator):
         return sc_obj, v_res
 
                     
-    def fit(self, X, y=None):
+    def fit(self, X: sp.csr.csr_matrix, y: np.ndarray = None) -> 'BaseBowEstimator':
+        """
+        Fit VAE model according to the given training data X with optional co-variates y.
+  
+        Parameters:
+            X: representing input data
+            y: representing covariate/labels associated with data elements
+
+        Returns:
+            self
+        """
         self.fit_with_validation(X, y, None, None)
         return self
 
@@ -667,29 +662,29 @@ class BowEstimator(BaseBowEstimator):
     def npmi(self, X, k=10):
         return self._npmi(X, k=k)
 
-    def perplexity(self, X):
+    def perplexity(self, X: sp.csr.csr_matrix) -> float:
         """
         Calculate approximate perplexity for data X and y
 
         Parameters:
-            X (array-like or sparse matrix): Document word matrix of shape [n_samples, vocab_size]
+            X: Document word matrix of shape [n_samples, vocab_size]
 
         Returns:
-           (float): Perplexity score.
+           Perplexity score.
         """
         return super().perplexity(X, None)
 
-    def _forward(self, model, data, labels):
+    def _forward(self, model: BowVAEModel, data: mx.nd.ndarray.NDArray, labels: mx.nd.ndarray.NDArray):
         """
         Forward pass of BowVAE model given the supplied data
 
         Parameters:
-            model (:class:`BowVAEModel`): Core VAE model for bag-of-words topic model
-            data (:class:`mxnet.ndarray.NDArray`): Document word matrix of shape (n_train_samples, vocab_size)
+            model: Core VAE model for bag-of-words topic model
+            data: Document word matrix of shape (n_train_samples, vocab_size)
             labels: Ignored
 
         Returns:
-            (tuple): Tuple of:
+            Tuple of:
                 elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, reconstruction
         """
         return model(data, labels)
@@ -730,28 +725,26 @@ class BowEstimator(BaseBowEstimator):
         return model
     
 
-    def get_topic_vectors(self):
+    def get_topic_vectors(self) -> mx.nd.ndarray.NDArrray:
         """
         Get topic vectors of the fitted model.
 
         Returns:
-            topic_vectors (:class:`NDArray`): Topic word distribution. 
-                topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
+            topic_distribution: topic_distribution[i, j] represents word j in topic i. shape=(n_latent, vocab_size)
         """
 
         return self.model.get_topic_vectors() 
 
-    def transform(self, X):
+    def transform(self, X: sp.csr.csr_matrix) -> mx.nd.ndarray.NDArray:
         """
         Transform data X according to the fitted model.
 
         Parameters:
-            X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features}
+            X: Document word matrix of shape {n_samples, n_features}
 
         Returns:
-            (:class:`mxnet.ndarray.NDArray`) topic_distribution: shape=(n_samples, n_latent) Document topic distribution for X
+            topic_distribution: shape=(n_samples, n_latent) Document topic distribution for X
         """
-
         mx_array = mx.nd.array(X,dtype='float32')
         return self.model.encode_data(mx_array).asnumpy()
 
@@ -770,8 +763,6 @@ class CovariateBowEstimator(BaseBowEstimator):
     def from_config(cls, n_covars, *args, **kwargs):
         est = super().from_config(*args, **kwargs)
         est.n_covars = n_covars
-        print("Estimator from_config with type = {}".format(type(est)))
-        print("Number of covars for estimator = {}".format(est.n_covars))
         return est
     
     def _get_model(self):
@@ -869,27 +860,27 @@ class CovariateBowEstimator(BaseBowEstimator):
         npmi, redundancy = self._npmi(X)
         return {'npmi': npmi, 'redundancy': redundancy, 'ppl': 0.0}
 
-    def get_topic_vectors(self):
+    def get_topic_vectors(self) -> mx.nd.ndarray.NDArray:
         """
         Get topic vectors of the fitted model.
 
         Returns:
-            topic_vectors (:class:`NDArray`): Topic word distribution. topic_distribution[i, j] represents word j in topic i. 
+            topic_vectors: Topic word distribution. topic_distribution[i, j] represents word j in topic i. 
                 shape=(n_latent, vocab_size)
         """
 
         return self.model.get_topic_vectors(self.train_data, self.train_labels)
 
-    def transform(self, X, y):
+    def transform(self, X: sp.csr.csr_matrix, y: np.ndarray):
         """
         Transform data X and y according to the fitted model.
 
         Parameters:
-            X ({array-like, sparse matrix}): Document word matrix of shape {n_samples, n_features)
-            y ({array-like, sparse matrix}): Covariate matrix of shape (n_train_samples, n_covars)
+            X: Document word matrix of shape {n_samples, n_features)
+            y: Covariate matrix of shape (n_train_samples, n_covars)
 
         Returns:
-            ({array-like, sparse matrix}): Document topic distribution for X and y of shape=(n_samples, n_latent)
+            Document topic distribution for X and y of shape=(n_samples, n_latent)
         """
         x_mxnet, y_mxnet = mx.nd.array(X, dtype=np.float32), mx.nd.array(y, dtype=np.float32)
         return self.model.encode_data_with_covariates(x_mxnet, y_mxnet).asnumpy()
@@ -934,8 +925,31 @@ class SeqBowEstimator(BaseEstimator):
 
 
     @classmethod
-    def from_config(cls, config, bert_base, bow_vocab,
-                    n_labels=0, reporter=None, log_interval=1, pretrained_param_file=None, ctx=mx.cpu()):
+    def from_config(cls,
+                    config: Union[str, ag.space.Dict],
+                    bert_base: nlp.model.bert.BERTModel,
+                    bow_vocab: nlp.Vocab,
+                    n_labels: int = 0,
+                    reporter: Optional[object] = None,
+                    log_interval: int = 1,
+                    pretrained_param_file: Optional[str] = None,
+                    ctx: mx.context.Context = mx.cpu()) -> 'SeqBowEstimator':
+        """
+        Instantiate an object of this class using the provided `config`
+
+        Parameters:
+            config: String to configuration path (in json format) or an autogluon dictionary representing the config
+            bert_base: GluonNLP BERT model
+            bow_vocab: Bag-of-words vocabulary used for decoding reconstruction target
+            n_labels: Number of labels for (semi-)supervised modeling
+            repoter: Autogluon reporter object with callbacks for logging model selection
+            log_interval: Logging frequency (default = 1)
+            pretrained_param_file: Parameter file
+            ctx: MXNet context
+        
+        Returns:
+            An object of this class
+        """
         if isinstance(config, str):
             try:
                 with open(config, 'r') as f:
@@ -1016,7 +1030,14 @@ class SeqBowEstimator(BaseEstimator):
         config['classifier_dropout'] = self.classifier_dropout
         return config
 
-    def write_model(self, model_dir, suffix=''):
+    def write_model(self, model_dir: str, suffix: str ='') -> None:
+        """
+        Writes the model within this estimator to disk.
+
+        Parameters:
+            model_dir: Output directory for model parameters, config and vocabulary
+            suffix: Suffix to use for model (e.g. at different checkpoints)
+        """
         pfile = os.path.join(model_dir, ('model.params' + suffix))
         conf_file = os.path.join(model_dir, ('model.config' + suffix))
         vocab_file = os.path.join(model_dir, ('vocab.json' + suffix))
@@ -1120,8 +1141,20 @@ class SeqBowEstimator(BaseEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
         
 
-    def fit_with_validation(self, train_data, dev_data, num_train_examples, aux_data=True):
-        """Training function."""
+    def fit_with_validation(self,
+                            train_data: gluon.data.DataLoader,
+                            dev_data: gluon.data.DataLoader,
+                            num_train_examples: int,
+                            aux_data: bool=True):
+        """
+        Training function.
+
+        Parameters:
+            train_data: Gluon dataloader with training data.
+            dev_data: Gluon dataloader with dev/validation data.
+            num_train_examples: Number of training samples
+            aux_data: Flag for whether auxilliary data is provided
+        """
         if self.model is None or not self.warm_start:
             model = self._get_model_bias_initialize(train_data)
             self.model = model

@@ -8,7 +8,6 @@
    :inherited-members:                          <-- ...and inherited members too
 
    {% block methods %}
-   .. automethod:: __init__
 
    {% if methods %}
    .. rubric:: {{ _('Methods') }}

@@ -51,7 +51,8 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
-    'sphinx_gallery.gen_gallery'
+    'sphinx_gallery.gen_gallery',
+    'sphinx_autodoc_typehints'
     #'autoapi.extension'
 ]
 
@@ -214,12 +215,32 @@ epub_exclude_files = ['search.html']
 
 # -- Extension configuration -------------------------------------------------
 
-autoclass_content = "both"
+html4_writer = True
+
+autoclass_content = "class"
 autodoc_inherit_docstrings = True
+autodoc_typehints="description"
+
+autodoc_default_options = {
+    'show-inheritance': True,
+    'members': True,
+    'member-order': 'bysource',
+    #'special-members': '__init__',
+    #'undoc-members': True,
+    'exclude-members': '__weakref__'
+}
 
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
-intersphinx_mapping = {'http://docs.python.org/': None}
+napoleon_include_init_with_doc = False
+napoleon_include_private_with_doc = False
+napoleon_include_special_with_doc = False
+intersphinx_mapping = {
+    'scipy': ("https://docs.scipy.org/doc/scipy/reference/", None),
+    'numpy [stable]': ('https://numpy.org/doc/stable/', None),
+    'scikit-learn [stable]': ('https://scikit-learn.org/stable/', None),
+    'http://docs.python.org/': None
+}
 #autoapi_options = [ 'members', 'undoc-members', 'show-inheritance', 'show-module-summary', 'special-members', 'imported-members']
 #autoapi_dirs = ['../../tmnt']
 

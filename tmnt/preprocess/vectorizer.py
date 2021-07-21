@@ -1,8 +1,7 @@
 # coding: utf-8
 """
-Copyright (c) 2019 The MITRE Corporation.
+Copyright (c) 2019-2021 The MITRE Corporation.
 """
-
 
 import io
 import os
@@ -17,49 +16,52 @@ import collections
 import threading
 import logging
 import threading
+import scipy
 import scipy.sparse as sp
 import numpy as np
 from queue import Queue
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.datasets import dump_svmlight_file
 from tmnt.preprocess import BasicTokenizer
+from typing import List, Dict, Optional, Any, Tuple
 
 __all__ = ['TMNTVectorizer']
 
 
 class TMNTVectorizer(object):
 
-    """Utility vectorizer that wraps `sklearn.feature_extraction.text.CountVectorizer` for use
+    """
+    Utility vectorizer that wraps :py:class:`sklearn.feature_extraction.text.CountVectorizer` for use
     with TMNT dataset conventions.
 
     Parameters:
-        text_key (str): Json key for text to use as document content
-        label_key (str): Json key to use for label/covariate
-        min_doc_size (int): Minimum number of tokens for inclusion in the dataset
-        json_out_dir (str): Output directory for resulting JSON files when using inline JSON processing
-        vocab_size (int): Number of vocabulary items (default=2000)
-        file_pat (str): File pattern for input json files (default = *.json)
-        encoding (str): Character encoding (default = 'utf-8')
-        initial_vocabulary (str): Use existing vocabulary rather than deriving one from the data
-        additional_feature_keys (list): List of strings for json keys that correspond to additional 
-            features to use alongside vocabulary
-        stop_word_file (str): Path to a file containing stop words (newline separated)
-        label_min_cnt (int): Minimum number of occurrences of label; instance provided label id -1 if label occurs less than this value
-        unknown_label (str): Label value that corresponds to label UNKNOWN.  Note that in addition to specifying this, if the label key
-            is not found, the label will be treated as unknown (i.e. value of -1)
-        split_char (str): Single character string used to split label string into multiple labels (for multilabel classification tasks)
-        count_vectorizer_kwargs (dict): Dictionary of parameter values to pass to `sklearn.feature_extraction.text.CountVectorizer`
+        text_key: Json key for text to use as document content
+        label_key: Json key to use for label/covariate
+        min_doc_size: Minimum number of tokens for inclusion in the dataset
+        label_remap: Dictionary mapping input label strings to alternative label set
+        json_out_dir: Output directory for resulting JSON files when using inline JSON processing
+        vocab_size: Number of vocabulary items (default=2000)
+        file_pat: File pattern for input json files (default = '*.json')
+        encoding: Character encoding (default = 'utf-8')
+        initial_vocabulary: Use existing vocabulary rather than deriving one from the data
+        additional_feature_keys: List of strings for json keys that correspond to additional 
+                features to use alongside vocabulary
+        stop_word_file: Path to a file containing stop words (newline separated)
+        split_char: Single character string used to split label string into multiple labels 
+                (for multilabel classification tasks)
+        count_vectorizer_kwargs: Dictionary of parameter values to pass to 
+                :py:class:`sklearn.feature_extraction.text.CountVectorizer`
     """
-
-    def __init__(self, text_key='body', label_key=None, min_doc_size=1, label_prefix=-1, label_remap=None,
-                 json_out_dir=None, vocab_size=2000, file_pat = '*.json', encoding='utf-8', initial_vocabulary=None,
-                 additional_feature_keys=None, stop_word_file=None, label_min_cnt=1, unknown_label=None,
-                 split_char=',',
-                 count_vectorizer_kwargs={'max_df':0.95, 'min_df':2, 'stop_words':'english'}):
+    def __init__(self, text_key: str = 'body', label_key: Optional[str] = None, min_doc_size: int = 1,
+                 label_remap: Optional[Dict[str,str]] = None,
+                 json_out_dir: Optional[str] = None, vocab_size: int = 2000, file_pat: str = '*.json',
+                 encoding: str = 'utf-8', initial_vocabulary: Optional[nlp.Vocab] = None,
+                 additional_feature_keys: List[str] = None, stop_word_file: str = None,
+                 split_char: str = ',',
+                 count_vectorizer_kwargs: Dict[str, Any] = {'max_df':0.95, 'min_df':0, 'stop_words':'english'}):
         self.encoding = encoding
         self.text_key = text_key
         self.label_key = label_key
-        self.label_prefix = label_prefix
         self.label_remap = label_remap
         self.split_char  = split_char
         self.min_doc_size = min_doc_size
@@ -68,7 +70,6 @@ class TMNTVectorizer(object):
         self.vocab = initial_vocabulary
         self.additional_feature_keys = additional_feature_keys
         self.file_pat = file_pat
-        self.label_min_cnt = label_min_cnt
         self.vocab_size = vocab_size if initial_vocabulary is None else len(initial_vocabulary)
         self.cv_kwargs = self._update_count_vectorizer_args(count_vectorizer_kwargs, stop_word_file)
         if not 'token_pattern' in self.cv_kwargs:
@@ -76,24 +77,31 @@ class TMNTVectorizer(object):
         self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
                                           vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None),
                                           **self.cv_kwargs)
-        self.unknown_label = unknown_label
         self.label_map = {}
 
 
         
-    def _update_count_vectorizer_args(self, cv_kwargs, stop_word_file):
+    def _update_count_vectorizer_args(self, cv_kwargs: Dict[str, Any], stop_word_file: str) -> Dict[str, Any]:
         if stop_word_file:
             stop_words = self._get_stop_word_set(stop_word_file)
             cv_kwargs['stop_words'] = stop_words
         return cv_kwargs
 
     @classmethod
-    def from_vocab_file(cls, vocab_file):
+    def from_vocab_file(cls, vocab_file: str):
+        """Class method that creates a TMNTVectorizer from a vocab file
+
+        Parameters:
+            vocab_file: String to vocabulary file path.
+
+        Returns:
+            (:py:class:`tmnt.preprocess.vectorizer.TMNTVectorizer`) TMNTVectorizer
+        """
         with io.open(vocab_file, 'r') as fp:
             voc_js = fp.read()
         return cls(initial_vocabulary=nlp.Vocab.from_json(voc_js))
 
-    def _get_stop_word_set(self, f):
+    def _get_stop_word_set(self, f: str) -> List[str]:
         wds = []
         with io.open(f, 'r', encoding=self.encoding) as fp:
             for w in fp:
@@ -101,7 +109,12 @@ class TMNTVectorizer(object):
         return list(set(wds))
 
     
-    def get_vocab(self):
+    def get_vocab(self) -> nlp.Vocab:
+        """Returns the GluonNLP vocabulary associated with the vectorizer
+
+        Returns:
+            GluonNLP vocabulary
+        """
         if self.vocab is not None:
             return self.vocab
         else:
@@ -188,7 +201,7 @@ class TMNTVectorizer(object):
         with io.open(json_file, 'r', encoding=self.encoding) as fp:
             for j in fp:
                 js = json.loads(j)
-                label_string = js.get(self.label_key) or self.unknown_label
+                label_string = js.get(self.label_key)
                 label_string_list = label_string.split(self.split_char)
                 if self.label_remap:
                     label_string_list = [ self.label_remap.get(label_string) or label_string for label_string in label_string_list ]
@@ -208,8 +221,6 @@ class TMNTVectorizer(object):
         fixed = len(self.label_map) > 1
         lab_map = self.label_map
         def _update(s):
-            if s == self.unknown_label:
-                return -1
             i = lab_map.get(s)
             if i is None:
                 if not fixed:
@@ -219,7 +230,7 @@ class TMNTVectorizer(object):
                     i = -1
             return i
         cnts = collections.Counter([s for yi in y_strs for s in yi])
-        y_ids = [ [ (_update(ys) if cnts[ys] >= self.label_min_cnt else -1) for ys in y_str_list ] for y_str_list in y_strs ]
+        y_ids = [ [ _update(ys) for ys in y_str_list ] for y_str_list in y_strs ]
         max_ids_per_instance = max([ len(yi_s) for yi_s in y_ids ])
         if max_ids_per_instance == 1:
             y_ids = np.array([ i for yi in y_ids for i in yi ]) ## flatten if we only have single label classification (most situations)
@@ -246,68 +257,110 @@ class TMNTVectorizer(object):
         else:
             return None
 
-    def write_to_vec_file(self, X, y, vec_file):
+    def write_to_vec_file(self, X: sp.csr.csr_matrix, y: Optional[np.ndarray], vec_file: str) -> None:
+        """Write document-term matrix and optional label vector to file in svmlight format.
+        
+        Parameters:
+            X: document-term (sparse) matrix
+            y: optional label vector (or matrix for multilabel documents)
+            vec_file: string denoting path to output vector file
+        """
         if y is None:
             y = np.zeros(X.shape[0])
         multilabel = len(y.shape) > 1
         dump_svmlight_file(X, y, vec_file, multilabel=multilabel)
 
-    def write_vocab(self, vocab_file):
+    def write_vocab(self, vocab_file: str) -> None:
+        """Write vocabulary to disk.
+
+        Parameters:
+            vocab_file: Write out vocabulary to this file (one word per line)
+        Returns:
+            None
+        """
         vocab = self.get_vocab()
         with io.open(vocab_file, 'w', encoding=self.encoding) as fp:
             for i in range(len(vocab.idx_to_token)):
                 fp.write(vocab.idx_to_token[i])
                 fp.write('\n')
                 
-    def transform(self, str_list):
+    def transform(self, str_list: List[str]) -> Tuple[sp.csr.csr_matrix, None]:
+        """Transforms a list of strings into a sparse matrix.
+
+        Transforms a single json list file into a tuple, the first element of which is 
+        a single sparse matrix **X** and the second element is always `None`.
+
+        Parameters:
+            str_list: List of document strings
+        Returns:
+            Tuple of X,None - sparse matrix of the input, second element is always None in this case
+        """
         return self.vectorizer.transform(str_list), None
 
-    def transform_json(self, json_file):
+    def transform_json(self, json_file: str) -> Tuple[sp.csr.csr_matrix, Optional[np.ndarray]]:
+        """Transforms a single json list file into matrix/vector format(s).         
+
+        Transforms a single json list file into a tuple, the first element being a
+        single sparse matrix **X** and the second an (optional) label vector **y**.
+
+        Parameters:
+            json_file: Input file containing one document per line in serialized json format
+        Returns:
+            Tuple containing sparse document-term matrix X and optional label vector y
+        """
         X = self._tr_json(self.vectorizer.transform, json_file)
         y = self._get_ys(json_file)
         return X, y
 
-    def transform_json_dir(self, json_dir):
+    def transform_json_dir(self, json_dir: str) -> Tuple[sp.csr.csr_matrix, Optional[np.ndarray]]:
+        """Transforms a the specified directory's json list files into matrix formats.
+
+        Parameters:
+            json_dir: A string denoting the path to a directory containing json list files to process
+        Returns:
+            Tuple containing sparse document-term matrix X and optional label vector y
+        """
         X = self._tr_json_dir(self.vectorizer.transform, json_dir)
         y = self._get_ys_dir(json_dir)
         return X, y
 
-    def fit_transform(self, str_list):
+    def fit_transform(self, str_list: List[str]) -> Tuple[sp.csr.csr_matrix, None]:
+        """Learns a vocabulary and transforms the input into into matrix formats.
+
+        As a side-effect, this function induces a vocabulary of the inputs.
+
+        Parameters:
+            str_list: List of document strings
+        Returns:
+            Tuple containing sparse document-term matrix X and optional label vector y
+        """
         return self.vectorizer.fit_transform(str_list), None
 
-    def fit_transform_json(self, json_file):
+    def fit_transform_json(self, json_file: str) -> Tuple[sp.csr.csr_matrix, Optional[np.ndarray]]:
+        """Learns a vocabulary and transforms the input into into matrix formats.
+
+        As a side-effect, this function induces a vocabulary of the inputs.
+
+        Parameters:
+            json_file: Input file containing one document per line in serialized json format
+        Returns:
+            Tuple containing sparse document-term matrix X and optional label vector y
+        """
         X = self._tr_json(self.vectorizer.fit_transform, json_file)
         y = self._get_ys(json_file)
         return X, y
 
-    def fit_transform_json_dir(self, json_dir):
+    def fit_transform_json_dir(self, json_dir: str) -> Tuple[sp.csr.csr_matrix, Optional[np.ndarray]]:
+        """Learns a vocabulary and transforms the input into into matrix formats.
+
+        As a side-effect, this function induces a vocabulary of the inputs.
+
+        Parameters:
+            json_dir: A string denoting the path to a directory containing json list files to process
+        Returns:
+            Tuple containing sparse document-term matrix X and optional label vector y
+        """
         X = self._tr_json_dir(self.vectorizer.fit_transform, json_dir)
         y = self._get_ys_dir(json_dir)
         return X, y
 
-        
-    def _tr_in_place_json(self, tr_method, json_file):        
-        X, _ = tr_method(json_file)
-        json_path, file_name = os.path.split(json_file)
-        js_path = self.json_out_dir if self.json_out_dir is not None else json_path
-        n_json_file = os.path.join(js_path, "vec_"+file_name)
-        if not os.path.exists(js_path):
-            os.mkdir(js_path)
-        with io.open(json_file, 'r', encoding = self.encoding) as fp:
-            with io.open(n_json_file, 'w', encoding = self.encoding) as op:
-                i = 0
-                for l in fp:
-                    js = json.loads(l)
-                    _, inds, vls = sp.find(X[i])
-                    i_inds = [int(a) for a in list(inds)]
-                    i_vls = [float(a) for a in list(vls)]
-                    js['sp_vec'] = list(zip(i_inds, i_vls))
-                    op.write(json.dumps(js))
-                    op.write('\n')
-
-    def fit_transform_in_place_json(self, json_file):
-        self._tr_in_place_json(self.fit_transform_json, json_file)
-
-    def transform_in_place_json(self, json_file):
-        self._tr_in_place_json(self.transform_json, json_file)
-                    
