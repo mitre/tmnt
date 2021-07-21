@@ -24,16 +24,15 @@ from gluonnlp.data import BERTSentenceTransform
 class JsonlDataset(SimpleDataset):
     """A dataset wrapping over a jsonlines (.jsonl) file, each line is a json object.
 
-    Parameters
-    ----------
-    filename : str
-        Path to the .jsonl file.
-    encoding : str, default 'utf8'
-        File encoding format.
-    label_remap : dict
-        Dictionary to map labels.
+    Parameters:
+        filename : Path to the .jsonl file.
+        txt_key: Json attribute key to use for seleting text document strings
+        label_key: Json attribute key to use to get string labels
+        encoding : File encoding format. (default 'utf8')
+        label_remap : Dictionary to map labels.
     """
-    def __init__(self, filename, txt_key, label_key, encoding='utf8', label_remap=None, random_drop_pct=0.0):
+    def __init__(self, filename: str, txt_key: str, label_key: str,
+                 encoding: str = 'utf8', label_remap: Dict[str,str] = None, random_drop_pct: float = 0.0):
 
         if not isinstance(filename, (tuple, list)):
             filename = (filename, )
@@ -69,10 +68,8 @@ class UnevenArrayDataset(Dataset):
 
     The i-th sample is defined as `(x1[i % len(x1)], x2[i % len(x2)], ...)`.
 
-    Parameters
-    ----------
-    *args : one or more dataset-like objects
-        The data arrays.
+    Parameters:
+        *args : one or more dataset-like objects. The data arrays.
     """
     def __init__(self, *args):
         assert len(args) > 0, "Needs at least 1 arrays"
@@ -121,7 +118,6 @@ class BERTDatasetTransform(object):
     num_classes: int
         Must be provided if class_labels isn't provided
     """
-
     def __init__(self,
                  tokenizer,
                  max_seq_length,
