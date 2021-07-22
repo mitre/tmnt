@@ -18,8 +18,8 @@ import json
 import collections
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.data_loading import to_label_matrix
-
 from gluonnlp.data import BERTSentenceTransform
+from typing import Dict
 
 class JsonlDataset(SimpleDataset):
     """A dataset wrapping over a jsonlines (.jsonl) file, each line is a json object.

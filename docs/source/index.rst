@@ -29,8 +29,7 @@ Table of Contents
    :caption: Core
    :maxdepth: 3
 
-   getting_started/preprocessing
-   model_training/training   
+   getting_started/quickstart
    model_selection/model_selection
    options/command_options
    inference/evaluation.rst

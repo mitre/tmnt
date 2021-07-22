@@ -108,7 +108,7 @@ class BaseEstimator(object):
                  coherence_reg_penalty: float = 0.0,
                  redundancy_reg_penalty: float = 0.0,
                  batch_size: int = 128,
-                 seed_matrix: Optional[mx.nd.ndarray.NDArray] = None,
+                 seed_matrix: Optional[mx.nd.NDArray] = None,
                  hybridize: bool = False,
                  epochs: int = 40,
                  coherence_via_encoder: bool = False,
@@ -136,6 +136,8 @@ class BaseEstimator(object):
         self.pretrained_param_file = pretrained_param_file
         self.warm_start = warm_start
         self.num_val_words = -1 ## will be set later for computing Perplexity on validation dataset
+        #if self.pretrained_param_file:
+        #    self.initialize_with_pretrained()
 
 
     def _np_one_hot(self, vec, n_outputs):
@@ -270,7 +272,20 @@ class BaseBowEstimator(BaseEstimator):
         self.n_labels = n_labels
         self.has_classifier = n_labels > 1
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
-        logging.info("Bow estimator constructed .. has_classifier = {}".format(self.has_classifier))
+
+    @classmethod
+    def from_saved(cls, model_dir: str) -> 'BaseBowEstimator':
+        """
+        Instantiate a BaseBowEstimator object from a saved model
+
+        Parameters:
+            model_dir: String representing the path to the saved model directory
+        Returns:
+            BaseBowEstimator object
+        """
+        return cls.from_config(config     = model_dir+'/model.config',
+                               vocabulary = model_dir+'/vocab.json',
+                               pretrained_param_file = model_dir+'/model.params')
 
     @classmethod
     def from_config(cls, config: Union[str, dict], vocabulary: Union[str, nlp.Vocab],
@@ -389,6 +404,8 @@ class BaseBowEstimator(BaseEstimator):
     
 
     def write_model(self, model_dir):
+        if not os.path.exists(model_dir):
+            os.mkdir(model_dir)
         pfile = os.path.join(model_dir, 'model.params')
         sp_file = os.path.join(model_dir, 'model.config')
         vocab_file = os.path.join(model_dir, 'vocab.json')
@@ -521,12 +538,10 @@ class BaseBowEstimator(BaseEstimator):
             prediction_np_mat = np.array(prediction_arrays)
             v_res['ap_scores_and_support'] = ap_scores
         return v_res
-    
+
 
     def initialize_with_pretrained(self):
-        assert(self.pretrained_param_file is not None)
-        self.model = self._get_model()
-        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
+        raise NotImplementedError()
 
 
     def _get_objective_from_validation_result(self, val_result):
@@ -659,6 +674,10 @@ class BowEstimator(BaseBowEstimator):
     def from_config(cls, *args, **kwargs):
         return super().from_config(*args, **kwargs)
 
+    @classmethod
+    def from_saved(cls, *args, **kwargs):
+        return super().from_saved(*args, **kwargs)
+    
     def npmi(self, X, k=10):
         return self._npmi(X, k=k)
 
@@ -674,7 +693,7 @@ class BowEstimator(BaseBowEstimator):
         """
         return super().perplexity(X, None)
 
-    def _forward(self, model: BowVAEModel, data: mx.nd.ndarray.NDArray, labels: mx.nd.ndarray.NDArray):
+    def _forward(self, model: BowVAEModel, data: mx.nd.NDArray, labels: mx.nd.NDArray):
         """
         Forward pass of BowVAE model given the supplied data
 
@@ -688,6 +707,12 @@ class BowEstimator(BaseBowEstimator):
                 elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, reconstruction
         """
         return model(data, labels)
+
+
+    def initialize_with_pretrained(self):
+        assert(self.pretrained_param_file is not None)
+        self.model = self._get_model()
+        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
 
 
     def _get_model(self):
@@ -725,7 +750,7 @@ class BowEstimator(BaseBowEstimator):
         return model
     
 
-    def get_topic_vectors(self) -> mx.nd.ndarray.NDArrray:
+    def get_topic_vectors(self) -> mx.nd.NDArray:
         """
         Get topic vectors of the fitted model.
 
@@ -735,7 +760,7 @@ class BowEstimator(BaseBowEstimator):
 
         return self.model.get_topic_vectors() 
 
-    def transform(self, X: sp.csr.csr_matrix) -> mx.nd.ndarray.NDArray:
+    def transform(self, X: sp.csr.csr_matrix) -> mx.nd.NDArray:
         """
         Transform data X according to the fitted model.
 
@@ -860,7 +885,7 @@ class CovariateBowEstimator(BaseBowEstimator):
         npmi, redundancy = self._npmi(X)
         return {'npmi': npmi, 'redundancy': redundancy, 'ppl': 0.0}
 
-    def get_topic_vectors(self) -> mx.nd.ndarray.NDArray:
+    def get_topic_vectors(self) -> mx.nd.NDArray:
         """
         Get topic vectors of the fitted model.
 

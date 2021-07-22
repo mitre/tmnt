@@ -40,27 +40,20 @@ X, _ = tf_vectorizer.fit_transform(data)
 ## vocab = load_vocab('vocab.txt')
 ## estimator = BowEstimator(vocab).fit(X)
 
-estimator = BowEstimator(tf_vectorizer.get_vocab()).fit(X)
+estimator = BowEstimator(tf_vectorizer.get_vocab(), epochs=8).fit(X)
 
-inferencer = BowVAEInferencer(estimator.model)
+inferencer = BowVAEInferencer(estimator)
 encodings = inferencer.encode_texts(['Greater Armenia would stretch from Karabakh, to the Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.','I have two pairs of headphones I\'d like to sell.  These are excellent, and both in great condition'])
 
-## write out model
-os.mkdir('_model_dir')
-estimator.write_model('_model_dir') 
+inferencer.save(model_dir='_model_dir')
 
-## reload model
-est2 = BowEstimator.from_config('_model_dir/model.config', '_model_dir/vocab.json', pretrained_param_file='_model_dir/model.params')
+inferencer2 = BowVAEInferencer.from_saved(model_dir='_model_dir')
 
-## instead of fitting with data; initialize with pretrained values
-est2.initialize_with_pretrained()
-est2.perplexity(X) # get preplexity
-est2.validate(X, None) # get perplexity, NPMI and redundancy
 
 ## visualize encodings (on training data)
 
-encs = inferencer.encode_data(X, None)
-encodings = np.array([enc.asnumpy() for enc in encs])
+enc_list = inferencer2.encode_data(X)
+encodings = np.array(enc_list)
 
 ## UMAP model
 umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
