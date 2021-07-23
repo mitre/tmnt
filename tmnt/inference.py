@@ -129,7 +129,7 @@ class BowVAEInferencer(BaseInferencer):
 
     def get_umap_embeddings(self, data, umap_metric='euclidean'):
         encs = self.encode_data(data, None)
-        encs2 = np.array([enc.asnumpy() for enc in encs])
+        encs2 = np.array(encs)
         um = umap.UMAP(n_neighbors=4, min_dist=0.1, metric='euclidean')
         return um.fit_transform(encs2)
 
@@ -150,7 +150,7 @@ class BowVAEInferencer(BaseInferencer):
         data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab), zero_based=True)
         return self.encode_data(data_mat, labels, use_probs=use_probs), labels
 
-    def encode_texts(self, texts, use_probs=False, include_bn=False):
+    def encode_texts(self, texts, use_probs=True, include_bn=False):
         X, _ = self.vectorizer.transform(texts)
         encodings = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
         return encodings

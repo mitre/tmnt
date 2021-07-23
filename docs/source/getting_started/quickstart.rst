@@ -76,7 +76,6 @@ Topic models using a bag of words (ngrams) model are *estimated* from a document
 The following example shows how to fit a topic model using the :py:class:`tmnt.estimator.BowEstimator`
 class.  The first step is to get a sample corpus and vectorize it::
 
-
   from sklearn.datasets import fetch_20newsgroups
   from tmnt.preprocess.vectorizer import TMNTVectorizer
 
@@ -103,12 +102,28 @@ matrix ``X`` provided as an argument::
 Using the Model for Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Given an estimator that has been *fit*, we can save the resulting model to a file for subsequent *inference* using
-the :py:meth:`tmnt.estimator.BowEstimator.write_model` method::
+Given an estimator that has been *fit*, we can instantiate the result for *inference* by
+creating a :py:class:`tmnt.inferencer.BowVAEInferencer` object::
 
-  estimator.write_model('_model_dir')
-  
-The model can be (re-)loaded from disk as follows::
+  from tmnt.inferencer import BowVAEInferencer
+  inferencer = BowVAEInferencer(estimator, vectorizer=tf_vectorizer)
 
-  reloaded_estimator = BowEstimator.from_saved('_model_dir')
+The ``BowVAEInferencer`` object encapsulates the trained model, the estimator used to fit the
+model as well as additional methods for applying the model to new data.  It optionally contains
+the ``TMNTVectorizer`` object that maps text data into the appropriate vector representation. The snippet below
+makes use of the :py:meth:`tmnt.inferencer.BowVAEInferencer.encode_texts` method to take raw text,
+apply the model to raw text, map each document string to a vector representation and apply the trained
+model encoder to get back document encodings, one for each input document string::
+
+  encodings = \
+    inferencer.encode_texts(['Greater Armenia would stretch from Karabakh, to the Black Sea',
+                             'I have two pairs of headphones I\'d like to sell.  These are both excellent.'])
+
   
+The ``BowVAEInferencer`` object can be saved to disk and reloaded for model deployment::
+
+  inferencer.save(model_dir='_model_dir')
+  reloaded_estimator = BowVAEInferencer.from_saved(model_dir='_model_dir')
+  
+A more complete example contains the code in this section and some additional
+code :ref:`here <sphx_glr_auto_examples_a_train_20news.py>`

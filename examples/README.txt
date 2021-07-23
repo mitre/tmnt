@@ -1,1 +1,3 @@
-Examples using the TMNT API
+Short examples of core TMNT capabilities.
+=========================================
+

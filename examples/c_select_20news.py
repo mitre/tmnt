@@ -25,7 +25,7 @@ tf_vectorizer = TMNTVectorizer(vocab_size=2000)
 X, _ = tf_vectorizer.fit_transform(data)
 vocab = tf_vectorizer.get_vocab()
 
-tmnt_config = TMNTConfigBOW('examples/select_model/config.yaml').get_configspace()
+tmnt_config = TMNTConfigBOW('select_model/config.yaml').get_configspace()
 selector = BaseSelector(tmnt_config, 8, 'random', 'fifo', 1, 4, False, 1, 1234, '_model_out')
 
 trainer = BowVAETrainer(vocab, X[:8000], X[8000:], log_out_dir='_exps', model_out_dir='_model_out')

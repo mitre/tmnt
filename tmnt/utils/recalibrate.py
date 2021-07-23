@@ -25,9 +25,9 @@ def recalibrate_scores(x, target_entropy=1.0):
         else:
             return abs( entropy(rescale(x, t)) - target_entropy )
     if entropy(x) < target_entropy:
-        bounds = (0.001, 1.0)
+        bounds = (0.01, 1.0)
     else:
-        bounds = (1.0, 100.0)
+        bounds = (1.0, 10.0)
     res = minimize_scalar(obj_fn, method='bounded', bounds=bounds)
     return rescale(x, res.x)
 

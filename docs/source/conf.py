@@ -14,6 +14,8 @@
 #
 import os
 import sys
+from sphinx_gallery.sorting import ExplicitOrder
+from sphinx_gallery.sorting import FileNameSortKey
 
 target_dir = os.path.abspath("../..")
 sys.path.insert(0, target_dir)
@@ -44,7 +46,6 @@ needs_sphinx = '4.1.1'
 # ones.
 extensions = [
     'sphinx.ext.napoleon',
-    'sphinx.ext.autodoc',
     'sphinx.ext.intersphinx',
     'sphinx.ext.autosummary',    
     'sphinx.ext.coverage',
@@ -52,25 +53,29 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx_gallery.gen_gallery',
-    'sphinx_autodoc_typehints'
+    'nbsphinx',
+    'sphinx.ext.autodoc',
+    'sphinx_autodoc_typehints',    
     #'autoapi.extension'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
-from sphinx_gallery.sorting import ExampleTitleSortKey
+nbsphinx_execute = 'never'
+
+
 # Now to declare your project structure, we add a configuration dictionary
 # for Sphinx-Gallery. The examples directory ../examples is declared
 # with a relative path from the conf.py file location:
 sphinx_gallery_conf = {
     # path to your examples scripts
-    'examples_dirs': '../../examples',
+    'examples_dirs': ['../../examples'], ## , '../../tutorials'],
     # path where to save gallery generated examples
     'gallery_dirs': 'auto_examples',
     # ignore files with this pattern.
     'ignore_pattern': '__init__\.py|.*\.sh',
-    'within_subsection_order': ExampleTitleSortKey,
+    'within_subsection_order': FileNameSortKey
 }
 
 # The suffix(es) of source filenames.
@@ -245,4 +250,4 @@ intersphinx_mapping = {
 #autoapi_options = [ 'members', 'undoc-members', 'show-inheritance', 'show-module-summary', 'special-members', 'imported-members']
 #autoapi_dirs = ['../../tmnt']
 
-autosummary_generate = True
+#autosummary_generate = True

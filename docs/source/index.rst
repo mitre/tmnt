@@ -35,6 +35,7 @@ Table of Contents
    inference/evaluation.rst
    inference/inference.rst
 
+
 .. toctree::
    :glob:
    :caption: Examples
@@ -53,11 +54,10 @@ Table of Contents
 
 .. toctree::
    :glob:
-   :caption: API
-   :maxdepth: 1
+   :caption: API Reference
+   :maxdepth: 2
 
-   api
-
+   api	      
    
 Indices and tables
 ==================

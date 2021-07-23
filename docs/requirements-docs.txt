@@ -3,6 +3,7 @@ sphinx_rtd_theme
 sphinx_gallery
 sphinx_autoapi
 sphinx_autodoc_typehints
+nbsphinx
 docutils<=0.16
 
 
