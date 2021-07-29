@@ -220,8 +220,6 @@ class BowVAEInferencer(BaseInferencer):
         ## Notes:
         ## Following ideas in the paper:
         ## Bayesian Autoencoders: Analysing and Fixing the Bernoulli likelihood for Out-of-Distribution Detection
-        ## But - that analysis was done on images with less sparsity
-        ## Consider using Gaussian liklihood here as well to avoid skewness associated with Bernoulli likilhood
         data_iter, last_batch_size = self._get_data_iterator(data_mat, None)
         all_stats = []
         for _, (data, labels) in enumerate(data_iter):
@@ -333,6 +331,7 @@ class SeqVEDInferencer(BaseInferencer):
         model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
                           dropout=classifier_dropout)
         model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
+        model.latent_dist.post_init(ctx) # need to call this after loading parameters now
         return cls(model, vocab, max_length, bow_vocab, pre_vectorizer=vectorizer, ctx=ctx)
 
 
@@ -371,12 +370,12 @@ class SeqVEDInferencer(BaseInferencer):
 
     def get_likelihood_stats(self, txt, n_samples=50):
         tokens, ids, lens, segs = self.prep_text(txt)
-        bow_vector = self.vectorizer.vectorizer.transform([txt])
+        bow_vector = mx.nd.array(self.vectorizer.vectorizer.transform([txt]), dtype='float32').expand_dims(0)
         elbos = []
         for s in range(n_samples):
-            elbo, _, _, _, _ = self.model(tokens, segs, lens, bow_vector)
+            elbo, _, _, _, _ = self.model(ids, segs, lens, bow_vector)
             elbos.append(list(elbo.asnumpy()))
-        wd_cnts = bow.sum(axis=1).asnumpy()
+        wd_cnts = bow_vector.sum().asnumpy()
         elbos_np = np.array(elbos) / (wd_cnts + 1)
         elbos_means = list(elbos_np.mean(axis=0))
         elbos_var   = list(elbos_np.var(axis=0))
