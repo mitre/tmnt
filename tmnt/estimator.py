@@ -110,7 +110,7 @@ class BaseEstimator(object):
         self.latent_distribution = latent_distribution or LogisticGaussianDistribution(20)
         self.optimizer = optimizer
         self.lr = lr
-        self.n_latent = latent_distribution.n_latent
+        self.n_latent = self.latent_distribution.n_latent
         self.coherence_reg_penalty = coherence_reg_penalty
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.batch_size = batch_size
@@ -761,9 +761,9 @@ class BowEstimator(BaseBowEstimator):
 
 class CovariateBowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, n_covars=0, *args, **kwargs):
+    def __init__(self, n_covars=0, *args, **kwargs):
         
-        super().__init__(vocabulary, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.covar_net_layers = 1 ### XXX - temp hardcoded
         self.n_covars = n_covars
@@ -793,7 +793,7 @@ class CovariateBowEstimator(BaseBowEstimator):
         model = \
             CovariateBowVAEModel(n_covars=self.n_covars,
                                  vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, embedding_size=emb_size,
-                                 fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
+                                 fixed_embedding=self.fixed_embedding, latent_distribution=self.latent_distribution,
                                  coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                                  batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
                                  ctx=self.ctx)

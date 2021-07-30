@@ -2,7 +2,8 @@
 Training a First Topic model
 ============================
 
-This example 
+This example shows how to train a simple neural variational topic model on 
+the widely used 20 Newsgroups Dataset.
 """
 
 # %%
@@ -25,8 +26,12 @@ X, _ = tf_vectorizer.fit_transform(data)
 
 # %%
 # Fitting a model involves creating an instance of the :py:class:`tmnt.estimator.BowEstimator` class
+# We use the ``LogisticGaussian`` latent distribution here with 25 latent dimensions or *topics*
+# The fit method applied to the term-document matrix will estimate the model parameters.
 from tmnt.estimator import BowEstimator
-estimator = BowEstimator(tf_vectorizer.get_vocab(), epochs=8).fit(X)
+from tmnt.distribution import LogisticGaussianDistribution
+estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=LogisticGaussianDistribution(25), epochs=8)
+_ = estimator.fit(X)
 
 # %%
 # An inference object is then created which enables the application of the model to raw text
@@ -41,22 +46,28 @@ inferencer.save(model_dir='_model_dir')
 reloaded_inferencer = BowVAEInferencer.from_saved(model_dir='_model_dir')
 
 # %%
-# Now let's visualize the encodings using UMAP:
+# Now let's visualize the encodings for the training set using UMAP:
 
 import numpy as np
 import umap
 import matplotlib.pyplot as plt
 
+# %%
+# As we've already preprocessed the entire training set, we can use the method :py:meth:`tmnt.inference.BowVAEInferencer.encode_data`
+# to derive encodings from the already pre-processed sparse matrix ``X``:
 enc_list = reloaded_inferencer.encode_data(X)
 encodings = np.array(enc_list)
 
+# %%
+# We leverage UMAP to fit (another) embedding from the topic encodings appropriate
+# for visualizing the data.  See UMAP for more `here <https://umap-learn.readthedocs.io/en/latest/>`_
 umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
 embeddings = umap_model.fit_transform(encodings)
 
 # %%
 # We can plot the UMAP embeddings as a scatter plot.
 # For this dataset, although we did not use the provided labels ``y`` to help fit the
-# topic model, it can be helpful to use the labels to color code the documents
+# topic model, it can be helpful to use the labels to color-code the documents
 # in order to see how documents with the same label are encoded.
 plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
 plt.show()
