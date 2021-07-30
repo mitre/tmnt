@@ -1,8 +1,8 @@
 """
-Model Selection
-===============
+Model Selection with Labels
+===========================
 
-Model selection using the API.
+Model selection with labeled data.
 """
 
 from tmnt.estimator import BowEstimator
@@ -31,8 +31,9 @@ if not os.path.exists(config_space):
     exit(0)
 
 tmnt_config = TMNTConfigBOW(config_space).get_configspace()
-selector = BaseSelector(tmnt_config, iterations=8, searcher='random',
-                        scheduler='hyperband', cpus_per_task=4, log_dir='_model_out')
-
-trainer = BowVAETrainer(vocab, X[:8000], X[8000:], log_out_dir='_exps', model_out_dir='_model_out')
-selector.select_model(trainer)
+n_labels = int(np.max(y)) + 1
+l_selector = BaseSelector(tmnt_config, iterations=8, searcher='random',
+                          scheduler='hyperband', cpus_per_task=4, log_dir='_model_out')
+labeled_trainer = BowVAETrainer(vocab, (X[:8000],y[:8000]), (X[8000:],y[8000:]), n_labels=n_labels,
+                                log_out_dir='_exps', model_out_dir='_model_out')
+l_selector.select_model(labeled_trainer)

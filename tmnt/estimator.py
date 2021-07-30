@@ -336,10 +336,12 @@ class BaseBowEstimator(BaseEstimator):
         latent_distrib = ldist_def.dist_type
         if latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
-            latent_distribution = LogisticGaussianDistribuion(n_latent, ctx=ctx, alpha=alpha)
+            latent_distribution = LogisticGaussianDistribution(n_latent, ctx=ctx, alpha=alpha)
         elif latent_distrib == 'vmf':
             kappa = ldist_def.kappa
             latent_distribution = HyperSphericalDistribution(n_latent, ctx=ctx, kappa=kappa)
+        else:
+            latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
         model = \
                 cls(vocabulary,
                     n_labels=n_labels,
