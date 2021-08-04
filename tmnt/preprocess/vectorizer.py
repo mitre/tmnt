@@ -88,14 +88,14 @@ class TMNTVectorizer(object):
         return cv_kwargs
 
     @classmethod
-    def from_vocab_file(cls, vocab_file: str):
+    def from_vocab_file(cls, vocab_file: str) -> 'TMNTVectorizer':
         """Class method that creates a TMNTVectorizer from a vocab file
 
         Parameters:
             vocab_file: String to vocabulary file path.
 
         Returns:
-            (:py:class:`tmnt.preprocess.vectorizer.TMNTVectorizer`) TMNTVectorizer
+            TMNTVectorizer
         """
         with io.open(vocab_file, 'r') as fp:
             voc_js = fp.read()

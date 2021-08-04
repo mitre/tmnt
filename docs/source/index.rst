@@ -29,12 +29,12 @@ Table of Contents
    :caption: Core
    :maxdepth: 3
 
-   getting_started/preprocessing
-   model_training/training   
+   getting_started/quickstart
    model_selection/model_selection
    options/command_options
    inference/evaluation.rst
    inference/inference.rst
+
 
 .. toctree::
    :glob:
@@ -54,11 +54,10 @@ Table of Contents
 
 .. toctree::
    :glob:
-   :caption: API
-   :maxdepth: 1
+   :caption: API Reference
+   :maxdepth: 2
 
-   api
-
+   api	      
    
 Indices and tables
 ==================

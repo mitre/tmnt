@@ -27,10 +27,10 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, f1_score, precision_recall_fscore_support
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
-from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, DeepAveragingVAEModel
+from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED
 from tmnt.eval_npmi import EvaluateNPMI
-from tmnt.distribution import HyperSphericalDistribution
+from tmnt.distribution import HyperSphericalDistribution, LogisticGaussianDistribution, BaseDistribution, GaussianDistribution
 import autogluon.core as ag
 from itertools import cycle
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
@@ -74,20 +74,12 @@ class BaseEstimator(object):
         reporter: Callback reporter to include information for 
             model selection via AutoGluon
         ctx: MXNet context for the estimator
-        latent_distribution: Latent distribution of the variational autoencoder.
-            'logistic_gaussian' | 'vmf' | 'gaussian' | 'gaussian_unitvar', optional (default="vmf")
+        latent_distribution: Latent distribution of the variational autoencoder - defaults to LogisticGaussian with 20 dimensions         
         optimizer: MXNet optimizer (default = "adam")
         lr: Learning rate of training. (default=0.005)
-        n_latent: Size of the latent distribution. optional (default=20)
-        kappa: Distribution parameter for Von-Mises Fisher distribution, ignored if latent_distribution not 'vmf'. 
-            optional (default=64.0)
-        alpha: Prior parameter for Logistic Gaussian distribution, ignored if latent_distribution not 'logistic_gaussian'. 
-            optional (default=1.0)
         coherence_reg_penalty: Regularization penalty for topic coherence. optional (default=0.0)
         redundancy_reg_penalty: Regularization penalty for topic redundancy. optional (default=0.0)
         batch_size: Batch training size. optional (default=128)
-        seed_matrix: Seed matrix for guided topic model. optional(default=None)
-        hybridize: Hybridize underlying mxnet model. optional(default=False)
         epochs : Number of training epochs. optional(default=40)
         coherence_via_encoder: Flag to use encoder to derive coherence scores (via gradient attribution)
         pretrained_param_file: Path to pre-trained parameter file to initialize weights
@@ -99,17 +91,12 @@ class BaseEstimator(object):
                  coherence_coefficient: float = 8.0,
                  reporter: Optional[object] = None,
                  ctx: Optional[mx.context.Context] = mx.cpu(),
-                 latent_distribution: str = "vmf",
+                 latent_distribution: Optional[BaseDistribution] = None,
                  optimizer: str = "adam",
                  lr: float = 0.005, 
-                 n_latent: int = 20,
-                 kappa: float = 64.0,
-                 alpha: float = 1.0,
                  coherence_reg_penalty: float = 0.0,
                  redundancy_reg_penalty: float = 0.0,
                  batch_size: int = 128,
-                 seed_matrix: Optional[mx.nd.ndarray.NDArray] = None,
-                 hybridize: bool = False,
                  epochs: int = 40,
                  coherence_via_encoder: bool = False,
                  pretrained_param_file: Optional[str] = None,
@@ -120,22 +107,19 @@ class BaseEstimator(object):
         self.coherence_coefficient = coherence_coefficient
         self.reporter = reporter
         self.ctx = ctx
-        self.latent_distrib = latent_distribution
+        self.latent_distribution = latent_distribution or LogisticGaussianDistribution(20)
         self.optimizer = optimizer
         self.lr = lr
-        self.n_latent = n_latent
-        self.kappa = kappa
-        self.alpha = alpha
+        self.n_latent = self.latent_distribution.n_latent
         self.coherence_reg_penalty = coherence_reg_penalty
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.batch_size = batch_size
-        self.seed_matrix = seed_matrix
-        self.hybridize = hybridize
         self.epochs = epochs
         self.coherence_via_encoder = coherence_via_encoder
         self.pretrained_param_file = pretrained_param_file
         self.warm_start = warm_start
         self.num_val_words = -1 ## will be set later for computing Perplexity on validation dataset
+        self.latent_distribution.ctx = self.ctx
 
 
     def _np_one_hot(self, vec, n_outputs):
@@ -270,7 +254,20 @@ class BaseBowEstimator(BaseEstimator):
         self.n_labels = n_labels
         self.has_classifier = n_labels > 1
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
-        logging.info("Bow estimator constructed .. has_classifier = {}".format(self.has_classifier))
+
+    @classmethod
+    def from_saved(cls, model_dir: str) -> 'BaseBowEstimator':
+        """
+        Instantiate a BaseBowEstimator object from a saved model
+
+        Parameters:
+            model_dir: String representing the path to the saved model directory
+        Returns:
+            BaseBowEstimator object
+        """
+        return cls.from_config(config     = model_dir+'/model.config',
+                               vocabulary = model_dir+'/vocab.json',
+                               pretrained_param_file = model_dir+'/model.params')
 
     @classmethod
     def from_config(cls, config: Union[str, dict], vocabulary: Union[str, nlp.Vocab],
@@ -337,10 +334,14 @@ class BaseBowEstimator(BaseEstimator):
         kappa = 0.0
         alpha = 1.0
         latent_distrib = ldist_def.dist_type
-        if latent_distrib == 'vmf':
-            kappa = ldist_def.kappa
-        elif latent_distrib == 'logistic_gaussian':
+        if latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
+            latent_distribution = LogisticGaussianDistribution(n_latent, ctx=ctx, alpha=alpha)
+        elif latent_distrib == 'vmf':
+            kappa = ldist_def.kappa
+            latent_distribution = HyperSphericalDistribution(n_latent, ctx=ctx, kappa=kappa)
+        else:
+            latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
         model = \
                 cls(vocabulary,
                     n_labels=n_labels,
@@ -348,8 +349,8 @@ class BaseBowEstimator(BaseEstimator):
                     multilabel = multilabel,
                     validate_each_epoch=validate_each_epoch,
                     coherence_coefficient=8.0, reporter=reporter, 
-                    ctx=ctx, lr=lr, latent_distribution=latent_distrib, optimizer=optimizer,
-                    n_latent=n_latent, kappa=kappa, alpha=alpha, enc_hidden_dim=enc_hidden_dim,
+                    ctx=ctx, lr=lr, latent_distribution=latent_distribution, optimizer=optimizer,
+                    enc_hidden_dim=enc_hidden_dim,
                     coherence_reg_penalty=coherence_reg_penalty,
                     redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
                     embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
@@ -374,10 +375,10 @@ class BaseBowEstimator(BaseEstimator):
         config['redundancy_loss_wt'] = self.redundancy_reg_penalty
         config['n_labels']           = self.n_labels
         config['covar_net_layers']   = 1
-        if self.latent_distrib == 'vmf':
-            config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}
-        elif self.latent_distrib == 'logistic_gaussian':
-            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.alpha}
+        if isinstance(self.latent_distribution, HyperSphericalDistribution):
+            config['latent_distribution'] = {'dist_type':'vmf', 'kappa': self.latent_distribution.kappa}
+        elif isinstance(self.latent_distribution, LogisticGaussianDistribution):
+            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.latent_distribution.alpha}
         else:
             config['latent_distribution'] = {'dist_type':'gaussian'}
         if self.embedding_source != 'random':
@@ -389,6 +390,8 @@ class BaseBowEstimator(BaseEstimator):
     
 
     def write_model(self, model_dir):
+        if not os.path.exists(model_dir):
+            os.mkdir(model_dir)
         pfile = os.path.join(model_dir, 'model.params')
         sp_file = os.path.join(model_dir, 'model.config')
         vocab_file = os.path.join(model_dir, 'vocab.json')
@@ -435,7 +438,7 @@ class BaseBowEstimator(BaseEstimator):
                 labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
             data = data.as_in_context(self.ctx)
             labels = labels.as_in_context(self.ctx)
-            _, kl_loss, rec_loss, _, _, _, _ = self._forward(self.model, data, labels)
+            _, kl_loss, rec_loss, _, _, _ = self._forward(self.model, data, labels)
             if i == num_batches - 1 and last_batch_size > 0:
                 total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
                 total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
@@ -521,12 +524,10 @@ class BaseBowEstimator(BaseEstimator):
             prediction_np_mat = np.array(prediction_arrays)
             v_res['ap_scores_and_support'] = ap_scores
         return v_res
-    
+
 
     def initialize_with_pretrained(self):
-        assert(self.pretrained_param_file is not None)
-        self.model = self._get_model()
-        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
+        raise NotImplementedError()
 
 
     def _get_objective_from_validation_result(self, val_result):
@@ -547,7 +548,7 @@ class BaseBowEstimator(BaseEstimator):
 
 
     def _get_losses(self, model, data, labels):
-        elbo_ls, kl_ls, rec_ls, entropies, coherence_loss, red_ls, predicted_labels = \
+        elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
             self._forward(self.model, data, labels)
         if self.has_classifier:
             label_ls = self.loss_function(predicted_labels, labels).mean()
@@ -659,6 +660,10 @@ class BowEstimator(BaseBowEstimator):
     def from_config(cls, *args, **kwargs):
         return super().from_config(*args, **kwargs)
 
+    @classmethod
+    def from_saved(cls, *args, **kwargs):
+        return super().from_saved(*args, **kwargs)
+    
     def npmi(self, X, k=10):
         return self._npmi(X, k=k)
 
@@ -674,7 +679,7 @@ class BowEstimator(BaseBowEstimator):
         """
         return super().perplexity(X, None)
 
-    def _forward(self, model: BowVAEModel, data: mx.nd.ndarray.NDArray, labels: mx.nd.ndarray.NDArray):
+    def _forward(self, model: BowVAEModel, data: mx.nd.NDArray, labels: mx.nd.NDArray):
         """
         Forward pass of BowVAE model given the supplied data
 
@@ -685,9 +690,15 @@ class BowEstimator(BaseBowEstimator):
 
         Returns:
             Tuple of:
-                elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, reconstruction
+                elbo, kl_loss, rec_loss, coherence_loss, redundancy_loss, reconstruction
         """
         return model(data, labels)
+
+
+    def initialize_with_pretrained(self):
+        assert(self.pretrained_param_file is not None)
+        self.model = self._get_model()
+        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
 
 
     def _get_model(self):
@@ -714,18 +725,21 @@ class BowEstimator(BaseBowEstimator):
                             n_labels = self.n_labels,
                             gamma = self.gamma,
                             multilabel = self.multilabel,
-                            vocabulary=self.vocabulary, n_latent=self.n_latent, 
-                            latent_distrib=self.latent_distrib, 
+                            vocabulary=self.vocabulary, 
+                            latent_distribution=self.latent_distribution, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                       kappa=self.kappa, alpha=self.alpha,
-                       batch_size=self.batch_size, 
-                            seed_mat=self.seed_matrix, n_covars=0, ctx=self.ctx)
+                            batch_size=self.batch_size, 
+                            n_covars=0, ctx=self.ctx)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
     
 
+<<<<<<< HEAD
     def get_topic_vectors(self) -> mx.nd.ndarray.NDArray:
+=======
+    def get_topic_vectors(self) -> mx.nd.NDArray:
+>>>>>>> v09_dev
         """
         Get topic vectors of the fitted model.
 
@@ -735,7 +749,7 @@ class BowEstimator(BaseBowEstimator):
 
         return self.model.get_topic_vectors() 
 
-    def transform(self, X: sp.csr.csr_matrix) -> mx.nd.ndarray.NDArray:
+    def transform(self, X: sp.csr.csr_matrix) -> mx.nd.NDArray:
         """
         Transform data X according to the fitted model.
 
@@ -751,9 +765,9 @@ class BowEstimator(BaseBowEstimator):
 
 class CovariateBowEstimator(BaseBowEstimator):
 
-    def __init__(self, vocabulary, n_covars=0, *args, **kwargs):
+    def __init__(self, n_covars=0, *args, **kwargs):
         
-        super().__init__(vocabulary, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.covar_net_layers = 1 ### XXX - temp hardcoded
         self.n_covars = n_covars
@@ -782,12 +796,11 @@ class CovariateBowEstimator(BaseBowEstimator):
             emb_size = self.embedding_size
         model = \
             CovariateBowVAEModel(n_covars=self.n_covars,
-                           vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, n_latent=self.n_latent, embedding_size=emb_size,
-                           fixed_embedding=self.fixed_embedding, latent_distrib=self.latent_distrib,
-                           coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                           kappa=self.kappa, alpha=self.alpha,
-                           batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
-                           seed_mat=self.seed_matrix, ctx=self.ctx)
+                                 vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, embedding_size=emb_size,
+                                 fixed_embedding=self.fixed_embedding, latent_distribution=self.latent_distribution,
+                                 coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
+                                 batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
+                                 ctx=self.ctx)
         return model
 
 
@@ -802,13 +815,13 @@ class CovariateBowEstimator(BaseBowEstimator):
         Forward pass of BowVAE model given the supplied data
 
         Parameters:
-            model (MXNet model): Model that returns elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
+            model (MXNet model): Model that returns elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
             data ({array-like, sparse matrix}): Document word matrix of shape (n_train_samples, vocab_size) 
             labels ({array-like, sparse matrix}): Covariate matrix of shape (n_train_samples, n_covars)
 
         Returns:
             (tuple): Tuple of: 
-                elbo, kl_loss, rec_loss, l1_pen, entropies, coherence_loss, redundancy_loss, reconstruction
+                elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
         """
         self.train_data = data
         self.train_labels = labels
@@ -860,7 +873,7 @@ class CovariateBowEstimator(BaseBowEstimator):
         npmi, redundancy = self._npmi(X)
         return {'npmi': npmi, 'redundancy': redundancy, 'ppl': 0.0}
 
-    def get_topic_vectors(self) -> mx.nd.ndarray.NDArray:
+    def get_topic_vectors(self) -> mx.nd.NDArray:
         """
         Get topic vectors of the fitted model.
 
@@ -1571,7 +1584,7 @@ class DeepAveragingBowEstimator(BaseEstimator):
                 output_bow = output_bow.as_in_context(self.ctx)
 
                 with autograd.record():
-                    elbo, kl_loss, rec_loss, entropies, coherence_loss, redundancy_loss, lab_loss = \
+                    elbo, kl_loss, rec_loss, coherence_loss, redundancy_loss, lab_loss = \
                         self._forward(self.model, ids, valid_len, output_bow, labels, mask)
                     elbo_mean = elbo.mean()
                 elbo_mean.backward()

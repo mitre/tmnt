@@ -16,7 +16,7 @@ import os
 from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import BowVAEInferencer
-
+from tmnt.distribution import LogisticGaussianDistribution
 
 n_samples = 2000
 n_features = 1000
@@ -30,9 +30,10 @@ X, _ = tf_vectorizer.fit_transform(data_samples)
 
 
 num_covar_values = int(np.max(y)) + 1 # get the number of possible labels
-m_estimator = CovariateBowEstimator(tf_vectorizer.get_vocab(), num_covar_values)
+m_estimator = CovariateBowEstimator(vocabulary=tf_vectorizer.get_vocab(), n_covars=num_covar_values)
+                                    
 _ = m_estimator.fit(X, y) # fit a covariate model using y
-m_inferencer = BowVAEInferencer(m_estimator.model)
+m_inferencer = BowVAEInferencer(m_estimator)
 
 ## the following returns a list of top 5 words per topic per covariate/label
 t_terms = m_inferencer.get_top_k_words_per_topic_per_covariate(5)

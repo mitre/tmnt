@@ -25,16 +25,14 @@ tf_vectorizer = TMNTVectorizer(vocab_size=2000)
 X, _ = tf_vectorizer.fit_transform(data)
 vocab = tf_vectorizer.get_vocab()
 
-tmnt_config = TMNTConfigBOW('examples/select_model/config.yaml').get_configspace()
-selector = BaseSelector(tmnt_config, 8, 'random', 'fifo', 1, 4, False, 1, 1234, '_model_out')
+config_space = 'data/configs/select_model/config.yaml'
+if not os.path.exists(config_space):
+    print("Run this example from the top-level TMNT directory")
+    exit(0)
+
+tmnt_config = TMNTConfigBOW(config_space).get_configspace()
+selector = BaseSelector(tmnt_config, iterations=8, searcher='random',
+                        scheduler='hyperband', cpus_per_task=4, log_dir='_model_out')
 
 trainer = BowVAETrainer(vocab, X[:8000], X[8000:], log_out_dir='_exps', model_out_dir='_model_out')
 selector.select_model(trainer)
-
-n_labels = int(np.max(y)) + 1
-
-labeled_trainer = BowVAETrainer(vocab, (X[:8000],y[:8000]), (X[8000:],y[8000:]), n_labels=n_labels,
-                                log_out_dir='_exps', model_out_dir='_model_out')
-
-l_selector = BaseSelector(tmnt_config, 8, 'random', 'fifo', 1, 4, False, 1, 1234, '_model_out')
-l_selector.select_model(labeled_trainer)

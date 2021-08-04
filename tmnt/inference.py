@@ -15,6 +15,7 @@ import umap
 import logging
 import pickle
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
+from tmnt.estimator import BowEstimator
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.distribution import HyperSphericalDistribution
@@ -33,6 +34,9 @@ class BaseInferencer(object):
     def __init__(self, ctx):
         self.ctx = ctx
 
+    def save(self, model_dir):
+        raise NotImplementedError
+
     def encode_texts(self, intexts):
         raise NotImplementedError
 
@@ -46,62 +50,53 @@ class BaseInferencer(object):
 class BowVAEInferencer(BaseInferencer):
     """
     """
-    def __init__(self, model, pre_vectorizer=None):
-        super().__init__(model.model_ctx)
+    def __init__(self, estimator, pre_vectorizer=None):
+        super().__init__(estimator.model.model_ctx)
         self.max_batch_size = 16
-        self.vocab = model.vocabulary
-        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=model.vocabulary)
-        self.n_latent = model.n_latent
-        self.model = model
-        if isinstance(model, CovariateBowVAEModel):
+        self.vocab = estimator.model.vocabulary
+        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.model.vocabulary)
+        self.n_latent = estimator.model.n_latent
+        self.model = estimator.model
+        self.estimator = estimator
+        if isinstance(estimator.model, CovariateBowVAEModel):
             self.covar_model = True
-            self.n_covars = model.n_covars
-            self.covar_net_layers = model.covar_net_layers
+            self.n_covars = estimator.model.n_covars
+            self.covar_net_layers = estimator.model.covar_net_layers
         else:
             self.covar_model = False
-        
 
     @classmethod
     def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
+        serialized_vectorizer_file = None
         if model_dir is not None:
+            estimator = BowEstimator.from_saved(model_dir)
+            serialized_vectorizer_file = os.path.join(model_dir,'vectorizer.pkl')
+        else:
             param_file = os.path.join(model_dir,'model.params')
             vocab_file = os.path.join(model_dir,'vocab.json')
             config_file = os.path.join(model_dir,'model.config')
-            serialized_vectorizer_file = os.path.join(model_dir,'vectorizer.pkl')
-        with open(config_file) as f:
-            config = json.loads(f.read())
-        with open(vocab_file) as f:
-            voc_js = f.read()
+            estimator = BowEstimator.from_config(config=config_file, vocabulary=vocab_file, pretrained_param_file=param_file)
+        estimator.initialize_with_pretrained()
         if os.path.exists(serialized_vectorizer_file):
             with open(serialized_vectorizer_file, 'rb') as fp:
                 vectorizer = pickle.load(fp)
         else:
             vectorizer = None
-        vocab = nlp.Vocab.from_json(voc_js)
-        n_latent = config['n_latent']
-        enc_dim = config['enc_hidden_dim']
-        lat_distrib = config['latent_distribution']['dist_type']
-        n_encoding_layers = config.get('num_enc_layers', 0)
-        enc_dr= float(config.get('enc_dr', 0.0))
-        emb_size = config['derived_info']['embedding_size']
-        n_labels = config.get('n_labels') or 0
-        gamma    = config.get('gamma') or 1.0
-        multilabel = config.get('multilabel') or False
-        if 'n_covars' in config:
-            n_covars = config['n_covars']
-            covar_net_layers = config.get('covar_net_layers')
-            model = CovariateBowVAEModel(covar_net_layers, 
-                                         enc_dim, emb_size, n_encoding_layers, enc_dr, False,
-                                         vocabulary=vocab, n_covars=n_covars, latent_distrib=lat_distrib,
-                                         n_latent=n_latent,
-                                         ctx=ctx)
-        else:
-            model = BowVAEModel(enc_dim, emb_size, n_encoding_layers, enc_dr, False, n_labels=n_labels, gamma=gamma,
-                                multilabel=multilabel,
-                                vocabulary=vocab, latent_distrib=lat_distrib, n_latent=n_latent,
-                                ctx=ctx)
-        model.load_parameters(str(param_file), allow_missing=False)
-        return cls(model, pre_vectorizer=vectorizer)
+        #model.load_parameters(str(param_file), allow_missing=False)
+        return cls(estimator, pre_vectorizer=vectorizer)
+
+    def save(self, model_dir: str) -> None:
+        """
+        Save model and vectorizer to disk
+
+        Parameters:
+            model_dir: Model directory to save parmaeters, config, vocabulary and vectorizer
+        """
+        self.estimator.write_model(model_dir)
+        serialized_vector_file = os.path.join(model_dir, 'vectorizer.pkl')
+        if self.vectorizer:
+            with io.open(serialized_vector_file, 'wb') as fp:
+                pickle.dump(self.vectorizer, fp)
 
 
     def get_model_details(self, sp_vec_file):
@@ -134,7 +129,7 @@ class BowVAEInferencer(BaseInferencer):
 
     def get_umap_embeddings(self, data, umap_metric='euclidean'):
         encs = self.encode_data(data, None)
-        encs2 = np.array([enc.asnumpy() for enc in encs])
+        encs2 = np.array(encs)
         um = umap.UMAP(n_neighbors=4, min_dist=0.1, metric='euclidean')
         return um.fit_transform(encs2)
 
@@ -155,7 +150,7 @@ class BowVAEInferencer(BaseInferencer):
         data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab), zero_based=True)
         return self.encode_data(data_mat, labels, use_probs=use_probs), labels
 
-    def encode_texts(self, texts, use_probs=False, include_bn=False):
+    def encode_texts(self, texts, use_probs=True, include_bn=False):
         X, _ = self.vectorizer.transform(texts)
         encodings = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
         return encodings
@@ -185,7 +180,7 @@ class BowVAEInferencer(BaseInferencer):
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         return infer_iter, last_batch_size
 
-    def encode_data(self, data_mat, labels, use_probs=True, include_bn=False):
+    def encode_data(self, data_mat, labels=None, use_probs=True, include_bn=False):
         infer_iter, last_batch_size = self._get_data_iterator(data_mat, labels)
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):
@@ -225,8 +220,6 @@ class BowVAEInferencer(BaseInferencer):
         ## Notes:
         ## Following ideas in the paper:
         ## Bayesian Autoencoders: Analysing and Fixing the Bernoulli likelihood for Out-of-Distribution Detection
-        ## But - that analysis was done on images with less sparsity
-        ## Consider using Gaussian liklihood here as well to avoid skewness associated with Bernoulli likilhood
         data_iter, last_batch_size = self._get_data_iterator(data_mat, None)
         all_stats = []
         for _, (data, labels) in enumerate(data_iter):
@@ -338,6 +331,7 @@ class SeqVEDInferencer(BaseInferencer):
         model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
                           dropout=classifier_dropout)
         model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
+        model.latent_dist.post_init(ctx) # need to call this after loading parameters now
         return cls(model, vocab, max_length, bow_vocab, pre_vectorizer=vectorizer, ctx=ctx)
 
 
@@ -376,12 +370,12 @@ class SeqVEDInferencer(BaseInferencer):
 
     def get_likelihood_stats(self, txt, n_samples=50):
         tokens, ids, lens, segs = self.prep_text(txt)
-        bow_vector = self.vectorizer.vectorizer.transform([txt])
+        bow_vector = mx.nd.array(self.vectorizer.vectorizer.transform([txt]), dtype='float32').expand_dims(0)
         elbos = []
         for s in range(n_samples):
-            elbo, _, _, _, _ = self.model(tokens, segs, lens, bow_vector)
+            elbo, _, _, _, _ = self.model(ids, segs, lens, bow_vector)
             elbos.append(list(elbo.asnumpy()))
-        wd_cnts = bow.sum(axis=1).asnumpy()
+        wd_cnts = bow_vector.sum().asnumpy()
         elbos_np = np.array(elbos) / (wd_cnts + 1)
         elbos_means = list(elbos_np.mean(axis=0))
         elbos_var   = list(elbos_np.var(axis=0))

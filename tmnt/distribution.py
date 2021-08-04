@@ -64,7 +64,7 @@ class GaussianDistribution(BaseDistribution):
         ctx (mxnet.context.Context): Mxnet computational context (cpu or gpu[id])
         dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
     """
-    def __init__(self, n_latent, ctx, dr=0.2):
+    def __init__(self, n_latent, ctx=mx.cpu(), dr=0.2):
         super(GaussianDistribution, self).__init__(n_latent, ctx)
         with self.name_scope():
             self.lv_encoder = gluon.nn.Dense(units = n_latent)            
@@ -96,7 +96,7 @@ class GaussianUnitVarDistribution(BaseDistribution):
         ctx (mxnet.context.Context): Mxnet computational context (cpu or gpu[id])
         dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
     """
-    def __init__(self, n_latent, ctx, dr=0.2, var=1.0):
+    def __init__(self, n_latent, ctx=mx.cpu(), dr=0.2, var=1.0):
         super(GaussianUnitVarDistribution, self).__init__(n_latent, ctx)
         self.variance = mx.nd.array([var], ctx=ctx)
         self.log_variance = mx.nd.log(self.variance)
@@ -125,7 +125,7 @@ class LogisticGaussianDistribution(BaseDistribution):
         dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
         alpha (float): Value the determines prior variance as 1/alpha - (2/n_latent) + 1/(n_latent^2)
     """
-    def __init__(self, n_latent, ctx, dr=0.2, alpha=1.0):
+    def __init__(self, n_latent, ctx=mx.cpu(), dr=0.1, alpha=1.0):
         super(LogisticGaussianDistribution, self).__init__(n_latent, ctx)
         self.alpha = alpha
 

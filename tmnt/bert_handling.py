@@ -19,7 +19,6 @@ import collections
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.data_loading import to_label_matrix
 from typing import Dict
-
 from gluonnlp.data import BERTSentenceTransform
 
 class JsonlDataset(SimpleDataset):

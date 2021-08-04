@@ -3,4 +3,4 @@ topic models as neural network-based variational auto-encoders.
 
 Documentation can be found here: https://tmnt.readthedocs.io/en/latest/
 
-Current version: 0.5
+Current version: 0.6.2

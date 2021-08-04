@@ -36,12 +36,12 @@ ctx = mx.cpu() ## or mx.gpu(N) if using GPU device=N
 #num_classes = int(np.max(y) + 1)
 num_classes = 0
 
-tr_dataset, dev_dataset, num_examples, bert_base, bert_vocab, _ = get_bert_datasets(None, vectorizer, 
+tr_dataset, dev_dataset, num_examples, bert_base, bert_vocab = get_bert_datasets(None, vectorizer, 
                                                                         tr_ds, dev_ds, batch_size, seq_len,
                                                                         bert_model_name=model_name,
                                                                         bert_dataset=dataset,
                                                                         num_classes=num_classes,
-                                                                        ctx=ctx)
+                                                                                    ctx=ctx)
 
 
 estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_name = dataset,
@@ -49,7 +49,7 @@ estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_n
                             bow_vocab = vectorizer.get_vocab(),
                             optimizer='bertadam',
                             batch_size=batch_size, ctx=ctx, log_interval=1,
-                            log_method='print', gamma=1.0, n_latent=20,
+                            log_method='print', gamma=1.0, 
                             lr=2e-5, decoder_lr=0.02, epochs=1)
 
 # this will take quite some time without a GPU!
