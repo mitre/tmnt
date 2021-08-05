@@ -388,9 +388,14 @@ class SeqVEDInferencer(BaseInferencer):
             ids, lens, segs, _, _ = seqs
             _, encs = self.model.bert(ids.as_in_context(self.ctx),
                                       segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
-            raw_topic_encodings = list(self.model.latent_dist.get_mu_encoding(encs))
-            renormed_topic_encodings = map(recalibrate, raw_topic_encodings)
-            encodings.extend(renormed_topic_encod)
+            encs = self.model.latent_dist.get_mu_encoding(encs)
+            if use_probs:
+                e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
+                encs = list(mx.nd.softmax(e1).asnumpy())
+                topic_encodings = map(recalibrate, encs)
+            else:
+                topic_encodings = list(encs.astype('float64').asnumpy())
+            encodings.extend(topic_encodings)
         return encodings
 
     def get_top_k_words_per_topic(self, k):
