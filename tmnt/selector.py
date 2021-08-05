@@ -117,6 +117,8 @@ class BaseSelector(object):
 
         Args:
             trainer (:class:`tmnt.trainer.BaseTrainer`): A trainer that fits and evaluates models given a configuration.
+        Returns:
+            estimator (:class:`tmnt.estimator.BaseEstimator`: A fit estimator for the final selected model hyper-parameters
         """
         dd = datetime.datetime.now()
         scheduler = self._select(trainer)
@@ -127,10 +129,10 @@ class BaseSelector(object):
         logging.info("Best configuration objective = {}".format(scheduler.get_best_reward()))
         best_config_dict = ag.space.Dict(**best_config)
         logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
-        model, obj = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
-        logging.info("Objective with final retrained model: {}".format(obj))
+        estimator, obj = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
+        logging.info("Objective with final retrained model/estimator: {}".format(obj))
         logging.info("Writing model to: {}".format(trainer.model_out_dir))
-        trainer.write_model(model)
+        trainer.write_model(estimator)
         with open(os.path.join(self.log_dir, 'best.model.config'), 'w') as fp:
             specs = json.dumps(best_config)
             fp.write(specs)
@@ -144,6 +146,7 @@ class BaseSelector(object):
         out_pretty = os.path.join(self.log_dir, 'selection.table.txt')
         with io.open(out_pretty, 'w') as fp:
             fp.write(tabulate(results_df, headers='keys', tablefmt='pqsl'))
+        return estimator
 
 
 def model_select_bow_vae(c_args):

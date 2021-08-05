@@ -94,6 +94,24 @@ class BaseTMNTConfig(object):
         """
         raise NotImplemented
 
+default_bow_config_space = {
+    'epochs': 27,
+    'gamma': 1.0,
+    'multilabel': False,
+    'lr': ag.space.Real(1e-4, 1e-2),
+    'batch_size': ag.space.Categorical(*list(range(100,401,100))),
+    'latent_distribution': ag.space.Categorical(ag.space.Dict(**{'dist_type': 'vmf', 'kappa': ag.space.Real(1.0, 100.0)}),
+                                                ag.space.Dict(**{'dist_type': 'logistic_gaussian', 'alpha': ag.space.Real(0.5, 5.0)})),
+    'optimizer': ag.space.Categorical('adam'),
+    'n_latent': ag.space.Categorical(15,20,25),
+    'enc_hidden_dim': ag.space.Categorical(50,100,150,200),
+    'embedding': ag.space.Categorical(ag.space.Dict(**{'source': 'random', 'size': ag.space.Categorical(50,100,150,200)})),
+    'coherence_loss_wt': 0.0,
+    'redundancy_loss_wt': 0.0,
+    'num_enc_layers': 1,
+    'enc_dr': ag.space.Real(0.0, 0.2),
+    'covar_net_layers': 1
+    }
 
 class TMNTConfigBOW(BaseTMNTConfig):
 
