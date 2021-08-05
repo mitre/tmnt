@@ -735,11 +735,7 @@ class BowEstimator(BaseBowEstimator):
         return model
     
 
-<<<<<<< HEAD
-    def get_topic_vectors(self) -> mx.nd.ndarray.NDArray:
-=======
     def get_topic_vectors(self) -> mx.nd.NDArray:
->>>>>>> v09_dev
         """
         Get topic vectors of the fitted model.
 
