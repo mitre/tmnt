@@ -1045,6 +1045,7 @@ class SeqBowEstimator(BaseEstimator):
             config['latent_distribution'] = {'dist_type':'gaussian'}
         config['epochs'] = self.epochs
         #config['embedding_source'] = self.embedding_source
+        config['gamma'] = self.gamma
         config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
         config['warmup_ratio'] = self.warmup_ratio
         config['bert_model_name'] = self.bert_model_name
