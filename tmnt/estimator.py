@@ -973,6 +973,7 @@ class SeqBowEstimator(BaseEstimator):
         kappa = 0.0
         alpha = 1.0
         latent_distrib = ldist_def.dist_type
+        n_latent = int(config.n_latent)
         if latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
             latent_distribution = LogisticGaussianDistribution(n_latent, ctx=ctx, alpha=alpha)
@@ -989,7 +990,6 @@ class SeqBowEstimator(BaseEstimator):
                     latent_distribution = latent_distribution,
                     batch_size      = int(config.batch_size),
                     redundancy_reg_penalty = 0.0,
-                    kappa = 20.0,
                     warmup_ratio = config.warmup_ratio,
                     optimizer = config.optimizer,
                     classifier_dropout = config.classifier_dropout,
