@@ -206,8 +206,11 @@ class BERTDatasetTransform(object):
             label_str = line[-1]
             # map to int if class labels are available
             if self.class_labels:
-                labels = [ self._label_map.get(label,0) for label in label_str.split(',') ]
-                if labels is None or len(labels) == 0:
+                if label_str:
+                    labels = [ self._label_map.get(label,0) for label in label_str.split(',') ]
+                    if labels is None or len(labels) == 0:
+                        labels = [0]
+                else:
                     labels = [0]
             else:
                 try:
