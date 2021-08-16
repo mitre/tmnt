@@ -984,7 +984,7 @@ class SeqBowEstimator(BaseEstimator):
             latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
         model = cls(bert_base,
                     bert_model_name = config.bert_model_name,
-                    bert_data_name  = config.bert_dataset,
+                    bert_data_name  = config.bert_data_name,
                     bow_vocab       = bow_vocab, 
                     n_labels        = n_labels,
                     latent_distribution = latent_distribution,
