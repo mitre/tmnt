@@ -272,6 +272,7 @@ class BaseBowEstimator(BaseEstimator):
     @classmethod
     def from_config(cls, config: Union[str, dict], vocabulary: Union[str, nlp.Vocab],
                     n_labels: int = 0,
+                    coherence_coefficient: float = 8.0,
                     coherence_via_encoder: bool = False,
                     validate_each_epoch: bool = False,
                     pretrained_param_file: Optional[str] = None,
@@ -348,7 +349,8 @@ class BaseBowEstimator(BaseEstimator):
                     gamma = gamma,
                     multilabel = multilabel,
                     validate_each_epoch=validate_each_epoch,
-                    coherence_coefficient=8.0, reporter=reporter, 
+                    coherence_coefficient=coherence_coefficient,
+                    reporter=reporter, 
                     ctx=ctx, lr=lr, latent_distribution=latent_distribution, optimizer=optimizer,
                     enc_hidden_dim=enc_hidden_dim,
                     coherence_reg_penalty=coherence_reg_penalty,
@@ -534,7 +536,7 @@ class BaseBowEstimator(BaseEstimator):
         npmi = val_result['npmi']
         ppl  = val_result['ppl']
         redundancy = val_result['redundancy']
-        obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
+        obj = (npmi - redundancy) - ( ( ppl / 1000 ) / self.coherence_coefficient )
         b_obj = max(min(obj, 100.0), -100.0)
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         if self.has_classifier:
@@ -967,12 +969,24 @@ class SeqBowEstimator(BaseEstimator):
                 logging.error("File {} does not appear to be a valid config instance".format(config))
                 raise Exception("Invalid Json Configuration File")
             config = ag.space.Dict(**config_dict)
+        ldist_def = config.latent_distribution
+        kappa = 0.0
+        alpha = 1.0
+        latent_distrib = ldist_def.dist_type
+        if latent_distrib == 'logistic_gaussian':
+            alpha = ldist_def.alpha
+            latent_distribution = LogisticGaussianDistribution(n_latent, ctx=ctx, alpha=alpha)
+        elif latent_distrib == 'vmf':
+            kappa = ldist_def.kappa
+            latent_distribution = HyperSphericalDistribution(n_latent, ctx=ctx, kappa=kappa)
+        else:
+            latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
         model = cls(bert_base,
                     bert_model_name = config.bert_model_name,
                     bert_data_name  = config.bert_dataset,
                     bow_vocab       = bow_vocab, 
                     n_labels        = n_labels,
-                    n_latent        = int(config.n_latent),
+                    latent_distribution = latent_distribution,
                     batch_size      = int(config.batch_size),
                     redundancy_reg_penalty = 0.0,
                     kappa = 20.0,
@@ -1014,7 +1028,6 @@ class SeqBowEstimator(BaseEstimator):
         if model.has_classifier:
             model.classifier.initialize(init=mx.init.Normal(0.02), ctx=self.ctx)
         return model
-    
 
     def _get_config(self):
         config = {}
@@ -1024,10 +1037,10 @@ class SeqBowEstimator(BaseEstimator):
         config['n_latent'] = self.n_latent
         config['n_labels'] = self.n_labels
         config['batch_size'] = self.batch_size
-        if self.latent_distrib == 'vmf':
-            config['latent_distribution'] = {'dist_type':'vmf', 'kappa':self.kappa}
-        elif self.latent_distrib == 'logistic_gaussian':
-            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.alpha}
+        if isinstance(self.latent_distribution, HyperSphericalDistribution):
+            config['latent_distribution'] = {'dist_type':'vmf', 'kappa': self.latent_distribution.kappa}
+        elif isinstance(self.latent_distribution, LogisticGaussianDistribution):
+            config['latent_distribution'] = {'dist_type':'logistic_gaussian', 'alpha':self.latent_distribution.alpha}
         else:
             config['latent_distribution'] = {'dist_type':'gaussian'}
         config['epochs'] = self.epochs
@@ -1110,7 +1123,7 @@ class SeqBowEstimator(BaseEstimator):
         npmi = val_result['npmi']
         ppl  = val_result['ppl']
         redundancy = val_result['redundancy']
-        obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
+        obj = (npmi - redundancy) - ( ( ppl / 1000 ) / self.coherence_coefficient )
         b_obj = max(min(obj, 100.0), -100.0)
         sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
         if self.has_classifier and self.gamma >= 0.0:

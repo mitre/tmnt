@@ -214,7 +214,7 @@ class BowVAETrainer(BaseTrainer):
     """
     def __init__(self, vocabulary, train_data_or_path, test_data_or_path,
                  log_out_dir='_exps', model_out_dir='_model_dir', coherence_via_encoder=False, aux_data_or_path=None,
-                 pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False,
+                 pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False, coherence_coefficient=8.0,
                  use_gpu=False, n_labels=0,
                  val_each_epoch=True, rng_seed=1234):
         super().__init__(vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, use_gpu, val_each_epoch, rng_seed)
@@ -227,6 +227,7 @@ class BowVAETrainer(BaseTrainer):
         self.n_labels = n_labels
         self.use_labels_as_covars = use_labels_as_covars
         self.coherence_via_encoder = coherence_via_encoder
+        self.coherence_coefficient = coherence_coefficient
         if topic_seed_file:
             self.seed_matrix = get_seed_matrix_from_file(topic_seed_file, vocabulary, ctx)
         
@@ -305,10 +306,11 @@ class BowVAETrainer(BaseTrainer):
                                                      pretrained_param_file=self.pretrained_param_file,
                                                      reporter=reporter, ctx=ctx)
         else:
-           estimator = BowEstimator.from_config(config, vocab, n_labels=self.n_labels,
-                                                coherence_via_encoder=self.coherence_via_encoder,
-                                                validate_each_epoch=self.validate_each_epoch,
-                                                pretrained_param_file=self.pretrained_param_file,
+           estimator = BowEstimator.from_config(config, vocab, n_labels = self.n_labels,
+                                                coherence_via_encoder   = self.coherence_via_encoder,
+                                                validate_each_epoch     = self.validate_each_epoch,
+                                                pretrained_param_file   = self.pretrained_param_file,
+                                                coherence_coefficient   = self.coherence_coefficient,
                                                 reporter=reporter, ctx=ctx)
         return estimator
     
