@@ -100,15 +100,19 @@ class BowVAEInferencer(BaseInferencer):
                 pickle.dump(self.vectorizer, fp)
 
 
-    def get_model_details(self, sp_vec_file):
-        data_csr, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab))
+    def get_model_details(self, sp_vec_file_or_X, y=None):
+        if isinstance(sp_vec_file_or_X, str):
+            data_csr, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab))
+        else:
+            data_csr = sp_vec_file_or_X
+            labels = y
         data_csr = mx.nd.sparse.csr_matrix(data_csr, dtype='float32')
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
         w_pr = mx.nd.softmax(w, axis=1)
         ## 2) D x K matrix over the test data of topic probabilities
         covars = labels if self.covar_model else None
-        dt_matrix = self.encode_data(data_csr, covars, use_probs=True)
+        dt_matrix = self.encode_data(data_csr, covars, use_probs=True, target_entropy=2.0)
         ## 3) D-length vector of document sizes
         doc_lengths = data_csr.sum(axis=1)
         ## 4) vocab (in same order as W columns)
@@ -117,8 +121,8 @@ class BowVAEInferencer(BaseInferencer):
         return w_pr, dt_matrix, doc_lengths, term_cnts
 
 
-    def get_pyldavis_details(self, sp_vec_file):
-        w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file)
+    def get_pyldavis_details(self, sp_vec_file_or_X, y=None):
+        w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file_or_X, y=y)
         d1 = w_pr.asnumpy().tolist()
         d2 = list(map(lambda x: x.tolist(), dt_matrix))
         d3 = doc_lengths.asnumpy().tolist()

@@ -21,7 +21,7 @@ data, y = fetch_20newsgroups(shuffle=True, random_state=1,
 # %%
 # Next step involves creating a vectorizer that maps text in the list of strings, ``data``,
 # to a document-term matrix, ``X``
-tf_vectorizer = TMNTVectorizer(vocab_size=2000)
+tf_vectorizer = TMNTVectorizer(vocab_size=2000, count_vectorizer_kwargs=dict(max_df=0.8, token_pattern=r'[A-Aa-z][A-Za-z][A-Za-z]+'))
 X, _ = tf_vectorizer.fit_transform(data)
 
 # %%
@@ -29,9 +29,11 @@ X, _ = tf_vectorizer.fit_transform(data)
 # We use the ``LogisticGaussian`` latent distribution here with 25 latent dimensions or *topics*
 # The fit method applied to the term-document matrix will estimate the model parameters.
 from tmnt.estimator import BowEstimator
-from tmnt.distribution import LogisticGaussianDistribution
-estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=LogisticGaussianDistribution(25), epochs=8)
-_ = estimator.fit(X)
+from tmnt.distribution import LogisticGaussianDistribution, HyperSphericalDistribution
+estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=HyperSphericalDistribution(20, kappa=20),
+                         log_method='print', lr=0.005, batch_size=500, embedding_source='random', embedding_size=200,
+                         epochs=36, enc_hidden_dim=150, validate_each_epoch=True)
+_ = estimator.fit_with_validation(X, None, X, None)
 
 # %%
 # An inference object is then created which enables the application of the model to raw text
@@ -44,6 +46,20 @@ encodings = inferencer.encode_texts(['Greater Armenia would stretch from Karabak
 # The model can be saved to disk and reloaded for model deployment
 inferencer.save(model_dir='_model_dir')
 reloaded_inferencer = BowVAEInferencer.from_saved(model_dir='_model_dir')
+
+# %%
+# We can visualize the topics and associated topic terms using PyLDAvis
+import pyLDAvis
+import funcy
+full_model_dict = inferencer.get_pyldavis_details(X)
+pylda_opts = funcy.merge(full_model_dict, {'mds': 'mmds'})
+vis_data = pyLDAvis.prepare(**pylda_opts)
+
+# %%
+# The topic model terms and topic-term proportions will be written
+# to the file ``m1.html``
+pyLDAvis.save_html(vis_data, 'm1.html')
+
 
 # %%
 # Now let's visualize the encodings for the training set using UMAP:
@@ -63,6 +79,7 @@ encodings = np.array(enc_list)
 # for visualizing the data.  See UMAP for more `here <https://umap-learn.readthedocs.io/en/latest/>`_
 umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
 embeddings = umap_model.fit_transform(encodings)
+
 
 # %%
 # We can plot the UMAP embeddings as a scatter plot.
