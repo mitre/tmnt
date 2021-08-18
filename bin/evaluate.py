@@ -27,7 +27,7 @@ def setup_parser():
     parser.add_argument('--gpu', type=int, help='GPU device ID (-1 default = CPU)', default=-1)
     parser.add_argument('--test_file', type=str, required=True, help='file in sparse vector format')    
     parser.add_argument('--vocab_file', type=str, required=True, help='Vocabulary file associated with sparse vector data')
-    parser.add_argument('--model_dir', type=Path,
+    parser.add_argument('--model_dir', type=str,
                         help='The directory where the params, specs, and vocab should be found.')
     parser.add_argument('--plot_file', type=str, help='Output plot')
     parser.add_argument('--words_per_topic', type=int, help='Number of terms per topic to output', default=10)

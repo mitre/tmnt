@@ -4,14 +4,14 @@ import os, io
 import argparse
 import funcy
 import json
-from pathlib import Path
+
 import warnings
 
 from tmnt.inference import BowVAEInferencer
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--model_dir', type=Path, help='Directory with trained model files')
+parser.add_argument('--model_dir', type=str, help='Directory with trained model files')
 parser.add_argument('--vec_file', type=str, help='Sparse vector file')
 parser.add_argument('--json_output_file', type=str, help='JSON output file')
 parser.add_argument('--json_simple', type=str, help='JSON output file')

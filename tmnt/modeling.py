@@ -131,6 +131,7 @@ class BowVAEModel(BaseVAE):
                  n_labels=0,
                  gamma=1.0,
                  multilabel=False,
+                 classifier_dropout=0.1,
                  *args, **kwargs):
         super(BowVAEModel, self).__init__(*args, **kwargs)
         self.embedding_size = embedding_size
@@ -140,19 +141,18 @@ class BowVAEModel(BaseVAE):
         self.multilabel = multilabel
         self.n_labels = n_labels
         self.gamma    = gamma
+        self.classifier_dropout=classifier_dropout
         self.has_classifier = self.n_labels > 1
         if self.vocabulary.embedding:
             assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
         self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
         
         with self.name_scope():
-            ## Add in topic seed constraints
-            ## should be tanh here to avoid losing embedding information
             self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
             self.encoder = self._get_encoder(self.encoding_dims, dr=enc_dr)
             if self.has_classifier:
+                self.lab_dr = gluon.nn.Dropout(self.enc_dr*2.0)
                 self.classifier = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
-                #self.lab_dr = gluon.nn.Dropout(self.enc_dr*2.0)
             #self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
             
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
@@ -267,7 +267,7 @@ class BowVAEModel(BaseVAE):
         ii_loss, recon_loss, coherence_loss, redundancy_loss = \
             self.get_loss_terms(F, data, y, KL, batch_size)
         if self.has_classifier:
-            classifier_outputs = self.classifier(mu_out)
+            classifier_outputs = self.classifier(self.lab_dr(mu_out))
         else:
             classifier_outputs = None
         return ii_loss, KL, recon_loss, coherence_loss, redundancy_loss, classifier_outputs

@@ -23,6 +23,7 @@ from tmnt.utils.recalibrate import recalibrate_scores
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from sklearn.datasets import load_svmlight_file
+from functools import partial
 
 
 MAX_DESIGN_MATRIX = 250000000 
@@ -119,7 +120,7 @@ class BowVAEInferencer(BaseInferencer):
     def get_pyldavis_details(self, sp_vec_file):
         w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file)
         d1 = w_pr.asnumpy().tolist()
-        d2 = list(map(lambda x: x.asnumpy().tolist(), dt_matrix))
+        d2 = list(map(lambda x: x.tolist(), dt_matrix))
         d3 = doc_lengths.asnumpy().tolist()
         d5 = term_cnts.asnumpy().tolist()
         d4 = list(map(lambda i: self.vocab.idx_to_token[i], range(len(self.vocab.idx_to_token))))
@@ -127,10 +128,10 @@ class BowVAEInferencer(BaseInferencer):
         return d
 
 
-    def get_umap_embeddings(self, data, umap_metric='euclidean'):
-        encs = self.encode_data(data, None)
+    def get_umap_embeddings(self, data, umap_metric='euclidean', use_probs=False, target_entropy=1.0):
+        encs = self.encode_data(data, None, use_probs=use_probs, target_entropy=target_entropy)
         encs2 = np.array(encs)
-        um = umap.UMAP(n_neighbors=4, min_dist=0.1, metric='euclidean')
+        um = umap.UMAP(n_neighbors=4, min_dist=0.2, metric='euclidean')
         return um.fit_transform(encs2)
 
     def plot_to(self, embeddings, labels, f=None):
@@ -180,7 +181,7 @@ class BowVAEInferencer(BaseInferencer):
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         return infer_iter, last_batch_size
 
-    def encode_data(self, data_mat, labels=None, use_probs=True, include_bn=False):
+    def encode_data(self, data_mat, labels=None, use_probs=True, include_bn=False, target_entropy=1.0):
         infer_iter, last_batch_size = self._get_data_iterator(data_mat, labels)
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):
@@ -193,7 +194,7 @@ class BowVAEInferencer(BaseInferencer):
             if use_probs:
                 e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
                 encs = list(mx.nd.softmax(e1).asnumpy())
-                encs = list(map(recalibrate_scores, encs))
+                encs = list(map(partial(recalibrate_scores, target_entropy=target_entropy), encs))
             else:
                 encs = list(encs.astype('float64').asnumpy())
             encodings.extend(encs)
@@ -210,7 +211,7 @@ class BowVAEInferencer(BaseInferencer):
             if use_probs:
                 e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
                 encs = list(mx.nd.softmax(e1).asnumpy())
-                encs = list(map(recalibrate_scores, encs))
+                encs = list(map(partial(recalibrate_scores, target_entropy=target_entropy), encs))
             else:
                 encs = list(encs.astype('float64').asnumpy())
             encodings.extend(encs)

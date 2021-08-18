@@ -12,7 +12,7 @@ the widely used 20 Newsgroups Dataset.
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 
 # %%
-# Let's start by first fetching the 20 newsgroups dataset
+# Let's fetch the 20 newsgroups dataset
 from sklearn.datasets import fetch_20newsgroups
 data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                              remove=('headers', 'footers', 'quotes'),

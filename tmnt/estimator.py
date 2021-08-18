@@ -20,7 +20,6 @@ import json
 from mxnet import autograd
 from mxnet import gluon
 import gluonnlp as nlp
-from pathlib import Path
 import umap
 #import umap.plot
 import matplotlib.pyplot as plt
@@ -239,12 +238,14 @@ class BaseBowEstimator(BaseEstimator):
                  fixed_embedding: bool = False,
                  num_enc_layers: int = 1,
                  enc_dr: float = 0.1,
+                 classifier_dropout: float = 0.1,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.enc_hidden_dim = enc_hidden_dim
         self.fixed_embedding = fixed_embedding
         self.n_encoding_layers = num_enc_layers
         self.enc_dr = enc_dr
+        self.classifier_dropout = classifier_dropout
         self.vocabulary = vocabulary 
         self.embedding_source = embedding_source
         self.embedding_size = embedding_size
@@ -564,8 +565,8 @@ class BaseBowEstimator(BaseEstimator):
     def fit_with_validation(self,
                             X: sp.csr.csr_matrix,
                             y: np.ndarray,
-                            val_X: sp.csr.csr_matrix,
-                            val_y: np.ndarray) -> Tuple[float, float, float, float]:
+                            val_X: Optional[sp.csr.csr_matrix],
+                            val_y: Optional[np.ndarray]) -> Tuple[float, float, float, float]:
         """
         Fit a model according to the options of this estimator and optionally evaluate on validation data
 
@@ -724,6 +725,7 @@ class BowEstimator(BaseBowEstimator):
         model = \
                 BowVAEModel(self.enc_hidden_dim, emb_size, n_encoding_layers=self.n_encoding_layers,
                             enc_dr=self.enc_dr, fixed_embedding=self.fixed_embedding,
+                            classifier_dropout=self.classifier_dropout,
                             n_labels = self.n_labels,
                             gamma = self.gamma,
                             multilabel = self.multilabel,
@@ -1199,8 +1201,12 @@ class SeqBowEstimator(BaseEstimator):
 
         num_effective_samples = num_train_examples
 
-        step_size = self.batch_size * accumulate if accumulate else self.batch_size
-        num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
+        #step_size = self.batch_size * accumulate if accumulate else self.batch_size
+        #num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
+        num_train_steps = len(train_data)
+        if accumulate:
+            num_train_steps /= accumulate
+        
         warmup_ratio = self.warmup_ratio
         num_warmup_steps = int(num_train_steps * warmup_ratio)
         logging.info("Number of warmup steps = {}, num total train steps = {}, train examples = {}, batch_size = {}, epochs = {}"
@@ -1241,7 +1247,7 @@ class SeqBowEstimator(BaseEstimator):
                     seqs, aux_seqs = data_batch
                 else:
                     seqs, aux_seqs = data_batch[0], None
-                # learning rate schedule
+                # learning rate schedule                
                 if step_num < num_warmup_steps:
                     new_lr = self.lr * (step_num+1) / num_warmup_steps
                 else:
@@ -1275,7 +1281,7 @@ class SeqBowEstimator(BaseEstimator):
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    self.log_train(batch_id, (num_effective_samples / step_size), self.metric, loss_details['step_loss'],
+                    self.log_train(batch_id, num_train_steps, self.metric, loss_details['step_loss'],
                                    loss_details['elbo_loss'], loss_details['red_loss'], loss_details['class_loss'], self.log_interval,
                                    epoch_id, trainer.learning_rate)
                     ## reset loss details
