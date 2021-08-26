@@ -419,7 +419,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_or_path else None
 
         bert_model_name = config.bert_model_name
-        bert_dataset    = config.bert_dataset
+        bert_dataset    = config.bert_data_name
         batch_size      = config.batch_size
         max_seq_len     = config.max_seq_len
         
