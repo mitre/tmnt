@@ -25,15 +25,24 @@ tf_vectorizer = TMNTVectorizer(vocab_size=2000, count_vectorizer_kwargs=dict(max
 X, _ = tf_vectorizer.fit_transform(data)
 
 # %%
+# Setup logging which is good practice
+import logging
+from tmnt.utils.log_utils import logging_config
+logging_config(folder='.', name='train_20news', level='info', console_level='info')
+
+# %%
 # Fitting a model involves creating an instance of the :py:class:`tmnt.estimator.BowEstimator` class
 # We use the ``LogisticGaussian`` latent distribution here with 25 latent dimensions or *topics*
 # The fit method applied to the term-document matrix will estimate the model parameters.
 from tmnt.estimator import BowEstimator
 from tmnt.distribution import LogisticGaussianDistribution, HyperSphericalDistribution
-estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=HyperSphericalDistribution(20, kappa=20),
-                         log_method='print', lr=0.005, batch_size=500, embedding_source='random', embedding_size=200,
+estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=LogisticGaussianDistribution(25, alpha=1.0),
+                         log_method='log', lr=0.005, batch_size=500, embedding_source='random', embedding_size=200,
                          epochs=36, enc_hidden_dim=150, validate_each_epoch=True)
-_ = estimator.fit_with_validation(X, None, X, None)
+#estimator = BowEstimator.from_config(config='../data/configs/train_model/model.config', vocabulary=tf_vectorizer.get_vocab())
+tr_X, val_X = X, X # in this case, use same data for training and validation
+tr_y, val_y = None, None # dependent variables (labels) aren't used
+_ = estimator.fit_with_validation(tr_X, tr_y, val_X, val_y)
 
 # %%
 # An inference object is then created which enables the application of the model to raw text

@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright (c) 2020 The MITRE Corporation.
+# Copyright (c) 2020-2021 The MITRE Corporation.
 """
 Model trainers that handle data prep, pre-trained vocabularies and enable model selection.
 """

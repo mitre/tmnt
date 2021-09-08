@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright (c) 2019-2020. The MITRE Corporation.
+# Copyright (c) 2019-2021. The MITRE Corporation.
 """
 Core Neural Net architectures for topic modeling.
 """

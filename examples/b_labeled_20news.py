@@ -63,7 +63,7 @@ num_label_values = int(np.max(y_train)) + 1
 # %%
 # Setting up the estimator now, we include some adjustments to default parameters
 # to reduce potential for overfitting the classifier
-l_estimator = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
+l_estimator1 = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
                            latent_distribution = latent_distribution,
                            n_labels=num_label_values,
                            gamma=gamma,
@@ -72,6 +72,8 @@ l_estimator = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
                            classifier_dropout=0.2,
                            lr=0.0003, enc_hidden_dim=50,
                            epochs=12, batch_size=128)
+
+l_estimator = BowEstimator.from_config(config='../data/configs/train_model/model.config', vocabulary=tf_vectorizer.get_vocab(), n_labels=num_label_values)
 
 # %%
 # Fit the model

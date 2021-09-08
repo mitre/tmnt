@@ -1,5 +1,5 @@
 # coding: utf-8
-# Copyright (c) 2020 The MITRE Corporation.
+# Copyright (c) 2020-2021 The MITRE Corporation.
 """
 Estimator module to train/fit/estimate individual models with fixed hyperparameters.
 Estimators are used by trainers to manage training with specific datasets; in addition,
@@ -344,6 +344,7 @@ class BaseBowEstimator(BaseEstimator):
             latent_distribution = HyperSphericalDistribution(n_latent, ctx=ctx, kappa=kappa)
         else:
             latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
+        n_labels = config.get('n_labels', n_labels)
         model = \
                 cls(vocabulary,
                     n_labels=n_labels,
@@ -498,6 +499,7 @@ class BaseBowEstimator(BaseEstimator):
             num_std_batches = val_X.shape[0] // bs
             last_batch_size = val_X.shape[0] % bs
             for i, (data, labels) in enumerate(val_dataloader):
+                logging.info("Labels = {}".format(labels))
                 data = data.as_in_context(self.ctx)
                 labels = labels.as_in_context(self.ctx)
                 if i == num_std_batches - 1 and last_batch_size > 0:
@@ -561,6 +563,13 @@ class BaseBowEstimator(BaseEstimator):
             label_ls = mx.nd.zeros(total_ls.shape)
         return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
 
+    def _get_unlabeled_losses(self, model, data, labels):
+        elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
+            self._forward(self.model, data, labels)
+        total_ls = elbo_ls.mean()
+        label_ls = mx.nd.zeros(total_ls.shape)
+        return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
+
     def fit_with_validation_aux(self, 
                                 X: sp.csr.csr_matrix,
                                 y: np.ndarray,
@@ -579,7 +588,8 @@ class BaseBowEstimator(BaseEstimator):
             train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
         if aux_X is not None:
             aux_dataloader = \
-                DataIterLoader(SparseMatrixDataIter(X, None, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
+                DataIterLoader(mx.io.NDArrayIter(aux_X, None, self.batch_size, last_batch_handle='discard', shuffle=True))
+                #DataIterLoader(SparseMatrixDataIter(X, None, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
             
         if self.model is None or not self.warm_start:
             self.model = self._get_model()
@@ -588,6 +598,7 @@ class BaseBowEstimator(BaseEstimator):
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         v_res = None
+        aux_dataiter = iter(aux_dataloader)
         for epoch in range(self.epochs):
             ts_epoch = time.time()
             elbo_losses = []
@@ -597,10 +608,19 @@ class BaseBowEstimator(BaseEstimator):
                     labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
                 labels = labels.as_in_context(self.ctx)
                 data = data.as_in_context(self.ctx)
+                try:
+                    aux_data, aux_labels = next(aux_dataiter)
+                except StopIteration:
+                    aux_dataiter = iter(aux_dataloader)
+                    aux_data, aux_labels = next(aux_dataiter)
                 with autograd.record():
                     elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data, labels)
                     elbo_mean = elbo_ls.mean()
                 total_ls.backward()
+                if aux_data is not None:
+                    with autograd.record():
+                        elbo_ls_a, kl_loss_a, _, _, lab_loss_a, total_ls_a = self._get_unlabeled_losses(self.model, aux_data, aux_labels)
+                    total_ls_a.backward()
                 trainer.step(1)
                 if not self.quiet:
                     elbo_losses.append(float(elbo_mean.asscalar()))
@@ -648,6 +668,9 @@ class BaseBowEstimator(BaseEstimator):
         Returns:
             sc_obj, npmi, perplexity, redundancy
         """
+        if aux_X is not None:
+            return self.fit_with_validation_aux(X, y, val_X, val_y, aux_X)
+        
         wd_freqs = self._get_wd_freqs(X)
         x_size = X.shape[0] * X.shape[1]
         if x_size > MAX_DESIGN_MATRIX:
@@ -1607,95 +1630,3 @@ class SeqBowMetricEstimator(SeqBowEstimator):
                           perplexity=0.0, redundancy=0.0)
         return v_res['avg_prec'], v_res
 
-
-class DeepAveragingBowEstimator(BaseEstimator):
-
-    def __init__(self, vocabulary, n_labels, gamma, emb_dim, emb_dr, seq_length, *args, **kwargs):
-        super(DeepAveragingBowEstimator, self).__init__(*args, **kwargs)
-        self.vocabulary = vocabulary
-        self.n_labels = n_labels
-        self.gamma = gamma
-        self.emb_in_dim = len(vocabulary)
-        self.emb_out_dim = emb_dim
-        self.emb_dr = emb_dr
-        self.seq_length = seq_length
-        self.validate_each_epoch = False
-
-    def _get_model(self):
-        model = DeepAveragingVAEModel(self.n_labels, self.gamma, self.emb_in_dim, self.emb_out_dim , self.emb_dr, self.seq_length,
-                                      vocabulary=self.vocabulary, n_latent=self.n_latent, latent_distrib=self.latent_distrib,
-                                      batch_size=self.batch_size, wd_freqs=self.wd_freqs, ctx=self.ctx)
-        return model
-              
-
-    def _forward(self, model, ids, lens, bow, labels, l_mask):
-        return model(ids, lens, bow, labels, l_mask)
-
-
-    def fit_with_validation(self, X, y, val_X, val_y):
-        seq_train, bow_train = X
-        model = self._get_model()
-        self.model = model
-
-        dataloader = mx.gluon.data.DataLoader(seq_train, batch_size=self.batch_size,
-                                              shuffle=True, last_batch='rollover')
-        if val_X is not None:
-            seq_val, bow_val = val_X
-            dataloader_val = mx.gluon.data.DataLoader(seq_val, batch_size=self.batch_size, last_batch='rollover',
-                                                       shuffle=False)
-
-        trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
-        sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
-        
-        for epoch in range(self.epochs):
-            ts_epoch = time.time()
-            elbo_losses = []
-            lab_losses  = []
-            for i, seqs in enumerate(dataloader):
-                ids, valid_len, output_bow, labels = seqs
-                if labels is None:
-                    labels = mx.nd.expand_dims(mx.nd.zeros(), 1)
-                    mask = None
-                else:
-                    if len(labels.shape) > 1:
-                        mask = labels.sum(axis=1) >= 0.0
-                    else:
-                        mask = labels >= 0.0
-                    mask = mask.as_in_context(self.ctx)
-                ids    = ids.as_in_context(self.ctx)
-                labels = labels.as_in_context(self.ctx)
-                valid_len = valid_len.as_in_context(self.ctx)
-                output_bow = output_bow.as_in_context(self.ctx)
-
-                with autograd.record():
-                    elbo, kl_loss, rec_loss, coherence_loss, redundancy_loss, lab_loss = \
-                        self._forward(self.model, ids, valid_len, output_bow, labels, mask)
-                    elbo_mean = elbo.mean()
-                elbo_mean.backward()
-                trainer.step(1)
-                if not self.quiet:
-                    elbo_losses.append(float(elbo_mean.asscalar()))
-                    if lab_loss is not None:
-                        lab_losses.append(float(lab_loss.mean().asscalar()))
-            if not self.quiet and not self.validate_each_epoch:
-                elbo_mean = np.mean(elbo_losses) if len(elbo_losses) > 0 else 0.0
-                lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
-                self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
-                                    .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
-            if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
-              _, val_X_sp = val_X
-              npmi, redundancy = self._npmi(val_X_sp)
-              self._output_status("NPMI ==> {}".format(npmi))
-                #ppl, npmi, redundancy = self.validate(val_X, val_y)
-                #if self.reporter:
-                #    obj = (npmi - redundancy) * self.coherence_coefficient - ( ppl / 1000 )
-                #    b_obj = max(min(obj, 100.0), -100.0)
-                #    sc_obj = 1.0 / (1.0 + math.exp(-b_obj))
-                #    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                #                        .format(epoch+1, sc_obj, ppl, npmi, redundancy))
-                #    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-                #                  coherence=npmi, perplexity=ppl, redundancy=redundancy)
-              
-        return sc_obj, {'npmi': npmi, 'ppl': ppl, 'redundancy': redundancy}
-
-    

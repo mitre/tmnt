@@ -1,5 +1,5 @@
 """
-Copyright (c) 2019 The MITRE Corporation.
+Copyright (c) 2019-2021 The MITRE Corporation.
 """
 
 import argparse

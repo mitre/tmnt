@@ -1,6 +1,7 @@
 # coding: utf-8
+# Copyright (c) 2019 The MITRE Corporation.
 """
-Copyright (c) 2019 The MITRE Corporation.
+Utilities for computing coherence based on Normalized Pointwise Mutual Information (NPMI).
 """
 
 from math import log10
