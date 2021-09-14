@@ -566,95 +566,16 @@ class BaseBowEstimator(BaseEstimator):
     def _get_unlabeled_losses(self, model, data, labels):
         elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
             self._forward(self.model, data, labels)
-        total_ls = elbo_ls.mean()
+        total_ls = elbo_ls.mean() / self.gamma
         label_ls = mx.nd.zeros(total_ls.shape)
         return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
 
-    def fit_with_validation_aux(self, 
-                                X: sp.csr.csr_matrix,
-                                y: np.ndarray,
-                                val_X: Optional[sp.csr.csr_matrix],
-                                val_y: Optional[np.ndarray],
-                                aux_X: Optional[sp.csr.csr_matrix] = None) -> Tuple[float, float, float, float]:
-        wd_freqs = self._get_wd_freqs(X)
-        x_size = X.shape[0] * X.shape[1]
-        if x_size > MAX_DESIGN_MATRIX:
-            logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
-            train_dataloader = \
-                DataIterLoader(SparseMatrixDataIter(X, y, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
-        else:
-            y = mx.nd.array(y) if y is not None else None
-            X = mx.nd.sparse.csr_matrix(X)
-            train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
-        if aux_X is not None:
-            aux_dataloader = \
-                DataIterLoader(mx.io.NDArrayIter(aux_X, None, self.batch_size, last_batch_handle='discard', shuffle=True))
-                #DataIterLoader(SparseMatrixDataIter(X, None, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
-            
-        if self.model is None or not self.warm_start:
-            self.model = self._get_model()
-            self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
-        
-        trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
-        sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
-        v_res = None
-        aux_dataiter = iter(aux_dataloader)
-        for epoch in range(self.epochs):
-            ts_epoch = time.time()
-            elbo_losses = []
-            lab_losses  = []
-            for i, (data, labels) in enumerate(train_dataloader):
-                if labels is None:
-                    labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                labels = labels.as_in_context(self.ctx)
-                data = data.as_in_context(self.ctx)
-                try:
-                    aux_data, aux_labels = next(aux_dataiter)
-                except StopIteration:
-                    aux_dataiter = iter(aux_dataloader)
-                    aux_data, aux_labels = next(aux_dataiter)
-                with autograd.record():
-                    elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data, labels)
-                    elbo_mean = elbo_ls.mean()
-                total_ls.backward()
-                if aux_data is not None:
-                    with autograd.record():
-                        elbo_ls_a, kl_loss_a, _, _, lab_loss_a, total_ls_a = self._get_unlabeled_losses(self.model, aux_data, aux_labels)
-                    total_ls_a.backward()
-                trainer.step(1)
-                if not self.quiet:
-                    elbo_losses.append(float(elbo_mean.asscalar()))
-                    if lab_loss is not None:
-                        lab_losses.append(float(lab_loss.mean().asscalar()))
-            if not self.quiet and not self.validate_each_epoch:
-                elbo_mean = np.mean(elbo_losses) if len(elbo_losses) > 0 else 0.0
-                lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
-                self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
-                                    .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
-            mx.nd.waitall()
-            if val_X is not None and (self.validate_each_epoch or epoch == self.epochs-1):
-                logging.info('Performing validation ....')
-                v_res = self.validate(val_X, val_y)
-                sc_obj = self._get_objective_from_validation_result(v_res)
-                if self.has_classifier:
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
-                                        .format(epoch+1, sc_obj, v_res['ppl'],
-                                                v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
-                else:
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                        .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
-                if self.reporter:
-                    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-                                  coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
-        mx.nd.waitall()
-        return sc_obj, v_res
-
-    def fit_with_validation(self,
+    def fit_with_validation(self, 
                             X: sp.csr.csr_matrix,
                             y: np.ndarray,
                             val_X: Optional[sp.csr.csr_matrix],
                             val_y: Optional[np.ndarray],
-                            aux_X: Optional[sp.csr.csr_matrix] = None) -> Tuple[float, float, float, float]:
+                            aux_X: Optional[sp.csr.csr_matrix] = None) -> Tuple[float, dict]:
         """
         Fit a model according to the options of this estimator and optionally evaluate on validation data
 
@@ -666,13 +587,19 @@ class BaseBowEstimator(BaseEstimator):
             aux_X: Auxilliary unlabeled data for semi-supervised training
 
         Returns:
-            sc_obj, npmi, perplexity, redundancy
+            sc_obj, v_res
         """
-        if aux_X is not None:
-            return self.fit_with_validation_aux(X, y, val_X, val_y, aux_X)
-        
         wd_freqs = self._get_wd_freqs(X)
         x_size = X.shape[0] * X.shape[1]
+        if self.model is None or not self.warm_start:
+            self.model = self._get_model()
+            self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
+            
+        all_model_params = self.model.collect_params()                
+        params = [p for p in all_model_params.values() if p.grad_req != 'null']                
+        for p in params:
+            p.grad_req = 'add'
+            
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
             train_dataloader = \
@@ -681,30 +608,76 @@ class BaseBowEstimator(BaseEstimator):
             y = mx.nd.array(y) if y is not None else None
             X = mx.nd.sparse.csr_matrix(X)
             train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
-
-        if self.model is None or not self.warm_start:
-            self.model = self._get_model()
-            self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
-        
+        if aux_X is not None:
+            aux_X = mx.nd.sparse.csr_matrix(aux_X)
+            aux_dataloader = \
+                DataIterLoader(mx.io.NDArrayIter(aux_X, None, self.batch_size, last_batch_handle='discard', shuffle=True))
+                #DataIterLoader(SparseMatrixDataIter(X, None, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
+            
+            
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         v_res = None
+        aux_is_outer = False
+        if aux_X is None:
+            outer_loader, inner_loader = train_dataloader, None
+        elif X.shape[0] >= aux_X.shape[0]:
+            outer_loader, inner_loader = train_dataloader, aux_dataloader            
+        else:
+            aux_is_outer = True
+            outer_loader, inner_loader = aux_dataloader, train_dataloader
+        if inner_loader:
+            inner_dataiter = iter(inner_loader)
         for epoch in range(self.epochs):
             ts_epoch = time.time()
             elbo_losses = []
             lab_losses  = []
-            for i, (data, labels) in enumerate(train_dataloader):
-                if labels is None:
-                    labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                labels = labels.as_in_context(self.ctx)
-                data = data.as_in_context(self.ctx)
+            for i, (outer_data, outer_labels) in enumerate(outer_loader):
+                if inner_loader:
+                    try:
+                        inner_data, inner_labels = next(inner_dataiter)
+                    except StopIteration:
+                        inner_dataiter = iter(inner_loader)
+                        inner_data, inner_labels = next(inner_dataiter)
+                else:
+                    inner_data, inner_labels = None, None
+                if aux_is_outer:
+                    aux_data = outer_data.as_in_context(self.ctx)
+                    data = inner_data.as_in_context(self.ctx)
+                    if outer_labels is None:
+                        outer_labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+                    aux_labels = outer_labels.as_in_context(self.ctx) # aux labels will be ignored
+                    labels = inner_labels.as_in_context(self.ctx)
+                else:
+                    data = outer_data.as_in_context(self.ctx)
+                    if outer_labels is None:
+                        labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+                    labels = outer_labels.as_in_context(self.ctx)
+                    if inner_data is not None:
+                        aux_data = inner_data.as_in_context(self.ctx)                    
+                        if inner_labels is None:
+                            inner_labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+                        aux_labels = inner_labels.as_in_context(self.ctx) # aux labels will be ignored                    
+                    
                 with autograd.record():
                     elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data, labels)
                     elbo_mean = elbo_ls.mean()
                 total_ls.backward()
-                trainer.step(1)
+
+                if inner_data is not None:
+                    with autograd.record():
+                        elbo_ls_a, kl_loss_a, _, _, lab_loss_a, total_ls_a = \
+                            self._get_unlabeled_losses(self.model, aux_data, aux_labels)
+                    total_ls_a.backward()
+                
+                trainer.allreduce_grads()
+                trainer.update(1)
+                all_model_params.zero_grad()
                 if not self.quiet:
-                    elbo_losses.append(float(elbo_mean.asscalar()))
+                    if inner_data is not None:
+                        elbo_losses.append(float(elbo_mean.asscalar()) + float(elbo_ls_a.mean().asscalar()))
+                    else:
+                        elbo_losses.append(float(elbo_mean.asscalar()))                        
                     if lab_loss is not None:
                         lab_losses.append(float(lab_loss.mean().asscalar()))
             if not self.quiet and not self.validate_each_epoch:

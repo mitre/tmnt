@@ -63,17 +63,15 @@ num_label_values = int(np.max(y_train)) + 1
 # %%
 # Setting up the estimator now, we include some adjustments to default parameters
 # to reduce potential for overfitting the classifier
-l_estimator1 = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
+l_estimator = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
                            latent_distribution = latent_distribution,
                            n_labels=num_label_values,
                            gamma=gamma,
                            log_method='print',
                            enc_dr=0.2,
-                           classifier_dropout=0.2,
+                           classifier_dropout=0.1,
                            lr=0.0003, enc_hidden_dim=50,
                            epochs=12, batch_size=128)
-
-l_estimator = BowEstimator.from_config(config='../data/configs/train_model/model.config', vocabulary=tf_vectorizer.get_vocab(), n_labels=num_label_values)
 
 # %%
 # Fit the model
@@ -84,6 +82,24 @@ _ = l_estimator.fit(X_train, y_train)
 v_results = l_estimator.validate(X_test, y_test)
 print("Validation results acc = {}, ppl = {}, npmi = {}"
       .format(v_results['accuracy'], v_results['ppl'], v_results['npmi']))
+
+# %%
+# Train a semi-supervised model using just the first 500 training points as
+# labeled data and using the UNLABELED test data (transducive learning).  
+l_estimator_semi_supervised = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
+                                           latent_distribution = HyperSphericalDistribution(40),
+                                           n_labels=num_label_values,
+                                           gamma=10.0,
+                                           log_method='print',
+                                           enc_dr=0.2,
+                                           classifier_dropout=0.1,
+                                           lr=0.0003, enc_hidden_dim=50,
+                                           epochs=40, batch_size=128)
+_ = l_estimator_semi_supervised.fit_with_validation(X_train[:500], y_train[:500], None, None, X_test)
+v_results_ss = l_estimator_semi_supervised.validate(X_test, y_test)
+print("Validation results with semi-supervised learning. acc = {}, ppl = {}, npmi = {}"
+      .format(v_results_ss['accuracy'], v_results_ss['ppl'], v_results_ss['npmi']))
+
 
 # %%
 # Now, let's create UMAP embeddings from the model encodings when applied to the test data

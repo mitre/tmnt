@@ -83,7 +83,6 @@ class BowVAEInferencer(BaseInferencer):
                 vectorizer = pickle.load(fp)
         else:
             vectorizer = None
-        #model.load_parameters(str(param_file), allow_missing=False)
         return cls(estimator, pre_vectorizer=vectorizer)
 
     def save(self, model_dir: str) -> None:
