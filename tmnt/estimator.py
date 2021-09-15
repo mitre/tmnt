@@ -499,7 +499,6 @@ class BaseBowEstimator(BaseEstimator):
             num_std_batches = val_X.shape[0] // bs
             last_batch_size = val_X.shape[0] % bs
             for i, (data, labels) in enumerate(val_dataloader):
-                logging.info("Labels = {}".format(labels))
                 data = data.as_in_context(self.ctx)
                 labels = labels.as_in_context(self.ctx)
                 if i == num_std_batches - 1 and last_batch_size > 0:
