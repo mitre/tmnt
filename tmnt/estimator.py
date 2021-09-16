@@ -829,8 +829,8 @@ class BowEstimator(BaseBowEstimator):
 
 class CovariateBowEstimator(BaseBowEstimator):
 
-    def __init__(self, n_covars=0, *args, **kwargs):
-        
+    def __init__(self, *args, n_covars=0, **kwargs):
+
         super().__init__(*args, **kwargs)
 
         self.covar_net_layers = 1 ### XXX - temp hardcoded
@@ -947,6 +947,12 @@ class CovariateBowEstimator(BaseBowEstimator):
         """
 
         return self.model.get_topic_vectors(self.train_data, self.train_labels)
+
+    def initialize_with_pretrained(self):
+        assert(self.pretrained_param_file is not None)
+        self.model = self._get_model()
+        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
+        
 
     def transform(self, X: sp.csr.csr_matrix, y: np.ndarray):
         """

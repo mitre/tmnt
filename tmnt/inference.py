@@ -15,7 +15,7 @@ import umap
 import logging
 import pickle
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
-from tmnt.estimator import BowEstimator
+from tmnt.estimator import BowEstimator, CovariateBowEstimator
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.distribution import HyperSphericalDistribution
@@ -67,16 +67,20 @@ class BowVAEInferencer(BaseInferencer):
             self.covar_model = False
 
     @classmethod
-    def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, ctx=mx.cpu()):
+    def from_saved(cls, model_dir=None, ctx=mx.cpu()):
         serialized_vectorizer_file = None
-        if model_dir is not None:
-            estimator = BowEstimator.from_saved(model_dir)
-            serialized_vectorizer_file = os.path.join(model_dir,'vectorizer.pkl')
+        config_file = os.path.join(model_dir,'model.config')
+        param_file = os.path.join(model_dir,'model.params')
+        vocab_file = os.path.join(model_dir,'vocab.json')
+        serialized_vectorizer_file = os.path.join(model_dir,'vectorizer.pkl')
+        with io.open(config_file, 'r') as f:
+            config_dict = json.load(f)
+        if config_dict['n_covars'] > 0:
+            estimator = CovariateBowEstimator.from_config(config_dict['n_covars'],
+                                                          config_file, vocab_file,
+                                                          pretrained_param_file=param_file)
         else:
-            param_file = os.path.join(model_dir,'model.params')
-            vocab_file = os.path.join(model_dir,'vocab.json')
-            config_file = os.path.join(model_dir,'model.config')
-            estimator = BowEstimator.from_config(config=config_file, vocabulary=vocab_file, pretrained_param_file=param_file)
+            estimator = BowEstimator.from_saved(model_dir)
         estimator.initialize_with_pretrained()
         if os.path.exists(serialized_vectorizer_file):
             with open(serialized_vectorizer_file, 'rb') as fp:
