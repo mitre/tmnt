@@ -275,6 +275,13 @@ class BowVAEInferencer(BaseInferencer):
             topic_terms.append(cv_i_terms)
         return topic_terms
 
+    def get_covariate_model_details(self):
+        ## 1) C x K x W tensor with |C|  P(term|topic) probability matricies where |C| is number of co-variates
+        w = self.model.cov_decoder.cov_inter_decoder.collect_params().get('weight').data().transpose()
+        w_rsh = w.reshape(-1,self.n_latent, w.shape[1])
+        return w_rsh.softmax(axis=2)
+    
+
     def get_top_k_words_per_topic_over_scalar_covariate(self, k, min_v=0.0, max_v=1.0, step=0.1):
         raise NotImplemented
 
