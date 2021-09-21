@@ -608,11 +608,14 @@ class BaseBowEstimator(BaseEstimator):
             X = mx.nd.sparse.csr_matrix(X)
             train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
         if aux_X is not None:
-            aux_X = mx.nd.sparse.csr_matrix(aux_X)
-            aux_dataloader = \
-                DataIterLoader(mx.io.NDArrayIter(aux_X, None, self.batch_size, last_batch_handle='discard', shuffle=True))
-                #DataIterLoader(SparseMatrixDataIter(X, None, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
-            
+            aux_X_size = aux_X.shape[0] * aux_X.shape[1]
+            if aux_X_size > MAX_DESIGN_MATRIX:
+                aux_dataloader = \
+                    DataIterLoader(SparseMatrixDataIter(aux_X, None, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
+            else:
+                aux_X = mx.nd.sparse.csr_matrix(aux_X)
+                aux_dataloader = \
+                    DataIterLoader(mx.io.NDArrayIter(aux_X, None, self.batch_size, last_batch_handle='discard', shuffle=True))
             
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
