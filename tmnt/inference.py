@@ -345,7 +345,7 @@ class SeqVEDInferencer(BaseInferencer):
         latent_dist = HyperSphericalDistribution(n_latent, kappa=kappa, ctx=ctx)
         model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
                           dropout=classifier_dropout)
-        model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True)
+        model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True, ctx=ctx)
         model.latent_dist.post_init(ctx) # need to call this after loading parameters now
         return cls(model, vocab, max_length, bow_vocab, pre_vectorizer=vectorizer, ctx=ctx)
 
