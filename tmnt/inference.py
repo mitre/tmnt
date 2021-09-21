@@ -390,8 +390,7 @@ class SeqVEDInferencer(BaseInferencer):
         _, enc = self.model.bert(ids.as_in_context(self.ctx),
                                               segs.as_in_context(self.ctx), lens.as_in_context(self.ctx))
         for s in range(n_samples):
-            elbo, _, _, _, _ = self.model(ids.as_in_context(self.ctx), segs.as_in_context(self.ctx), lens.as_in_context(self.ctx),
-                                          bow_vector, pre_enc=enc)
+            elbo, _, _, _, _ = self.model.forward_with_cached_encoding(ids.as_in_context(self.ctx), enc)
             elbos.append(list(elbo.asnumpy()))
         wd_cnts = bow_vector.sum().asnumpy()
         elbos_np = np.array(elbos) / (wd_cnts + 1)
