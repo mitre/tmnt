@@ -547,8 +547,8 @@ class SeqBowVED(BaseSeqBowVED):
                     self.classifier.add(nn.Dropout(rate=self.dropout))
                 self.classifier.add(nn.Dense(in_units=self.n_latent, units=self.num_classes))
 
-    def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
-        _, enc = self.bert(inputs, token_types, valid_length)
+    def forward(self, inputs, token_types, valid_length=None, bow=None, pre_enc=None):  # pylint: disable=arguments-differ
+        enc = pre_enc or self.bert(inputs, token_types, valid_length)[1]
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
             bow = bow.squeeze(axis=1)
