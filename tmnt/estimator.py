@@ -257,7 +257,7 @@ class BaseBowEstimator(BaseEstimator):
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
 
     @classmethod
-    def from_saved(cls, model_dir: str) -> 'BaseBowEstimator':
+    def from_saved(cls, model_dir: str, ctx: Optional[mx.context.Context] = mx.cpu()) -> 'BaseBowEstimator':
         """
         Instantiate a BaseBowEstimator object from a saved model
 
@@ -268,7 +268,8 @@ class BaseBowEstimator(BaseEstimator):
         """
         return cls.from_config(config     = model_dir+'/model.config',
                                vocabulary = model_dir+'/vocab.json',
-                               pretrained_param_file = model_dir+'/model.params')
+                               pretrained_param_file = model_dir+'/model.params',
+                               ctx        = ctx)
 
     @classmethod
     def from_config(cls, config: Union[str, dict], vocabulary: Union[str, nlp.Vocab],
