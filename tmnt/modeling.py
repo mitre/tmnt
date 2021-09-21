@@ -551,7 +551,7 @@ class SeqBowVED(BaseSeqBowVED):
         _, enc = self.bert(inputs, token_types, valid_length)
         return self.forward_with_cached_encoding(self, inputs, enc, bow)
 
-    def forward_with_cached_encoding(self, inputs, encoding, bow):
+    def forward_with_cached_encoding(self, inputs, enc, bow):
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
             bow = bow.squeeze(axis=1)
