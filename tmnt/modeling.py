@@ -549,9 +549,9 @@ class SeqBowVED(BaseSeqBowVED):
 
     def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
         _, enc = self.bert(inputs, token_types, valid_length)
-        return self.forward_with_cached_encoding(self, inputs, enc)
+        return self.forward_with_cached_encoding(self, inputs, enc, bow)
 
-    def forward_with_cached_encoding(self, inputs, encoding):
+    def forward_with_cached_encoding(self, inputs, encoding, bow):
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
             bow = bow.squeeze(axis=1)
