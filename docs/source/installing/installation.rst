@@ -17,9 +17,14 @@ Once Conda is installed, setup a new environment for TMNT as follows::
 
   conda create --name TMNT python=3.7 --no-default-packages
 
-Ensure the environment is activated::
+Activate the environment::
 
-  conda activate TMNT 
+  conda activate TMNT
+
+If planning to use a GPU, ensure cudatoolkit and cudnn packages are installed::
+
+  conda install cudatoolkit=10.1 cudnn=5.6.7
+  
 
 Pip Installation
 ++++++++++++++++
@@ -69,7 +74,20 @@ for 27 training epochs::
 
   python bin/train_model.py --tr_vec_file ./data/train.vec \
   --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
-  --config ./examples/train_model/model.2.config \
+  --config ./data/configs/train_model/model.2.config \
   --save_dir ./_exps/ --log_level info
 
-As another test, try out the example: :ref:`sphx_glr_auto_examples_train_20news.py`
+As another test, try out the example: :ref:`sphx_glr_auto_examples_a_train_20news.py`
+
+Troubleshooting
++++++++++++++++
+
+There are a couple known platforms/environments where installing TMNT can be a challenge.
+
+1. Windows installation.  TMNT can be installed on Windows, however it requires specific versions
+   of Microsoft Visual C++.
+
+2. Ubuntu installation.  Certain versions/images of Ubuntu, e.g. 18.04, have known problems using
+   pre-built MXNet libraries.  To run TMNT on these platforms it may be necessary to build MXNet from
+   source (see https://mxnet.apache.org/versions/1.8.0/get_started/build_from_source )
+   
