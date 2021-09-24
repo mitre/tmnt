@@ -380,6 +380,7 @@ class BaseBowEstimator(BaseEstimator):
         config['redundancy_loss_wt'] = self.redundancy_reg_penalty
         config['n_labels']           = self.n_labels
         config['covar_net_layers']   = 1
+        config['n_covars']           = 0
         if isinstance(self.latent_distribution, HyperSphericalDistribution):
             config['latent_distribution'] = {'dist_type':'vmf', 'kappa': self.latent_distribution.kappa}
         elif isinstance(self.latent_distribution, LogisticGaussianDistribution):
