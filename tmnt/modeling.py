@@ -288,7 +288,7 @@ class MetricBowVAEModel(BowVAEModel):
         return elbo, rec_loss, KL_loss
 
     def _get_encoding(self, data):
-        return self.encoding( self.embedding(data) )
+        return self.encoder( self.embedding(data) )
 
     def unpaired_input_forward(self, data):
         enc = self._get_encoding(data)

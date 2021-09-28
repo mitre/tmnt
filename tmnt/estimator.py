@@ -724,7 +724,7 @@ class BaseBowEstimator(BaseEstimator):
             val_X_size = val_X.shape[0]
         else:
             val_dataloader, total_val_words, val_X_size = None, 0, 0
-        self.fit_with_validation_loaders(train_dataloader, val_dataloader, aux_dataloader, train_X_size, val_X_size,
+        return self.fit_with_validation_loaders(train_dataloader, val_dataloader, aux_dataloader, train_X_size, val_X_size,
                                          aux_X_size, total_val_words, val_X=val_X, val_y=val_y)
 
                     
@@ -855,15 +855,11 @@ class BowEstimator(BaseBowEstimator):
 class BowMetricEstimator(BowEstimator):
 
     def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_tr_data=None, fixed_test_data=None, plot_dir=None, **kwargs):
-        super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
+        super(BowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
-        self.fixed_tr_batch = None
-        self.fixed_test_batch = None
+        self.fixed_tr_batch = fixed_tr_data
+        self.fixed_test_batch = fixed_test_data
         self.plot_dir = plot_dir
-        if fixed_data:
-            self.fixed_tr_batch = next(enumerate(fixed_tr_data)) # take the first batch and fix
-            if fixed_test_data:
-                self.fixed_test_batch = next(enumerate(fixed_test_data))
 
 
     @classmethod
@@ -909,12 +905,12 @@ class BowMetricEstimator(BowEstimator):
     def _ff_batch(self, model, batch_data, on_test=False):
         if on_test:
             if self.fixed_test_batch:
-                batch1, batch2 = batch_data, self.fixed_test_batch
+                batch1, batch2 = batch_data, self.fixed_test_batch[0]
             else:
                 batch1, batch2 = batch_data
         else:
-            if self.fixed_batch:
-                batch1, batch2 = batch_data, self.fixed_batch
+            if self.fixed_tr_batch:
+                batch1, batch2 = batch_data, self.fixed_tr_batch[0]
             else:
                 batch1, batch2 = batch_data
         elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(batch1, batch2)
