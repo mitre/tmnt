@@ -273,6 +273,40 @@ class BowVAEModel(BaseVAE):
         return ii_loss, KL, recon_loss, coherence_loss, redundancy_loss, classifier_outputs
 
 
+class MetricBowVAEModel(BowVAEModel):
+
+    def __init__(self, *args, **kwargs):
+        super(MetricBowVAEModel, self).__init__(*args, **kwargs)
+
+    def _get_elbo(self, bow, enc):
+        batch_size = bow.shape[0]
+        z, KL = self.latent_distribution(enc, batch_size)
+        KL_loss = (KL * self.kld_wt)
+        y = mx.nd.softmax(self.decoder(z), axis=1)
+        rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
+        elbo = rec_loss + KL_loss
+        return elbo, rec_loss, KL_loss
+
+    def _get_encoding(self, data):
+        return self.encoding( self.embedding(data) )
+
+    def unpaired_input_forward(self, data):
+        enc = self._get_encoding(data)
+        elbo, rec_loss, kl_loss = self._get_elbo(data, enc)
+        redundancy_loss = self.get_redundancy_penalty()
+        return elbo, rec_loss, kl_loss, redundancy_loss
+
+
+    def hybrid_forward(self, F, data1, data2):
+        enc1 = self._get_encoding(data1)
+        enc2 = self._get_encoding(data2)
+        mu1  = self.latent_distribution.get_mu_encoding(enc1)
+        mu2  = self.latent_distribution.get_mu_encoding(enc2)
+        elbo1, rec_loss1, KL_loss1 = self._get_elbo(data1, enc1)
+        elbo2, rec_loss2, KL_loss2 = self._get_elbo(data2, enc2)        
+        redundancy_loss = self.get_redundancy_penalty()
+        return (elbo1 + elbo2), (rec_loss1 + rec_loss2), (KL_loss1 + KL_loss2), redundancy_loss, mu1, mu2
+
 
 class CovariateBowVAEModel(BowVAEModel):
     """Bag-of-words topic model with labels used as co-variates

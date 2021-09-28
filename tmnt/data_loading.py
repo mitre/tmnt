@@ -186,6 +186,50 @@ class DataIterLoader():
         return self.__next__()
 
 
+class PairedDataLoader():
+    
+    def __init__(self, data_loader1, data_loader2):
+        self.data_loader1 = data_loader1
+        self.data_loader2 = data_loader2
+        self.data_iter1   = iter(data_loader1)
+        self.data_iter2   = iter(data_loader2)
+        self.batch_index = 0
+        self.end1         = False
+        self.end2         = False
+
+
+    def __iter__(self):
+        self.data_iter1 = iter(self.data_loader1)
+        self.data_iter2 = iter(self.data_loader2)
+        self.batch_index = 0
+        self.end1 = False
+        self.end2 = False
+        return self
+
+    def __next__(self):
+        try:
+            batch1 = self.data_iter1.__next__()
+        except StopIteration:
+            if self.end2:
+                raise StopIteration
+            self.data_iter1 = iter(self.data_loader1)
+            self.end1 = True
+            batch1 = self.data_iter1.__next__()
+        try:
+            batch2 = self.data_iter2.__next__()
+        except StopIteration:
+            if self.end1:
+                raise StopIteration
+            self.data_iter2 = iter(self.data_loader2)
+            self.end2 = True
+            batch2 = self.data_iter2.__next__()
+        return batch1, batch2
+
+    def next(self):
+        return self.__next__()
+    
+
+
 def _init_data(data, allow_empty, default_name):
     """Convert data into canonical form."""
     assert (data is not None) or allow_empty
@@ -224,157 +268,7 @@ def file_to_data(sp_file, voc_size, batch_size=1000):
     wd_freqs = mx.nd.array(np.array(X.sum(axis=0)).squeeze())
     total_words = X.sum()
     return X, y, wd_freqs, total_words
+
+
+
     
-
-def get_single_vec(els_sp):
-    pairs = sorted( [ (int(el[0]), float(el[1]) ) for el in els_sp ] )
-    inds, vs = zip(*pairs)
-    return pairs, inds, vs
-
-
-def _load_dataset_bert(line_gen, voc_size, max_len=64, ctx=mx.cpu()):
-    indices = []
-    values = []
-    indptrs = [0]
-    cumulative = 0
-    total_num_words = 0
-    ndocs = 0
-    bert_model = 'bert_12_768_12'
-    dname = 'book_corpus_wiki_en_uncased'
-    ## This is really only needed here to get the vocab
-    ## GluonNLP API doesn't enable that
-    bert_base, vocab = nlp.model.get_model(bert_model,  
-                                             dataset_name=dname,
-                                             pretrained=True, ctx=ctx, use_pooler=True,
-                                             use_decoder=False, use_classifier=False)
-    tokenizer = BERTTokenizer(vocab)
-    transform = BERTSentenceTransform(tokenizer, max_len, pair=False) 
-    x_ids = []
-    x_val_lens = []
-    x_segs = []
-    for t in line_gen:
-        if isinstance(t, tuple):
-            line = t[0]
-            sp_vec_els = t[1]
-        else:
-            line = t
-            sp_vec_els = None
-        ids, lens, segs = transform((line,)) # create BERT-ready inputs
-        x_ids.append(ids)
-        x_val_lens.append(lens)
-        x_segs.append(segs)
-        ## Now, get the sparse vector
-        ndocs += 1
-        if sp_vec_els:
-            pairs, inds, vs = get_single_vec(sp_vec_els)
-            cumulative += len(pairs)
-            total_num_words += sum(vs)
-            indptrs.append(cumulative)
-            values.extend(vs)
-            indices.extend(inds)
-    if len(indices) > 0:
-        csr_mat = mx.nd.sparse.csr_matrix((values, indices, indptrs), shape=(ndocs, voc_size)).tostype('default')
-    else:
-        csr_mat = None
-    return x_ids, x_val_lens, x_segs, bert_base, vocab, csr_mat
-
-
-def prepare_bert(content, max_len, bow_vocab_size=1000, vectorizer=None, ctx=mx.cpu()):
-    """
-    Utility function to take text content (e.g. list of document strings), a maximum sequence
-    length and vocabulary size, returning a data_train object that can be used
-    by a SeqBowEstimator object for the call to fit_with_validation. Also returns
-    the BOW matrix as a SciPy sparse matrix along with the BOW vocabulary.
-    """
-    x_ids, x_val_lens, x_segs, bert_base, bert_vocab, _ = _load_dataset_bert(content, 0, max_len, ctx)
-    tf_vectorizer = vectorizer or TMNTVectorizer(vocab_size = bow_vocab_size)
-    X, _ = tf_vectorizer.transform(content) if vectorizer else tf_vectorizer.fit_transform(content)
-    data_train = gluon.data.ArrayDataset(
-            mx.nd.array(x_ids, dtype='int32'),
-            mx.nd.array(x_val_lens, dtype='int32'),
-            mx.nd.array(x_segs, dtype='int32'),
-            mx.nd.sparse.csr_matrix(X, dtype='float32').tostype('default'))
-    return data_train, X, tf_vectorizer, bert_base, bert_vocab
-
-
-def prepare_bert_via_json(json_file, max_len, bow_vocab_size=1000, vectorizer=None, json_text_key="text", json_label_key=None, ctx=mx.cpu()):
-    with io.open(json_file, 'r', encoding='utf-8') as fp:
-        content = [json.loads(line)[json_text_key] for line in fp]
-        x_ids, x_val_lens, x_segs, bert_base, bert_vocab, _ = _load_dataset_bert(content, 0, max_len, ctx)
-        tf_vectorizer = vectorizer or TMNTVectorizer(text_key=json_text_key, label_key=json_label_key, vocab_size = bow_vocab_size)
-        X, y = tf_vectorizer.transform_json(json_file) if vectorizer else tf_vectorizer.fit_transform_json(json_file)
-        data_train = gluon.data.ArrayDataset(
-            mx.nd.array(x_ids, dtype='int32'),
-            mx.nd.array(x_val_lens, dtype='int32'),
-            mx.nd.array(x_segs, dtype='int32'),
-            mx.nd.sparse.csr_matrix(X, dtype='float32').tostype('default'))
-    return data_train, X, tf_vectorizer, bert_base, bert_vocab, y
-    
-
-
-def load_dataset_bert(json_file, voc_size, json_text_key="text", json_sp_key="sp_vec", max_len=64, ctx=mx.cpu()):
-    with io.open(json_file, 'r', encoding='utf-8') as fp:
-        line_gen = ((json.loads(line)[json_text_key],json.loads(line)[json_sp_key]) for line in fp)
-        x_ids, x_val_lens, x_segs, bert_base, vocab, csr_mat =  _load_dataset_bert(line_gen, voc_size, max_len, ctx)
-        data_train = gluon.data.ArrayDataset(
-            mx.nd.array(x_ids, dtype='int32'),
-            mx.nd.array(x_val_lens, dtype='int32'),
-            mx.nd.array(x_segs, dtype='int32'),
-            csr_mat)
-    return data_train, bert_base, vocab, csr_mat
-
-
-## loading for non-BERT seq2vec encoders with embeddings
-
-def _load_dataset_sequence(line_gen, max_len, tokenizer, vocab):
-    toked_lines = [tokenizer(line)[:max_len] for line in line_gen]
-    wd_ids = []
-    for tl in toked_lines:
-        wl = []
-        for w in tl:
-            try:
-                i = vocab(w)
-                wl.append(i)
-            except Exception:
-                pass
-        wd_ids.append(wl)
-    lens = [len(line) for line in wd_ids]
-    for line_ids in wd_ids:
-        line_ids.extend([0] * (max_len - len(line_ids)))
-    return wd_ids, lens
-
-
-def _load_bow_identical_sequence(X, max_len):
-    from tmnt.classifier.load_data import _sv_to_seq
-    seqs = []
-    lens = []
-    for i in range(X.shape[0]):
-        seq, _ = _sv_to_seq(X[i])
-        slen = len(seq[:max_len])
-        lens.append(slen)
-        seqs.append(seq[:max_len] + ([0] * (max_len - slen)))
-    return seqs, lens
-
-
-def prepare_dataset_sequence(content, max_len, labels=None, tokenizer=None, bow_vocab_size=1000, vectorizer=None, ctx=mx.cpu()):
-    tf_vectorizer = vectorizer or TMNTVectorizer(vocab_size = bow_vocab_size)
-    if tokenizer is None:
-        tokenizer = nlp.data.SacreMosesTokenizer()
-    X, _ = tf_vectorizer.transform(content) if vectorizer else tf_vectorizer.fit_transform(content)
-    vocab = tf_vectorizer.get_vocab()
-    #x_ids, x_val_lens = _load_dataset_sequence(content, max_len, tokenizer, vocab)
-    x_ids, x_val_lens = _load_bow_identical_sequence(X, max_len)
-    if labels is not None:
-        larr = mx.nd.array(labels, dtype='float32')
-    else:
-        larr = mx.nd.full(len(x_ids), -1)
-    data_train = gluon.data.ArrayDataset(
-        mx.nd.array(x_ids, dtype='int32'),
-        mx.nd.array(x_val_lens, dtype='int32'),
-        mx.nd.sparse.csr_matrix(X, dtype='float32').tostype('default'),
-        larr)
-    return data_train, tf_vectorizer.get_vocab(), X
-    
-    
-
-
