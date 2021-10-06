@@ -192,7 +192,7 @@ class PairedDataLoader():
         self.data_loader1 = data_loader1
         self.data_loader2 = data_loader2
         self.data_iter1   = iter(data_loader1)
-        self.data_iter2   = iter(data_loader2)
+        self.data_iter2   = iter(data_loader2) if data_loader2 is not None else None
         self.batch_index = 0
         self.end1         = False
         self.end2         = False
@@ -200,7 +200,7 @@ class PairedDataLoader():
 
     def __iter__(self):
         self.data_iter1 = iter(self.data_loader1)
-        self.data_iter2 = iter(self.data_loader2)
+        self.data_iter2 = iter(self.data_loader2) if self.data_loader2 is not None else None
         self.batch_index = 0
         self.end1 = False
         self.end2 = False
@@ -210,19 +210,22 @@ class PairedDataLoader():
         try:
             batch1 = self.data_iter1.__next__()
         except StopIteration:
-            if self.end2:
+            if self.end2 or self.data_loader2 is None:
                 raise StopIteration
             self.data_iter1 = iter(self.data_loader1)
             self.end1 = True
             batch1 = self.data_iter1.__next__()
-        try:
-            batch2 = self.data_iter2.__next__()
-        except StopIteration:
-            if self.end1:
-                raise StopIteration
-            self.data_iter2 = iter(self.data_loader2)
-            self.end2 = True
-            batch2 = self.data_iter2.__next__()
+        if self.data_loader2 is not None:
+            try:
+                batch2 = self.data_iter2.__next__()
+            except StopIteration:
+                if self.end1:
+                    raise StopIteration
+                self.data_iter2 = iter(self.data_loader2)
+                self.end2 = True
+                batch2 = self.data_iter2.__next__()
+        else:
+            batch2 = None
         return batch1, batch2
 
     def next(self):

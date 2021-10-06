@@ -276,7 +276,16 @@ class BowVAEModel(BaseVAE):
 class MetricBowVAEModel(BowVAEModel):
 
     def __init__(self, *args, **kwargs):
+        self.kld_wt = 1.0
         super(MetricBowVAEModel, self).__init__(*args, **kwargs)
+
+
+    def get_redundancy_penalty(self):
+        w = self.decoder.params.get('weight').data()
+        emb = self.embedding.params.get('weight').data() if self.embedding is not None else w.transpose()
+        _, redundancy_loss = self.coherence_regularization(w, emb)
+        return redundancy_loss
+        
 
     def _get_elbo(self, bow, enc):
         batch_size = bow.shape[0]
@@ -583,7 +592,7 @@ class SeqBowVED(BaseSeqBowVED):
 
     def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
         _, enc = self.bert(inputs, token_types, valid_length)
-        return self.forward_with_cached_encoding(self, inputs, enc, bow)
+        return self.forward_with_cached_encoding(inputs, enc, bow)
 
     def forward_with_cached_encoding(self, inputs, enc, bow):
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0

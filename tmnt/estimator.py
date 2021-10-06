@@ -25,7 +25,7 @@ import umap
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, f1_score, precision_recall_fscore_support
-from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter
+from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter, PairedDataLoader
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
@@ -557,7 +557,8 @@ class BaseBowEstimator(BaseEstimator):
         return sc_obj
 
 
-    def _get_losses(self, model, data, labels):
+    def _get_losses(self, model, batch_data):
+        data,labels = batch_data
         elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
             self._forward(self.model, data, labels)
         if self.has_classifier:
@@ -585,53 +586,24 @@ class BaseBowEstimator(BaseEstimator):
         trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         v_res = None
-        aux_is_outer = False
-        if aux_dataloader is None:
-            outer_loader, inner_loader = train_dataloader, None
-        elif train_X_size >= aux_X_size:            
-            outer_loader, inner_loader = train_dataloader, aux_dataloader            
-        else:
-            aux_is_outer = True
-            outer_loader, inner_loader = aux_dataloader, train_dataloader
-        if inner_loader:
-            inner_dataiter = iter(inner_loader)
+        joint_loader = PairedDataLoader(train_dataloader, aux_dataloader)
         for epoch in range(self.epochs):
             ts_epoch = time.time()
             elbo_losses = []
             lab_losses  = []
-            for i, (outer_data, outer_labels) in enumerate(outer_loader):
-                if inner_loader:
-                    try:
-                        inner_data, inner_labels = next(inner_dataiter)
-                    except StopIteration:
-                        inner_dataiter = iter(inner_loader)
-                        inner_data, inner_labels = next(inner_dataiter)
-                else:
-                    inner_data, inner_labels = None, None
-                if aux_is_outer:
-                    aux_data = outer_data.as_in_context(self.ctx)
-                    data = inner_data.as_in_context(self.ctx)
-                    if outer_labels is None:
-                        outer_labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                    aux_labels = outer_labels.as_in_context(self.ctx) # aux labels will be ignored
-                    labels = inner_labels.as_in_context(self.ctx)
-                else:
-                    data = outer_data.as_in_context(self.ctx)
-                    if outer_labels is None:
-                        outer_labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                    labels = outer_labels.as_in_context(self.ctx)
-                    if inner_data is not None:
-                        aux_data = inner_data.as_in_context(self.ctx)                    
-                        if inner_labels is None:
-                            inner_labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                        aux_labels = inner_labels.as_in_context(self.ctx) # aux labels will be ignored                    
-                    
+            for i, ((data, labels), aux_batch) in enumerate(joint_loader):
+                data = data.as_in_context(self.ctx)
+                if labels is None:
+                    labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+                labels = labels.as_in_context(self.ctx)
                 with autograd.record():
-                    elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data, labels)
+                    elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, (data, labels))
                     elbo_mean = elbo_ls.mean()
                 total_ls.backward()
 
-                if inner_data is not None:
+                if aux_batch is not None:
+                    aux_data, aux_labels = aux_batch
+                    aux_data = aux_data.as_in_context(self.ctx)
                     with autograd.record():
                         elbo_ls_a, kl_loss_a, _, _, lab_loss_a, total_ls_a = \
                             self._get_unlabeled_losses(self.model, aux_data, aux_labels)
@@ -641,7 +613,7 @@ class BaseBowEstimator(BaseEstimator):
                 trainer.update(1)
                 all_model_params.zero_grad()
                 if not self.quiet:
-                    if inner_data is not None:
+                    if aux_batch is not None:
                         elbo_losses.append(float(elbo_mean.asscalar()) + float(elbo_ls_a.mean().asscalar()))
                     else:
                         elbo_losses.append(float(elbo_mean.asscalar()))                        
@@ -654,23 +626,33 @@ class BaseBowEstimator(BaseEstimator):
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
             mx.nd.waitall()
             if validation_dataloader is not None and (self.validate_each_epoch or epoch == self.epochs-1):
-                logging.info('Performing validation ....')
-                #v_res = self.validate(val_X, val_y)
-                v_res = self.validate_with_loader(validation_dataloader, val_X_size, total_val_words, val_X, val_y)
-                sc_obj = self._get_objective_from_validation_result(v_res)
-                if self.has_classifier:
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
-                                        .format(epoch+1, sc_obj, v_res['ppl'],
-                                                v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
-                else:
-                    self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                        .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
-                if self.reporter:
-                    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-                                  coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+                sc_obj, v_res = self._perform_validation(epoch, validation_dataloader, val_X_size, total_val_words, val_X, val_y)
         mx.nd.waitall()
         return sc_obj, v_res
-        
+
+    
+    def _perform_validation(self,
+                            epoch,
+                            validation_dataloader,
+                            val_X_size,
+                            total_val_words,
+                            val_X = None,
+                            val_y = None):
+        logging.info('Performing validation ....')
+        v_res = self.validate_with_loader(validation_dataloader, val_X_size, total_val_words, val_X, val_y)
+        sc_obj = self._get_objective_from_validation_result(v_res)
+        if self.has_classifier:
+            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
+                                .format(epoch+1, sc_obj, v_res['ppl'],
+                                        v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
+        else:
+            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                                .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
+            if self.reporter:
+                self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
+                              coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+        return sc_obj, v_res
+
 
     def fit_with_validation(self, 
                             X: sp.csr.csr_matrix,
@@ -901,30 +883,38 @@ class BowMetricEstimator(BowEstimator):
         model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         return model
 
+    def _forward(self, model, data, labels):
+        elbo_ls, rec_ls, kl_ls, red_ls, total_ls = self._get_unlabeled_losses(model, data, labels)
+        return elbo_ls, rec_ls, kl_ls, red_ls, total_ls, None
 
     def _ff_batch(self, model, batch_data, on_test=False):
         if on_test:
             if self.fixed_test_batch:
-                batch1, batch2 = batch_data, self.fixed_test_batch[0]
+                batch1, batch2 = batch_data[0], self.fixed_test_batch[0]
+                labels1 = batch_data[1]
+                labels2 = self.fixed_test_batch[1]
             else:
-                batch1, batch2 = batch_data
+                batch1, batch2 = batch_data[0][0], batch_data[1][0]
+                labels1, labels2 = batch_data[0][1], batch_data[1][1]
         else:
             if self.fixed_tr_batch:
-                batch1, batch2 = batch_data, self.fixed_tr_batch[0]
+                batch1, batch2 = batch_data[0], self.fixed_tr_batch[0]
+                labels1 = batch_data[1]
+                labels2 = self.fixed_tr_batch[1]
             else:
                 batch1, batch2 = batch_data
+                labels1, labels2 = batch_data[0][1], batch_data[1][1]                
         elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(batch1, batch2)
-        return elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2
+        return elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, labels1, labels2
 
 
-    def _get_losses(self, model, batch_data, labels):
-        elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = self._ff_batch(model, batch_data)
-        ## convert back to label indices rather than 1-hot vecs        
-        label1, label2 = labels
-        label1_ind = label1.argmax(axis=1)
-        label2_ind = label2.argmax(axis=1)
-        label1 = label1_ind.as_in_context(self.ctx)
-        label2 = label2_ind.as_in_context(self.ctx)
+    def _get_losses(self, model, batch_data):
+        # batch_data is either:
+        #    1. (data, label)
+        # or 2. ((data, label), (data, label))
+        elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
+        label1 = label1.as_in_context(self.ctx)
+        label2 = label2.as_in_context(self.ctx)
         label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
         label_ls = label_ls.mean()
         total_ls = (self.gamma * label_ls) + elbo_ls.mean()
@@ -935,6 +925,81 @@ class BowMetricEstimator(BowEstimator):
         elbo_ls, rec_ls, kl_ls, red_ls = model.unpaired_input_forward(data)
         total_ls = elbo_ls / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
+
+
+    #def _classifier_validate(self, model, dataloader, epoch_id):
+
+    def classifier_validate(self, model, dataloader, epoch_id):
+        posteriors = []
+        ground_truth = []
+        ground_truth_idx = []
+        emb2 = None
+        emb1 = []
+        for batch_id, data_batch in enumerate(dataloader):
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch, on_test=True)
+            label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
+            dists = self.loss_function._compute_distances(z_mu1, z_mu2)
+            probs = mx.nd.softmax(-dists, axis=1).asnumpy()
+            posteriors += list(probs)
+            label1 = np.array(label1.squeeze().asnumpy(), dtype='int')
+            ground_truth_idx += list(label1) ## index values for labels
+            gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())+1))
+            gt[np.arange(label1.shape[0]), label1] = 1
+            ground_truth += list(gt)
+            if emb2 is None:
+                emb2 = z_mu2.asnumpy()
+            emb1 += list(z_mu1.asnumpy())
+        posteriors = np.array(posteriors)
+        ground_truth = np.array(ground_truth)
+        ground_truth_idx = np.array(ground_truth_idx)
+        if not np.any(np.isnan(posteriors)):
+            avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
+        else:
+            avg_prec = 0.0
+        logging.info('EVALUTAION: Ground truth indices: {}'.format(list(ground_truth_idx)))
+        try:
+            auroc = roc_auc_score(ground_truth, posteriors, average='weighted')
+        except:
+            auroc = 0.0
+            logging.error('ROC computation failed')
+        ndcg = ndcg_score(ground_truth, posteriors)
+        top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1)        
+        top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
+        top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
+        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)
+        y = np.where(ground_truth > 0)[1]
+        if self.plot_dir:
+            ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
+            umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
+            embeddings = umap_model.fit_transform(np.array(emb1))
+            #mapper = umap_model.fit(np.array(emb1))
+            plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
+            #umap.plot.points(mapper, labels=y)
+            plt.savefig(ofile)
+            plt.close("all")
+        return {'avg_prec': avg_prec, 'top_1': top_acc_1, 'top_2': top_acc_2, 'top_3': top_acc_3, 'top_4': top_acc_4,
+                'au_roc': auroc, 'ndcg': ndcg}    
+        
+
+    def _perform_validation(self,
+                            epoch,
+                            validation_dataloader,
+                            val_X_size,
+                            total_val_words,
+                            val_X = None,
+                            val_y = None):
+        v_res = self.classifier_validate(self.model, validation_dataloader, epoch)
+        if self.has_classifier:
+            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
+                                .format(epoch+1, sc_obj, v_res['ppl'],
+                                        v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
+        else:
+            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
+                                .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
+            if self.reporter:
+                self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
+                              coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+
 
 
 class CovariateBowEstimator(BaseBowEstimator):
@@ -1662,7 +1727,6 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         emb2 = None
         emb1 = []
         for batch_id, data_batch in enumerate(dataloader):
-            seqs = data_batch[0]
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs, on_test=True)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
