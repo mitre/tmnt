@@ -212,9 +212,9 @@ class BowVAEInferencer(BaseInferencer):
             if self.covar_model and labels is not None:
                 labels = mx.nd.one_hot(mx.nd.array(labels[-last_batch_size:], dtype='int'),
                                        self.n_covars).as_in_context(self.ctx)
-                encs = self.model.encode_data_with_covariates(data, labels)
+                encs = self.model.encode_data_with_covariates(data, labels, include_bn=include_bn)
             else:
-                encs = self.model.encode_data(data)
+                encs = self.model.encode_data(data, include_bn=include_bn)
             if use_probs:
                 e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
                 encs = list(mx.nd.softmax(e1).asnumpy())

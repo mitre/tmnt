@@ -988,18 +988,15 @@ class BowMetricEstimator(BowEstimator):
                             total_val_words,
                             val_X = None,
                             val_y = None):
+        logging.info("Performing validation .. val_X_size = {}".format(val_X_size))
         v_res = self.classifier_validate(self.model, validation_dataloader, epoch)
-        if self.has_classifier:
-            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}. Accuracy = {}."
-                                .format(epoch+1, sc_obj, v_res['ppl'],
-                                        v_res['npmi'], v_res['redundancy'], v_res['accuracy']))
-        else:
-            self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
-                                .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
-            if self.reporter:
-                self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-                              coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
-
+        self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}, AuROC = {}, NDCG = {} [acc@1= {}, acc@2={}, acc@3={}, acc@4={}]"
+                            .format(epoch, v_res['avg_prec'], v_res['avg_prec'], v_res['au_roc'], v_res['ndcg'],
+                                    v_res['top_1'], v_res['top_2'], v_res['top_3'], v_res['top_4']))
+        if self.reporter:
+            self.reporter(epoch=epoch+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0,
+                          perplexity=0.0, redundancy=0.0)
+        return v_res['avg_prec'], v_res
 
 
 class CovariateBowEstimator(BaseBowEstimator):
