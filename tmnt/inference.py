@@ -158,7 +158,7 @@ class BowVAEInferencer(BaseInferencer):
         data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab), zero_based=True)
         return self.encode_data(data_mat, labels, use_probs=use_probs), labels
 
-    def encode_texts(self, texts, use_probs=True, include_bn=False):
+    def encode_texts(self, texts, use_probs=True, include_bn=True):
         X, _ = self.vectorizer.transform(texts)
         encodings = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
         return encodings
@@ -188,7 +188,7 @@ class BowVAEInferencer(BaseInferencer):
                                                       batch_size, last_batch_handle='discard', shuffle=False))
         return infer_iter, last_batch_size
 
-    def encode_data(self, data_mat, labels=None, use_probs=True, include_bn=False, target_entropy=1.0):
+    def encode_data(self, data_mat, labels=None, use_probs=True, include_bn=True, target_entropy=1.0):
         infer_iter, last_batch_size = self._get_data_iterator(data_mat, labels)
         encodings = []
         for _, (data,labels) in enumerate(infer_iter):
@@ -288,7 +288,7 @@ class BowVAEInferencer(BaseInferencer):
     def predict_text(self, txt, pred_threshold=0.5):
         X_csr, _      = self.vectorizer.transform(txt)
         X = mx.nd.sparse.csr_matrix(X_csr, dtype='float32')
-        encodings = self.encode_data(X, None, use_probs=True, include_bn=False)
+        encodings = self.encode_data(X, None, use_probs=True, include_bn=True)
         preds     = self.model.predict(X).asnumpy()
         inv_map = [0] * len(self.vectorizer.label_map)
         for k in self.vectorizer.label_map:
