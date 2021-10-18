@@ -220,7 +220,7 @@ class BowVAEModel(BaseVAE):
         return jacobian_list
 
 
-    def encode_data(self, data, include_bn=False):
+    def encode_data(self, data, include_bn=True):
         """
         Encode data to the mean of the latent distribution defined by the input `data`.
 
@@ -250,10 +250,7 @@ class BowVAEModel(BaseVAE):
         Returns:
             output vector (tensor): unnormalized outputs over label values
         """
-        emb_out = self.embedding(data)
-        enc_out = self.encoder(emb_out)
-        mu_out  = self.latent_distribution.get_mu_encoding(enc_out)
-        return self.classifier(mu_out)
+        return self.classifier(self.lab_dr(self.encode_data(data)))
     
 
     def hybrid_forward(self, F, data, labels):

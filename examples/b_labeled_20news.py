@@ -22,6 +22,9 @@ from sklearn.metrics import accuracy_score
 train_data = fetch_20newsgroups(subset='train', shuffle=True, random_state=1)
 test_data  = fetch_20newsgroups(subset='test', shuffle=True, random_state=1)
 
+
+                 
+
 # %%
 # In setting up the vectorizer, this time we'll use a somewhat larger vocabulary
 # size which may be more appropriate if we're interested in classifier labeling
@@ -31,6 +34,14 @@ tf_vectorizer = TMNTVectorizer(vocab_size=10000, count_vectorizer_kwargs=cv_para
 X_train, _ = tf_vectorizer.fit_transform(train_data.data)
 X_test, _  = tf_vectorizer.transform(test_data.data)
 y_train, y_test = train_data.target, test_data.target
+
+# %%
+# Note that when processing a JSON list
+# formatted dataset, one typically computes the label map from whatever field denotes each documents label
+# Here, in the case of the 20 Newsgroup dataset, the label map has already been calculated.
+# We create the label map and explicitly attach to the vectorizer so the mapping between label indices
+# and label names (strings) is preserved.
+tf_vectorizer.label_map = dict([ (train_data.target_names[i], i) for i in range(len(train_data.target_names)) ])
 
 # %%
 # First, let's train a baseline comparison logistic regression
@@ -102,14 +113,24 @@ print("Validation results with semi-supervised learning. acc = {}, ppl = {}, npm
 
 
 # %%
+# We can create an inference object used to encode new data points. For convenience,
+# the inferencer keeps the vectorizer used to process text strings and convert to
+# term frequency vectors.  This allows the inferencer to be used directly as
+# a text classifier by using the ``predict_text`` method.
+l_inferencer = BowVAEInferencer(l_estimator, pre_vectorizer=tf_vectorizer)
+predicted_labels, encodings, posteriors = l_inferencer.predict_text(test_data.data[:2])
+
+
+# %%
 # Now, let's create UMAP embeddings from the model encodings when applied to the test data
 # Note here the use of ``use_probs=True`` and a higher ``target_entropy`` of 2.0.
 # The target entropy rescales the topic proportions to avoid extremely skewed distributions
 # This can be helpful when plotting embeddings and/or interpeting topic probabilities/proportions.
 # Note that since the model was trained in a supervised manner, the embeddings show 
-l_inferencer = BowVAEInferencer(l_estimator, pre_vectorizer=tf_vectorizer)
+
 embeddings = l_inferencer.get_umap_embeddings(X_test, use_probs=True, target_entropy=2.5)
 l_inferencer.plot_to(embeddings, y_test, None)
+
 
 
 

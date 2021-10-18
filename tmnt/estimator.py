@@ -573,8 +573,7 @@ class BaseBowEstimator(BaseEstimator):
         elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
             self._forward(self.model, data, labels)
         total_ls = elbo_ls.mean() / self.gamma
-        label_ls = mx.nd.zeros(total_ls.shape)
-        return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
+        return elbo_ls, kl_ls, rec_ls, red_ls, total_ls
 
     def fit_with_validation_loaders(self, train_dataloader, validation_dataloader, aux_dataloader,
                                     train_X_size, val_X_size, aux_X_size, total_val_words, val_X=None, val_y=None):
@@ -605,7 +604,7 @@ class BaseBowEstimator(BaseEstimator):
                     aux_data, aux_labels = aux_batch
                     aux_data = aux_data.as_in_context(self.ctx)
                     with autograd.record():
-                        elbo_ls_a, kl_loss_a, _, _, lab_loss_a, total_ls_a = \
+                        elbo_ls_a, kl_loss_a, _, _, total_ls_a = \
                             self._get_unlabeled_losses(self.model, aux_data, aux_labels)
                     total_ls_a.backward()
                 
@@ -952,21 +951,21 @@ class BowMetricEstimator(BowEstimator):
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
+        labels = np.arange(posteriors[0].shape[0])        
         if not np.any(np.isnan(posteriors)):
             avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
         else:
             avg_prec = 0.0
-        logging.info('EVALUTAION: Ground truth indices: {}'.format(list(ground_truth_idx)))
         try:
-            auroc = roc_auc_score(ground_truth, posteriors, average='weighted')
+            auroc = roc_auc_score(ground_truth, posteriors, average='weighted', labels=labels)
         except:
             auroc = 0.0
             logging.error('ROC computation failed')
         ndcg = ndcg_score(ground_truth, posteriors)
-        top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1)        
-        top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
-        top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
-        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)
+        top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1, labels=labels)        
+        top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2, labels=labels)
+        top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3, labels=labels)
+        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4, labels=labels)
         y = np.where(ground_truth > 0)[1]
         if self.plot_dir:
             ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'

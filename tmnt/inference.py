@@ -25,6 +25,8 @@ from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from sklearn.datasets import load_svmlight_file
 from functools import partial
 
+from typing import List, Tuple, Dict, Optional, Union, NoReturn
+
 
 MAX_DESIGN_MATRIX = 250000000 
 
@@ -225,9 +227,10 @@ class BowVAEInferencer(BaseInferencer):
         return encodings
 
     def get_likelihood_stats(self, data_mat, n_samples=50):
-        ## Notes:
-        ## Following ideas in the paper:
-        ## Bayesian Autoencoders: Analysing and Fixing the Bernoulli likelihood for Out-of-Distribution Detection
+        """Get the expected elbo and its variance for input data using sampling
+        Parameters:
+            data_mat: Document term matrix 
+        """
         data_iter, last_batch_size = self._get_data_iterator(data_mat, None)
         all_stats = []
         for _, (data, labels) in enumerate(data_iter):
@@ -285,11 +288,19 @@ class BowVAEInferencer(BaseInferencer):
     def get_top_k_words_per_topic_over_scalar_covariate(self, k, min_v=0.0, max_v=1.0, step=0.1):
         raise NotImplemented
 
-    def predict_text(self, txt, pred_threshold=0.5):
+    def predict_text(self, txt: List[str], pred_threshold: float = 0.5) -> Tuple[List[str], List[np.ndarray], np.ndarray]:
+        """Take a list of input documents/passages as strings and return document encodings (topics) and classification outputs
+        
+        Parameters:
+            txt: List of input document strings
+            pred_threshold: Threshold to use for multilabel classification
+        Returns:
+            top predicted labels, encodings, posteriors
+        """
         X_csr, _      = self.vectorizer.transform(txt)
         X = mx.nd.sparse.csr_matrix(X_csr, dtype='float32')
         encodings = self.encode_data(X, None, use_probs=True, include_bn=True)
-        preds     = self.model.predict(X).asnumpy()
+        preds     = self.model.predict(X).softmax(axis=1).asnumpy()
         inv_map = [0] * len(self.vectorizer.label_map)
         for k in self.vectorizer.label_map:
             inv_map[self.vectorizer.label_map[k]] = k
@@ -298,7 +309,7 @@ class BowVAEInferencer(BaseInferencer):
             best_strs = [ inv_map[best] for best in bests ]
         else:
             best_strs = [ inv_map[i] for i in list(np.where(preds > pred_threshold)[0]) ]
-        return best_strs, encodings
+        return best_strs, encodings, preds
     
 
 
