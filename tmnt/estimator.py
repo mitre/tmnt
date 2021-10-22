@@ -99,7 +99,8 @@ class BaseEstimator(object):
                  epochs: int = 40,
                  coherence_via_encoder: bool = False,
                  pretrained_param_file: Optional[str] = None,
-                 warm_start: bool = False):
+                 warm_start: bool = False,
+                 test_batch_size: int = 0):
         self.log_method = log_method
         self.quiet = quiet
         self.model = None
@@ -113,6 +114,7 @@ class BaseEstimator(object):
         self.coherence_reg_penalty = coherence_reg_penalty
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.batch_size = batch_size
+        self.test_batch_size = test_batch_size or batch_size
         self.epochs = epochs
         self.coherence_via_encoder = coherence_via_encoder
         self.pretrained_param_file = pretrained_param_file
@@ -464,7 +466,7 @@ class BaseBowEstimator(BaseEstimator):
 
     def _get_val_dataloader(self, val_X, val_y):
         test_size = val_X.shape[0] * val_X.shape[1]
-        test_batch_size = min(val_X.shape[0], self.batch_size)
+        test_batch_size = min(val_X.shape[0], self.test_batch_size)
         last_batch_size = val_X.shape[0] % test_batch_size if test_batch_size < val_X.shape[0] else test_batch_size
         num_val_batches = val_X.shape[0] // test_batch_size
         if last_batch_size > 0 and last_batch_size < test_batch_size:
@@ -926,9 +928,7 @@ class BowMetricEstimator(BowEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
 
 
-    #def _classifier_validate(self, model, dataloader, epoch_id):
-
-    def classifier_validate(self, model, dataloader, epoch_id):
+    def classifier_validate(self, model, dataloader, epoch_id, include_predictions=False):
         posteriors = []
         ground_truth = []
         ground_truth_idx = []
@@ -961,6 +961,15 @@ class BowMetricEstimator(BowEstimator):
         except:
             auroc = 0.0
             logging.error('ROC computation failed')
+        ap_scores = []
+        for c in range(len(labels)):
+            y_vec = ground_truth[:,c]
+            pred_vec = posteriors[:,c]
+            if not np.any(np.isnan(pred_vec)):
+                ap_c = average_precision_score(y_vec, pred_vec)
+            else:
+                ap_c = 0.0
+            ap_scores.append((ap_c, int(y_vec.sum())))
         ndcg = ndcg_score(ground_truth, posteriors)
         top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1, labels=labels)        
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2, labels=labels)
@@ -976,8 +985,14 @@ class BowMetricEstimator(BowEstimator):
             #umap.plot.points(mapper, labels=y)
             plt.savefig(ofile)
             plt.close("all")
+            
+        if include_predictions:
+            res_predictions = posteriors
+            res_ground_truth = ground_truth
+        else:
+            res_predictions, res_ground_truth = None, None
         return {'avg_prec': avg_prec, 'top_1': top_acc_1, 'top_2': top_acc_2, 'top_3': top_acc_3, 'top_4': top_acc_4,
-                'au_roc': auroc, 'ndcg': ndcg}    
+                'au_roc': auroc, 'ndcg': ndcg, 'ap_scores': ap_scores, 'results_predictions': res_predictions, 'results_ground_truth': res_ground_truth}    
         
 
     def _perform_validation(self,
@@ -992,6 +1007,7 @@ class BowMetricEstimator(BowEstimator):
         self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}, AuROC = {}, NDCG = {} [acc@1= {}, acc@2={}, acc@3={}, acc@4={}]"
                             .format(epoch, v_res['avg_prec'], v_res['avg_prec'], v_res['au_roc'], v_res['ndcg'],
                                     v_res['top_1'], v_res['top_2'], v_res['top_3'], v_res['top_4']))
+        self._output_status("  AP Scores: {}".format(v_res['ap_scores']))
         if self.reporter:
             self.reporter(epoch=epoch+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0,
                           perplexity=0.0, redundancy=0.0)
@@ -1723,7 +1739,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         emb2 = None
         emb1 = []
         for batch_id, data_batch in enumerate(dataloader):
-            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, seqs, on_test=True)
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch, on_test=True)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
             probs = mx.nd.softmax(-dists, axis=1).asnumpy()
