@@ -1460,7 +1460,7 @@ class SeqBowEstimator(BaseEstimator):
 
         #step_size = self.batch_size * accumulate if accumulate else self.batch_size
         #num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
-        num_train_steps = len(train_data)
+        num_train_steps = len(train_data) * self.epochs
         if accumulate:
             num_train_steps /= accumulate
         
