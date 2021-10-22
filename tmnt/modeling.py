@@ -711,6 +711,7 @@ class GeneralizedSDMLLoss(Loss):
         l1 = l1.squeeze()
         l2 = l2.squeeze()
         batch_size = l1.shape[0]
+        print("shape l1 = {}, l2 = {}".format(l1.shape, l2.shape))
         l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
         l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
         ll = F.equal(l1_x, l2_x)
