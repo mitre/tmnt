@@ -65,9 +65,12 @@ class BaseSelector(object):
                                      objective=task_df["objective"],
                                      target_epoch=task_df["epoch"].iloc[-1])
             task_dfs.append(task_df)
-        result = pd.concat(task_dfs, axis="index", ignore_index=True, sort=True)
-        result = result.sort_values(by="runtime")
-        result = result.assign(best=result["objective"].cummax())
+        if len(task_dfs) > 0:
+            result = pd.concat(task_dfs, axis="index", ignore_index=True, sort=True)
+            result = result.sort_values(by="runtime")
+            result = result.assign(best=result["objective"].cummax())
+        else:
+            result = None
         return result
     
 
@@ -128,24 +131,31 @@ class BaseSelector(object):
         logging.info("Best configuration = {}".format(best_config))
         logging.info("Best configuration objective = {}".format(scheduler.get_best_reward()))
         best_config_dict = ag.space.Dict(**best_config)
+        out_config_file  = os.path.join(self.log_dir, 'best.model.config')
+        with open(out_config_file, 'w') as fp:
+            specs = json.dumps(best_config)
+            fp.write(specs)
+        logging.info("===> Writing best configuration to {}".format(out_config_file))
+            
         logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
         estimator, obj = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
         logging.info("Objective with final retrained model/estimator: {}".format(obj))
         logging.info("Writing model to: {}".format(trainer.model_out_dir))
         trainer.write_model(estimator)
-        with open(os.path.join(self.log_dir, 'best.model.config'), 'w') as fp:
-            specs = json.dumps(best_config)
-            fp.write(specs)
+        
         dd_finish = datetime.datetime.now()
         logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
         results_df = self._process_training_history(scheduler.training_history.copy(),
                                                     start_timestamp=scheduler._start_time)
-        logging.info("Printing hyperparameter results")
-        out_html = os.path.join(self.log_dir, 'selection.html')
-        results_df.to_html(out_html)
-        out_pretty = os.path.join(self.log_dir, 'selection.table.txt')
-        with io.open(out_pretty, 'w') as fp:
-            fp.write(tabulate(results_df, headers='keys', tablefmt='pqsl'))
+        if results_df is not None:
+            logging.info("Printing hyperparameter results")
+            out_html = os.path.join(self.log_dir, 'selection.html')
+            results_df.to_html(out_html)
+            out_pretty = os.path.join(self.log_dir, 'selection.table.txt')
+            with io.open(out_pretty, 'w') as fp:
+                fp.write(tabulate(results_df, headers='keys', tablefmt='pqsl'))
+        else:
+            logging.info("Training history unavailable")
         return estimator
 
 

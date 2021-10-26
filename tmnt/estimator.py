@@ -1046,26 +1046,49 @@ class CovariateBowEstimator(BaseBowEstimator):
         return model
 
 
+    def _get_losses(self, model, batch_data):
+        # batch_data has form: ((data, covars),)
+        (data,covars), = batch_data
+        data = data.as_in_context(self.ctx)
+        covars = covars.as_in_context(self.ctx)        
+        elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
+            self._forward(self.model, data, covars)
+        total_ls = elbo_ls.mean()
+        label_ls = mx.nd.zeros(total_ls.shape)
+        return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
+    
+
     def _get_config(self):
         config = super()._get_config()
         config['n_covars'] = self.n_covars
         return config
     
     
-    def _forward(self, model, data):
+    def _forward(self,
+                 model: BowVAEModel,
+                 data: mx.nd.NDArray,
+                 covars: mx.nd.NDArray) -> Tuple[mx.nd.NDArray,
+                                                 mx.nd.NDArray,
+                                                 mx.nd.NDArray,
+                                                 mx.nd.NDArray,
+                                                 mx.nd.NDArray,
+                                                 mx.nd.NDArray,
+                                                 mx.nd.NDArray] :
         """
         Forward pass of BowVAE model given the supplied data
 
         Parameters:
-            model (MXNet model): Model that returns elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
-            data ({array-like, sparse matrix}): Document word matrix of shape (n_train_samples, vocab_size) 
+            model: Model that returns elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
+            data: Document word matrix of shape (n_train_samples, vocab_size) 
+            covars: Covariate matrix. shape [n_samples, n_covars]
 
         Returns:
             (tuple): Tuple of: 
                 elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
         """
         self.train_data = data
-        return model(data)
+        self.train_labels = covars
+        return model(data, covars)
 
 
     def _npmi_per_covariate(self, X, y, k=10):
