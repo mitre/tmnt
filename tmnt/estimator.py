@@ -1730,7 +1730,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         emb2 = None
         emb1 = []
         for batch_id, data_batch in enumerate(dataloader):
-            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch[0])
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch)
             label1_ind = label1.argmax(axis=1)
             label2_ind = label2.argmax(axis=1)
             label1 = label1_ind.as_in_context(self.ctx)
