@@ -253,7 +253,7 @@ class BowVAEModel(BaseVAE):
         return self.classifier(self.lab_dr(self.encode_data(data)))
     
 
-    def hybrid_forward(self, F, data, labels):
+    def hybrid_forward(self, F, data):
         batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
         emb_out = self.embedding(data)
         #z, KL = self.run_encode(F, emb_out, batch_size)

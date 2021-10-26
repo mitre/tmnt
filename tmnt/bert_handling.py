@@ -17,7 +17,7 @@ from gluonnlp.data.dataset import SimpleDataset, Dataset
 import json
 import collections
 from tmnt.preprocess.vectorizer import TMNTVectorizer
-from tmnt.data_loading import to_label_matrix
+from tmnt.data_loading import to_label_matrix, PairedDataLoader
 from typing import Dict
 from gluonnlp.data import BERTSentenceTransform
 
@@ -244,31 +244,20 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
     bow_count_dtype = 'float32'
     # data train
     data_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
-    if aux_dataset is None:
-        final_ds = data_ds.transform( lambda a,b,c,d,e: ((a,b,c,d,e),) ) # create a singleton tuple to keep data iterators simple
-        data_ds_len = data_ds.transform(
-            lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
-        batchify_fn = nlp.data.batchify.Tuple(
-            nlp.data.batchify.Tuple(
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
-    else:
-        aux_ds = mx.gluon.data.SimpleDataset(pool.map(trans, aux_dataset))
-        final_ds = UnevenArrayDataset(data_ds, aux_ds)
-        logging.info("Uneven dataset created, size = {} (from data_ds = {}, aux_ds = {})".format(len(final_ds), len(data_ds), len(aux_ds)))
-        data_ds_len = final_ds.transform( lambda a, b: a[1] + b[1], lazy=False )
-        batchify_fn = nlp.data.batchify.Tuple(
-            nlp.data.batchify.Tuple(
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)),
-            nlp.data.batchify.Tuple(
+
+    #data_ds_len = data_ds.transform(lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
+
+    final_ds = data_ds.transform( lambda a,b,c,d,e: ((a,b,c,d,e),) ) # singleton tuple
+    final_ds_len = data_ds.transform(lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
+    batchify_fn = nlp.data.batchify.Tuple(
+        nlp.data.batchify.Tuple(
                 nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
                 nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
     if train_mode:
         # bucket sampler 
         num_buckets = min(6, len(data_ds) // batch_size)
         batch_sampler = nlp.data.sampler.FixedBucketSampler(
-            data_ds_len,
+            final_ds_len,
             batch_size=batch_size,
             num_buckets=num_buckets,
             ratio=0.2, # may avoid batches with size = 1 (which may tigger a bug)
@@ -286,7 +275,27 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
             num_workers=4,
             shuffle=False,
             batchify_fn=batchify_fn)
-    return loader, len(final_ds)
+    return loader, len(data_ds)
+
+
+def get_aux_dataloader(trans, batch_size, aux_dataset):
+    pool = multiprocessing.Pool()
+    label_dtype = 'float32' # if not task.class_labels else 'int32'
+    bow_count_dtype = 'float32'
+    
+    aux_ds = mx.gluon.data.SimpleDataset(pool.map(trans, aux_dataset))
+    a_batchify_fn = nlp.data.batchify.Tuple(
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
+    loader_aux = gluon.data.DataLoader(
+        dataset=aux_ds,
+        num_workers=4,
+        last_batch = 'rollover', ## need to ensure all batches are the same size here
+        shuffle=True,  # shuffle optional (for training)
+        batch_size  = batch_size,
+        batchify_fn = a_batchify_fn)
+    return loader_aux
+
 
 
 def get_bert_datasets(class_labels,
@@ -323,10 +332,13 @@ def get_bert_datasets(class_labels,
                                  vectorizer=vectorizer,
                                  bert_vocab_size = len(bert_vocabulary) if use_bert_vocab else 0,
                                  num_classes = num_classes)
-    train_data, num_train_examples = preprocess_seq_data(trans, class_labels, train_ds, batch_size, max_len, train_mode=True, pad=pad,
-                                                         aux_dataset=aux_ds)
+    train_data, num_train_examples = preprocess_seq_data(trans, class_labels, train_ds, batch_size, max_len, train_mode=True, pad=pad)
+    if aux_ds is not None:
+        aux_data = get_aux_dataloader(trans, batch_size, aux_ds)
+    else:
+        aux_data = None
     dev_data, _ = preprocess_seq_data(trans, class_labels, dev_ds, batch_size, max_len, train_mode=False, pad=pad)
-    return train_data, dev_data, num_train_examples, bert, bert_vocabulary
+    return train_data, dev_data, aux_data, num_train_examples, bert, bert_vocabulary
 
 
 ############
@@ -408,28 +420,15 @@ def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_d
     a_data_train = mx.gluon.data.SimpleDataset(pool.map(trans1, train_a_ds))
     b_data_train = mx.gluon.data.SimpleDataset(pool.map(trans2, train_b_ds))
 
-    if aux_dataset is None:
-        a_final_ds = a_data_train.transform( lambda a,b,c,d,e: ((a,b,c,d,e),) ) # create a singleton tuple to keep data iterators simple
-        a_batchify_fn = nlp.data.batchify.Tuple(
-            nlp.data.batchify.Tuple(
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
-    else:
-        aux_ds = mx.gluon.data.SimpleDataset(pool.map(trans2, aux_dataset))
-        a_final_ds = UnevenArrayDataset(a_data_train, aux_ds)
-        a_batchify_fn = nlp.data.batchify.Tuple(
-            nlp.data.batchify.Tuple(
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)),
-            nlp.data.batchify.Tuple(
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
-                nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
+    a_batchify_fn = nlp.data.batchify.Tuple(
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
+        nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
     
     b_batchify_fn = nlp.data.batchify.Tuple(
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
     a_loader_train = gluon.data.DataLoader(
-        dataset=a_final_ds,
+        dataset=a_data_train,
         num_workers=4,
         last_batch = 'rollover', ## need to ensure all batches are the same size here
         shuffle=shuffle,  # shuffle optional (for training)
@@ -441,7 +440,9 @@ def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_d
         shuffle=False,  # don't shuffle fixed set 'B'
         batch_size  = batch_size,
         batchify_fn = b_batchify_fn)
-    return a_loader_train, len(a_final_ds), b_loader_train
+    paired_loader = PairedDataLoader(a_loader_train, b_loader_train)
+    return paired_loader, len(a_data_train)
+
 
 
 def get_dual_bert_datasets(class_labels,
@@ -487,9 +488,11 @@ def get_dual_bert_datasets(class_labels,
                                   vectorizer=vectorizer,
                                   bert_vocab_size=len(bert_vocabulary) if use_bert_vocab else 0)
     
-    #train_data, num_train_examples = preprocess_data_metriclearn(
-    #   trans, class_labels, train_ds1, train_ds2, batch_size, max_len, pad)
     batch_size = len(train_ds2)
-    a_train_data, num_train_examples, b_train_data = preprocess_data_metriclearn_separate(
-        trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle=shuffle, aux_dataset=aux_dataset)
-    return a_train_data, num_train_examples, bert, b_train_data, bert_vocabulary
+    train_data, num_train_examples = preprocess_data_metriclearn_separate(
+        trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle=shuffle)
+    if aux_dataset is not None:
+        aux_dataloader = get_aux_dataloader(trans1, batch_size, aux_dataset)
+    else:
+        aux_dataloader = None
+    return train_data, aux_dataloader, num_train_examples, bert, bert_vocabulary

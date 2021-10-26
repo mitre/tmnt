@@ -186,6 +186,30 @@ class DataIterLoader():
         return self.__next__()
 
 
+class SingletonWrapperLoader():
+
+    def __init__(self, data_loader):
+        self.data_loader = data_loader
+        self.data_iter   = iter(data_loader)
+        self.last_batch_size = data_loader.last_batch_size
+        self.num_batches = data_loader.num_batches
+        self.handle_last_batch = data_loader.handle_last_batch
+
+    def __iter__(self):
+        self.data_iter = iter(self.data_loader)
+        return self
+
+    def __len__(self):
+        return len(self.data_iter)
+
+    def __next__(self):
+        batch = self.data_iter.__next__()
+        return (batch,)
+
+    def next(self):
+        return self.__next__()    
+
+
 class PairedDataLoader():
     
     def __init__(self, data_loader1, data_loader2):
@@ -205,6 +229,12 @@ class PairedDataLoader():
         self.end1 = False
         self.end2 = False
         return self
+
+    def __len__(self):
+        if self.data_iter2 is not None:
+            return max(len(self.data_iter1), len(self.data_iter2))
+        else:
+            return len(self.data_iter1)
 
     def __next__(self):
         try:
@@ -231,6 +261,7 @@ class PairedDataLoader():
     def next(self):
         return self.__next__()
     
+
 
 
 def _init_data(data, allow_empty, default_name):

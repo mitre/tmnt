@@ -25,7 +25,7 @@ import umap
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, f1_score, precision_recall_fscore_support
-from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter, PairedDataLoader
+from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter, PairedDataLoader, SingletonWrapperLoader
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
@@ -441,12 +441,9 @@ class BaseBowEstimator(BaseEstimator):
         total_kl_loss  = 0
         last_batch_size = dataloader.last_batch_size
         num_batches = dataloader.num_batches
-        for i, (data,labels) in enumerate(dataloader):
-            if labels is None:            
-                labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+        for i, ((data,labels),) in enumerate(dataloader):
             data = data.as_in_context(self.ctx)
-            labels = labels.as_in_context(self.ctx)
-            _, kl_loss, rec_loss, _, _, _ = self._forward(self.model, data, labels)
+            _, kl_loss, rec_loss, _, _, _ = self._forward(self.model, data)
             if i == num_batches - 1 and last_batch_size > 0:
                 total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
                 total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
@@ -481,6 +478,7 @@ class BaseBowEstimator(BaseEstimator):
             val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = test_batch_size,
                                                                  last_batch_handle='pad', shuffle=False),
                                             )
+        val_dataloader = SingletonWrapperLoader(val_dataloader)
         return val_dataloader
 
     def validate_with_loader(self, val_dataloader, val_size, total_val_words, val_X=None, val_y=None):
@@ -498,7 +496,7 @@ class BaseBowEstimator(BaseEstimator):
             bs = min(val_size, self.batch_size)
             num_std_batches = val_size // bs
             last_batch_size = val_size % bs
-            for i, (data, labels) in enumerate(val_dataloader):
+            for i, ((data, labels),) in enumerate(val_dataloader):
                 data = data.as_in_context(self.ctx)
                 labels = labels.as_in_context(self.ctx)
                 if i == num_std_batches - 1 and last_batch_size > 0:
@@ -560,9 +558,15 @@ class BaseBowEstimator(BaseEstimator):
 
 
     def _get_losses(self, model, batch_data):
-        data,labels = batch_data
+        # batch_data has form: ((data, labels),)
+        (data,labels), = batch_data
+        data = data.as_in_context(self.ctx)
+        if labels is None:
+            labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
+        labels = labels.as_in_context(self.ctx)
+        
         elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
-            self._forward(self.model, data, labels)
+            self._forward(self.model, data)
         if self.has_classifier:
             label_ls = self.loss_function(predicted_labels, labels).mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
@@ -571,9 +575,9 @@ class BaseBowEstimator(BaseEstimator):
             label_ls = mx.nd.zeros(total_ls.shape)
         return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
 
-    def _get_unlabeled_losses(self, model, data, labels):
+    def _get_unlabeled_losses(self, model, data):
         elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
-            self._forward(self.model, data, labels)
+            self._forward(self.model, data)
         total_ls = elbo_ls.mean() / self.gamma
         return elbo_ls, kl_ls, rec_ls, red_ls, total_ls
 
@@ -592,22 +596,19 @@ class BaseBowEstimator(BaseEstimator):
             ts_epoch = time.time()
             elbo_losses = []
             lab_losses  = []
-            for i, ((data, labels), aux_batch) in enumerate(joint_loader):
-                data = data.as_in_context(self.ctx)
-                if labels is None:
-                    labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-                labels = labels.as_in_context(self.ctx)
+            for i, (data_batch, aux_batch) in enumerate(joint_loader):
                 with autograd.record():
-                    elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, (data, labels))
+                    elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data_batch)
                     elbo_mean = elbo_ls.mean()
                 total_ls.backward()
 
                 if aux_batch is not None:
-                    aux_data, aux_labels = aux_batch
+                    aux_data, = aux_batch
+                    aux_data, _ = aux_data # ignore (null) label
                     aux_data = aux_data.as_in_context(self.ctx)
                     with autograd.record():
                         elbo_ls_a, kl_loss_a, _, _, total_ls_a = \
-                            self._get_unlabeled_losses(self.model, aux_data, aux_labels)
+                            self._get_unlabeled_losses(self.model, aux_data)
                     total_ls_a.backward()
                 
                 trainer.allreduce_grads()
@@ -655,6 +656,14 @@ class BaseBowEstimator(BaseEstimator):
         return sc_obj, v_res
 
 
+    def setup_model_with_biases(self, X: sp.csr.csr_matrix) -> int:
+        wd_freqs = self._get_wd_freqs(X)
+        x_size = X.shape[0] * X.shape[1]
+        if self.model is None or not self.warm_start:
+            self.model = self._get_model()
+            self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
+        return x_size
+
     def fit_with_validation(self, 
                             X: sp.csr.csr_matrix,
                             y: np.ndarray,
@@ -674,12 +683,9 @@ class BaseBowEstimator(BaseEstimator):
         Returns:
             sc_obj, v_res
         """
-        wd_freqs = self._get_wd_freqs(X)
-        x_size = X.shape[0] * X.shape[1]
-        if self.model is None or not self.warm_start:
-            self.model = self._get_model()
-            self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
-            
+        
+        x_size = self.setup_model_with_biases(X)
+        
         if x_size > MAX_DESIGN_MATRIX:
             logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
             train_dataloader = \
@@ -702,11 +708,14 @@ class BaseBowEstimator(BaseEstimator):
         else:
             aux_dataloader, aux_X_size = None, 0
         if val_X is not None:
-            val_dataloader = self._get_val_dataloader(val_X, val_y)
+            val_dataloader = self._get_val_dataloader(val_X, val_y) # already wrapped in a singleton
             total_val_words = val_X.sum()
             val_X_size = val_X.shape[0]
         else:
             val_dataloader, total_val_words, val_X_size = None, 0, 0
+        train_dataloader = SingletonWrapperLoader(train_dataloader)
+        if aux_dataloader is not None:
+            aux_dataloader   = SingletonWrapperLoader(aux_dataloader)        
         return self.fit_with_validation_loaders(train_dataloader, val_dataloader, aux_dataloader, train_X_size, val_X_size,
                                          aux_X_size, total_val_words, val_X=val_X, val_y=val_y)
 
@@ -754,20 +763,19 @@ class BowEstimator(BaseBowEstimator):
         """
         return super().perplexity(X, None)
 
-    def _forward(self, model: BowVAEModel, data: mx.nd.NDArray, labels: mx.nd.NDArray):
+    def _forward(self, model: BowVAEModel, data: mx.nd.NDArray):
         """
         Forward pass of BowVAE model given the supplied data
 
         Parameters:
             model: Core VAE model for bag-of-words topic model
             data: Document word matrix of shape (n_train_samples, vocab_size)
-            labels: Ignored
 
         Returns:
             Tuple of:
                 elbo, kl_loss, rec_loss, coherence_loss, redundancy_loss, reconstruction
         """
-        return model(data, labels)
+        return model(data)
 
 
     def initialize_with_pretrained(self):
@@ -837,11 +845,9 @@ class BowEstimator(BaseBowEstimator):
 
 class BowMetricEstimator(BowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_tr_data=None, fixed_test_data=None, plot_dir=None, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, **kwargs):
         super(BowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
-        self.fixed_tr_batch = fixed_tr_data
-        self.fixed_test_batch = fixed_test_data
         self.plot_dir = plot_dir
 
 
@@ -884,58 +890,42 @@ class BowMetricEstimator(BowEstimator):
         model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         return model
 
-    def _forward(self, model, data, labels):
-        elbo_ls, rec_ls, kl_ls, red_ls, total_ls = self._get_unlabeled_losses(model, data, labels)
+    def _forward(self, model, data):
+        elbo_ls, rec_ls, kl_ls, red_ls, total_ls = self._get_unlabeled_losses(model, data)
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls, None
 
-    def _ff_batch(self, model, batch_data, on_test=False):
-        if on_test:
-            if self.fixed_test_batch:
-                batch1, batch2 = batch_data[0], self.fixed_test_batch[0]
-                labels1 = batch_data[1]
-                labels2 = self.fixed_test_batch[1]
-            else:
-                batch1, batch2 = batch_data[0][0], batch_data[1][0]
-                labels1, labels2 = batch_data[0][1], batch_data[1][1]
-        else:
-            if self.fixed_tr_batch:
-                batch1, batch2 = batch_data[0], self.fixed_tr_batch[0]
-                labels1 = batch_data[1]
-                labels2 = self.fixed_tr_batch[1]
-            else:
-                batch1, batch2 = batch_data
-                labels1, labels2 = batch_data[0][1], batch_data[1][1]                
+    def _ff_batch(self, model, batch_data):
+        (batch1, labels1), (batch2, labels2) = batch_data
+        batch1 = batch1.as_in_context(self.ctx)
+        batch2 = batch2.as_in_context(self.ctx)
+        labels1 = labels1.as_in_context(self.ctx)
+        labels2 = labels2.as_in_context(self.ctx)
         elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(batch1, batch2)
         return elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, labels1, labels2
 
 
     def _get_losses(self, model, batch_data):
-        # batch_data is either:
-        #    1. (data, label)
-        # or 2. ((data, label), (data, label))
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
-        label1 = label1.as_in_context(self.ctx)
-        label2 = label2.as_in_context(self.ctx)
         label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
         label_ls = label_ls.mean()
         total_ls = (self.gamma * label_ls) + elbo_ls.mean()
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
         
 
-    def _get_unlabeled_losses(self, model, data, labels):
+    def _get_unlabeled_losses(self, model, data):
         elbo_ls, rec_ls, kl_ls, red_ls = model.unpaired_input_forward(data)
         total_ls = elbo_ls / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
 
 
-    def classifier_validate(self, model, dataloader, epoch_id, include_predictions=False):
+    def classifier_validate(self, model, dataloader, epoch_id, include_predictions=True):
         posteriors = []
         ground_truth = []
         ground_truth_idx = []
         emb2 = None
         emb1 = []
         for batch_id, data_batch in enumerate(dataloader):
-            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch, on_test=True)
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
             probs = mx.nd.softmax(-dists, axis=1).asnumpy()
@@ -1014,6 +1004,7 @@ class BowMetricEstimator(BowEstimator):
         return v_res['avg_prec'], v_res
 
 
+
 class CovariateBowEstimator(BaseBowEstimator):
 
     def __init__(self, *args, n_covars=0, **kwargs):
@@ -1061,22 +1052,20 @@ class CovariateBowEstimator(BaseBowEstimator):
         return config
     
     
-    def _forward(self, model, data, labels):
+    def _forward(self, model, data):
         """
         Forward pass of BowVAE model given the supplied data
 
         Parameters:
             model (MXNet model): Model that returns elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
             data ({array-like, sparse matrix}): Document word matrix of shape (n_train_samples, vocab_size) 
-            labels ({array-like, sparse matrix}): Covariate matrix of shape (n_train_samples, n_covars)
 
         Returns:
             (tuple): Tuple of: 
                 elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
         """
         self.train_data = data
-        self.train_labels = labels
-        return model(data, labels)
+        return model(data)
 
 
     def _npmi_per_covariate(self, X, y, k=10):
@@ -1359,8 +1348,8 @@ class SeqBowEstimator(BaseEstimator):
         max_rows = 2000000000 / len(self.bow_vocab)
         logging.info("Maximum rows for BOW matrix = {}".format(max_rows))
         rows = 0
-        for i, data_batch in enumerate(dataloader):
-            seqs = data_batch[0]
+        for i, data in enumerate(dataloader):
+            seqs, = data
             bow_batch = list(seqs[3].squeeze(axis=1))
             rows += len(bow_batch)
             if i >= max_rows:
@@ -1373,8 +1362,8 @@ class SeqBowEstimator(BaseEstimator):
 
     def _get_bow_wd_counts(self, dataloader):
         sums = mx.nd.zeros(len(self.bow_vocab))
-        for i, data_batch in enumerate(dataloader):
-            seqs = data_batch[0]
+        for i, data in enumerate(dataloader):
+            seqs, = data
             bow_batch = seqs[3].squeeze(axis=1)
             sums += bow_batch.sum(axis=0)
         return sums
@@ -1394,7 +1383,9 @@ class SeqBowEstimator(BaseEstimator):
         return sc_obj
 
     def _get_losses(self, model, batch_data):
-        input_ids, valid_length, type_ids, bow, label = batch_data
+        ## batch_data should be a singleton tuple: (seqs,)
+        seqs, = batch_data
+        input_ids, valid_length, type_ids, bow, label = seqs
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
             input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
             valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
@@ -1426,20 +1417,22 @@ class SeqBowEstimator(BaseEstimator):
     def fit_with_validation(self,
                             train_data: gluon.data.DataLoader,
                             dev_data: gluon.data.DataLoader,
-                            num_train_examples: int,
-                            aux_data: bool=True):
+                            aux_data: gluon.data.DataLoader,
+                            num_train_examples: int):
         """
         Training function.
 
         Parameters:
             train_data: Gluon dataloader with training data.
             dev_data: Gluon dataloader with dev/validation data.
+            aux_data: Gluon dataloader with auxilliary data.
             num_train_examples: Number of training samples
-            aux_data: Flag for whether auxilliary data is provided
         """
         if self.model is None or not self.warm_start:
             model = self._get_model_bias_initialize(train_data)
             self.model = model
+
+        has_aux_data = aux_data is not None
         
         accumulate = False
 
@@ -1481,7 +1474,7 @@ class SeqBowEstimator(BaseEstimator):
                 clipped_params.append(p)
         
         # Set grad_req if gradient accumulation is required
-        if (accumulate and accumulate > 1) or aux_data:
+        if (accumulate and accumulate > 1) or has_aux_data:
             for p in params:
                 p.grad_req = 'add'
 
@@ -1492,18 +1485,17 @@ class SeqBowEstimator(BaseEstimator):
             loss_details['red_loss'] += red_ls.mean().asscalar()
             if class_ls is not None:
                 loss_details['class_loss'] += class_ls.mean().asscalar()
+
+        joint_loader = PairedDataLoader(train_data, aux_data)
             
         for epoch_id in range(self.epochs):
             self.metric.reset()
             all_model_params.zero_grad()
             
-            for (batch_id, data_batch) in enumerate(train_data):
+            for (batch_id, (data, aux_batch)) in enumerate(joint_loader):
                 # data_batch is either a 2-tuple of: (labeled, unlabeled)
                 # OR a 1-tuple of (labeled,)
-                if len(data_batch) == 2:
-                    seqs, aux_seqs = data_batch
-                else:
-                    seqs, aux_seqs = data_batch[0], None
+                
                 # learning rate schedule                
                 if step_num < num_warmup_steps:
                     new_lr = self.lr * (step_num+1) / num_warmup_steps
@@ -1515,15 +1507,15 @@ class SeqBowEstimator(BaseEstimator):
                 trainer.set_learning_rate(new_lr)
                 # forward and backward with optional auxilliary data
                 with mx.autograd.record():
-                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
+                    elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, data)
                 total_ls.backward()
-                if aux_seqs is not None:
+                if aux_batch is not None:
                     with mx.autograd.record():
-                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_seqs)
+                        elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_batch)
                     total_ls_2.backward()
 
                 update_loss_details(total_ls, elbo_ls, red_ls, label_ls)
-                if aux_seqs is not None:
+                if aux_batch is not None:
                     update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
 
                 # update
@@ -1534,7 +1526,7 @@ class SeqBowEstimator(BaseEstimator):
                     trainer.update(accumulate if accumulate else 1)
                     dec_trainer.update(accumulate if accumulate else 1)
                     step_num += 1
-                    if (accumulate and accumulate > 1) or aux_data:
+                    if (accumulate and accumulate > 1) or aux_batch:
                         # set grad to zero for gradient accumulation
                         all_model_params.zero_grad()
                 if (batch_id + 1) % (self.log_interval) == 0:
@@ -1606,8 +1598,7 @@ class SeqBowEstimator(BaseEstimator):
         elbo_loss  = 0
         total_rec_loss = 0.0
         total_kl_loss  = 0.0
-        for batch_id, data_batch in enumerate(dataloader):
-            seqs = data_batch[0]
+        for batch_id, seqs in enumerate(dataloader):
             elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
             total_rec_loss += rec_ls.sum().asscalar()
             total_kl_loss  += kl_ls.sum().asscalar()
@@ -1637,16 +1628,10 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, fixed_data=None, fixed_test_data=None, plot_dir=None, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
-        self.fixed_batch = None
-        self.fixed_test_batch = None
         self.plot_dir = plot_dir
-        if fixed_data:
-            self.fixed_batch = next(enumerate(fixed_data))[1] # take the first batch and fix
-            if fixed_test_data:
-                self.fixed_test_batch = next(enumerate(fixed_test_data))[1]
 
 
     @classmethod
@@ -1675,34 +1660,17 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
-        for _, data_batch in enumerate(dataloader):
-            seqs = data_batch[0]
-            if self.fixed_batch:
-                batch_1 = seqs
-            else:
-                batch_1, batch_2 = seqs                
-                bow_matrix.extend(list(batch_2[3].squeeze(axis=1)))
+        for _, seqs in enumerate(dataloader):
+            batch_1, batch_2 = seqs                
+            bow_matrix.extend(list(batch_2[3].squeeze(axis=1)))
             bow_matrix.extend(list(batch_1[3].squeeze(axis=1)))
-        if self.fixed_batch:
-            bow_matrix.extend(list(self.fixed_batch[3].squeeze(axis=1)))
         bow_matrix = mx.nd.stack(*bow_matrix)
         if cache:
             self._bow_matrix = bow_matrix
         return bow_matrix
 
-    def _ff_batch(self, model, batch_data, on_test=False):
-        if on_test:
-            if self.fixed_test_batch:
-                batch1 = batch_data
-                batch2 = self.fixed_test_batch
-            else:
-                batch1, batch2 = batch_data
-        else:
-            if self.fixed_batch:
-                batch1 = batch_data
-                batch2 = self.fixed_batch
-            else:
-                batch1, batch2 = batch_data
+    def _ff_batch(self, model, batch_data):
+        batch1, batch2 = batch_data
         in1, vl1, tt1, bow1, label1 = batch1
         in2, vl2, tt2, bow2, label2 = batch2
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(
@@ -1732,14 +1700,14 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         total_ls = elbo_ls / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
     
-    def classifier_validate(self, model, dataloader, epoch_id):
+    def classifier_validate(self, model, dataloader, epoch_id, include_predictions=True):
         posteriors = []
         ground_truth = []
         ground_truth_idx = []
         emb2 = None
         emb1 = []
         for batch_id, data_batch in enumerate(dataloader):
-            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch[0], on_test=True)
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch[0])
             label1_ind = label1.argmax(axis=1)
             label2_ind = label2.argmax(axis=1)
             label1 = label1_ind.as_in_context(self.ctx)
@@ -1784,8 +1752,13 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             #umap.plot.points(mapper, labels=y)
             plt.savefig(ofile)
             plt.close("all")
+        if include_predictions:
+            res_predictions = posteriors
+            res_ground_truth = ground_truth
+        else:
+            res_predictions, res_ground_truth = None, None
         return {'avg_prec': avg_prec, 'top_1': top_acc_1, 'top_2': top_acc_2, 'top_3': top_acc_3, 'top_4': top_acc_4,
-                'au_roc': auroc, 'ndcg': ndcg}
+                'au_roc': auroc, 'ndcg': ndcg, 'results_predictions': res_predictions, 'results_ground_truth': res_ground_truth}
 
             
     def _perform_validation(self, model, dev_data, epoch_id):

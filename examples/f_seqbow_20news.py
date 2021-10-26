@@ -18,10 +18,12 @@ from mxnet.gluon.data import ArrayDataset
 data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                               remove=('headers', 'footers', 'quotes'),
                               return_X_y=True)
-train_data = data[:2000]
-dev_data   = data[-2000:]
-train_y    = y[:2000]
-dev_y      = y[-2000:]
+
+tr_size = 100
+train_data = data[:tr_size]
+dev_data   = data[-tr_size:]
+train_y    = y[:tr_size]
+dev_y      = y[-tr_size:]
 model_name = 'bert_12_768_12'
 dataset = 'book_corpus_wiki_en_uncased'
 batch_size = 32
@@ -57,12 +59,13 @@ dev_ds = ArrayDataset(dev_data, dev_y_s)
 
 print("Classes = {}".format(classes))
 
-tr_dataset, dev_dataset, num_examples, bert_base, bert_vocab = get_bert_datasets(classes, vectorizer, 
-                                                                        tr_ds, dev_ds, batch_size, seq_len,
-                                                                        bert_model_name=model_name,
-                                                                        bert_dataset=dataset,
-                                                                        num_classes=num_classes,
-                                                                                    ctx=ctx)
+tr_dataset, dev_dataset, aux_dataset, num_examples, bert_base, bert_vocab = \
+    get_bert_datasets(classes, vectorizer, 
+                      tr_ds, dev_ds, batch_size, seq_len,
+                      bert_model_name=model_name,
+                      bert_dataset=dataset,
+                      num_classes=num_classes, aux_ds = dev_ds,
+                      ctx=ctx)
 
 
 estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_name = dataset,
@@ -74,5 +77,5 @@ estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_n
                             lr=2e-5, decoder_lr=0.02, epochs=1)
 
 # this will take quite some time without a GPU!
-estimator.fit_with_validation(tr_dataset, dev_dataset, num_examples)
+estimator.fit_with_validation(tr_dataset, dev_dataset, None, num_examples)
 
