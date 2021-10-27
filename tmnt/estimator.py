@@ -1750,21 +1750,22 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
+        labels = np.arange(posteriors[0].shape[0])                
         if not np.any(np.isnan(posteriors)):
             avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
         else:
             avg_prec = 0.0
         logging.info('EVALUTAION: Ground truth indices: {}'.format(list(ground_truth_idx)))
         try:
-            auroc = roc_auc_score(ground_truth, posteriors, average='weighted')
+            auroc = roc_auc_score(ground_truth, posteriors, average='weighted', labels=labels)
         except:
             auroc = 0.0
             logging.error('ROC computation failed')
         ndcg = ndcg_score(ground_truth, posteriors)
-        top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1)        
-        top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2)
-        top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3)
-        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4)
+        top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1, labels=labels)        
+        top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2, labels=labels)
+        top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3, labels=labels)
+        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4, labels=labels)
         y = np.where(ground_truth > 0)[1]
         if self.plot_dir:
             ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
