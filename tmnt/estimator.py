@@ -24,7 +24,7 @@ import umap
 #import umap.plot
 import matplotlib.pyplot as plt
 
-from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, f1_score, precision_recall_fscore_support
+from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
 from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter, PairedDataLoader, SingletonWrapperLoader
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED, MetricBowVAEModel
@@ -1755,7 +1755,6 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
         else:
             avg_prec = 0.0
-        logging.info('EVALUTAION: Ground truth indices: {}'.format(list(ground_truth_idx)))
         try:
             auroc = roc_auc_score(ground_truth, posteriors, average='weighted', labels=labels)
         except:
