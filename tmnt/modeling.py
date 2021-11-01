@@ -24,7 +24,6 @@ class BaseVAE(HybridBlock):
 
     def __init__(self, vocabulary=None, latent_distribution=LogisticGaussianDistribution(20),
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
-                 batch_size=None, 
                  n_covars=0, ctx=mx.cpu(), **kwargs):
         super(BaseVAE, self).__init__(**kwargs)        
         self.vocabulary = vocabulary
@@ -32,7 +31,6 @@ class BaseVAE(HybridBlock):
         self.n_latent   = latent_distribution.n_latent
         self.coherence_reg_penalty = coherence_reg_penalty
         self.redundancy_reg_penalty = redundancy_reg_penalty
-        self.batch_size = batch_size
         self.n_covars = n_covars
         self.model_ctx = ctx
         self.embedding = None
@@ -120,7 +118,6 @@ class BowVAEModel(BaseVAE):
         enc_dim (int): Number of dimension of input encoder (first FC layer)
         embedding_size (int): Number of dimensions for embedding layer
         fixed_embedding (bool): Whether to fix embedding weights (default = False)
-        batch_size (int): provided only at training time (or when model is Hybridized) - otherwise will be inferred (default None) 
         n_encoding_layers (int): Number of layers used for the encoder. (default = 1)
         enc_dr (float): Dropout after each encoder layer. (default = 0.1)
         n_covars (int): Number of values for categorical co-variate (0 for non-CovariateData BOW model)
@@ -254,7 +251,7 @@ class BowVAEModel(BaseVAE):
     
 
     def hybrid_forward(self, F, data):
-        batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
+        batch_size = data.shape[0]
         emb_out = self.embedding(data)
         #z, KL = self.run_encode(F, emb_out, batch_size)
         enc_out = self.encoder(emb_out)
@@ -326,7 +323,7 @@ class CovariateBowVAEModel(BowVAEModel):
                                                             total_layers=self.covar_net_layers, ctx=self.model_ctx)
             else:
                 self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size,
-                                                  batch_size=self.batch_size, interactions=True, ctx=self.model_ctx)
+                                                  interactions=True, ctx=self.model_ctx)
 
 
     def encode_data_with_covariates(self, data, covars, include_bn=False):
@@ -395,7 +392,7 @@ class CovariateBowVAEModel(BowVAEModel):
         
 
     def hybrid_forward(self, F, data, covars):
-        batch_size = data.shape[0] if F is mx.ndarray else self.batch_size
+        batch_size = data.shape[0]
         emb_out = self.embedding(data)
         if self.n_covars > 0:
             covars = F.one_hot(covars, self.n_covars)
@@ -411,12 +408,11 @@ class CovariateBowVAEModel(BowVAEModel):
         
 class CovariateModel(HybridBlock):
 
-    def __init__(self, n_topics, n_covars, vocab_size, batch_size=None, interactions=False, ctx=mx.cpu()):
+    def __init__(self, n_topics, n_covars, vocab_size, interactions=False, ctx=mx.cpu()):
         self.n_topics = n_topics
         self.n_covars = n_covars
         self.vocab_size = vocab_size
         self.interactions = interactions
-        self.batch_size = batch_size
         self.model_ctx = ctx
         super(CovariateModel, self).__init__()
         with self.name_scope():
@@ -433,7 +429,7 @@ class CovariateModel(HybridBlock):
             td_rsh = F.expand_dims(topic_distrib, 1)
             cov_rsh = F.expand_dims(covars, 2)
             cov_interactions = cov_rsh * td_rsh    ## shape (N, Topics, Covariates) -- outer product
-            batch_size = cov_interactions.shape[0] if F is mx.ndarray else self.batch_size
+            batch_size = cov_interactions.shape[0]
             cov_interactions_rsh = F.reshape(cov_interactions, (batch_size, self.n_topics * self.n_covars))
             score_CI = self.cov_inter_decoder(cov_interactions_rsh)
             return score_CI + score_C

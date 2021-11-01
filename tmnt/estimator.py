@@ -812,7 +812,6 @@ class BowEstimator(BaseBowEstimator):
                             vocabulary=self.vocabulary, 
                             latent_distribution=self.latent_distribution, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                            batch_size=self.batch_size, 
                             n_covars=0, ctx=self.ctx)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
@@ -877,7 +876,6 @@ class BowMetricEstimator(BowEstimator):
                             vocabulary=self.vocabulary, 
                             latent_distribution=self.latent_distribution, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                            batch_size=self.batch_size, 
                             n_covars=0, ctx=self.ctx)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)

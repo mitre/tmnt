@@ -17,9 +17,10 @@ from gluonnlp.data.dataset import SimpleDataset, Dataset
 import json
 import collections
 from tmnt.preprocess.vectorizer import TMNTVectorizer
-from tmnt.data_loading import to_label_matrix, PairedDataLoader
+from tmnt.data_loading import to_label_matrix, PairedDataLoader, RoundRobinDataLoader
 from typing import Dict
 from gluonnlp.data import BERTSentenceTransform
+from itertools import accumulate
 
 class JsonlDataset(SimpleDataset):
     """A dataset wrapping over a jsonlines (.jsonl) file, each line is a json object.
@@ -471,28 +472,37 @@ def get_dual_bert_datasets(class_labels,
     do_lower_case = 'uncased' in dataset    
     bert_tokenizer = BERTTokenizer(bert_vocabulary, lower=do_lower_case)
 
-    # transformation for data train and dev
-    trans1 = BERTDatasetTransform(bert_tokenizer, max_len1,
-                                  class_labels=class_labels,
-                                  label_alias=None,
-                                  pad=pad, pair=False,
-                                  has_label=True,
-                                  vectorizer=vectorizer,
-                                  bert_vocab_size=len(bert_vocabulary) if use_bert_vocab else 0)
+    def get_transform(_class_labels, _max_len):
+        print("Getting transform, labels = {}, len = {}".format(_class_labels, _max_len))
+        trans = BERTDatasetTransform(bert_tokenizer,
+                                      _max_len,
+                                      class_labels = _class_labels,
+                                      label_alias=None,
+                                      pad=pad, pair=False,
+                                      has_label=True,
+                                      vectorizer=vectorizer,
+                                      bert_vocab_size=len(bert_vocabulary) if use_bert_vocab else 0)
+        return trans
 
-    trans2 = BERTDatasetTransform(bert_tokenizer, max_len2,
-                                  class_labels=class_labels,
-                                  label_alias=None,
-                                  pad=pad, pair=False,
-                                  has_label=True,
-                                  vectorizer=vectorizer,
-                                  bert_vocab_size=len(bert_vocabulary) if use_bert_vocab else 0)
-    
-    batch_size = len(train_ds2)
-    train_data, num_train_examples = preprocess_data_metriclearn_separate(
-        trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle=shuffle)
+    if isinstance(train_ds1, list) and isinstance(train_ds2, list) and len(train_ds1) == len(train_ds2):
+        trans1s = [ get_transform(class_labels[i], max_len1) for i in range(len(train_ds1)) ]
+        trans2s = [ get_transform(class_labels[i], max_len2) for i in range(len(train_ds2)) ]        
+        train_sets = [
+            preprocess_data_metriclearn_separate(trans1s[i], trans2s[i], class_labels[i], train_ds1[i], train_ds2[i], len(train_ds2[i]), shuffle=shuffle)
+            for i in range(len(train_ds1)) ]
+        num_train_examples = list(accumulate([ s for _,s in train_sets], lambda x,y: x + y)).pop()
+        loaders = [l for l,_ in train_sets]
+        train_data = RoundRobinDataLoader(loaders)
+    else:
+        batch_size = len(train_ds2)
+        trans1 = get_transform(class_labels, max_len1)
+        trans2 = get_transform(class_labels, max_len2)
+        print("train_ds2 = {}".format(train_ds2))
+        train_data, num_train_examples = preprocess_data_metriclearn_separate(
+            trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle=shuffle)
     if aux_dataset is not None:
-        aux_dataloader = get_aux_dataloader(trans1, batch_size, aux_dataset)
+        aux_rans = get_transform([], max_len1)
+        aux_dataloader = get_aux_dataloader(aux_trans, batch_size, aux_dataset)
     else:
         aux_dataloader = None
     return train_data, aux_dataloader, num_train_examples, bert, bert_vocabulary

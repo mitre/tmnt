@@ -160,6 +160,7 @@ class DataIterLoader():
         self.batch_index = 0
         self.batch_size = 1000
 
+
     def __iter__(self):
         if not self.using_file:
             self.data_iter.reset()
@@ -230,11 +231,12 @@ class PairedDataLoader():
         self.end2 = False
         return self
 
+
     def __len__(self):
-        if self.data_iter2 is not None:
-            return max(len(self.data_iter1), len(self.data_iter2))
+        if self.data_loader2 is not None:
+            return max(len(self.data_loader1), len(self.data_loader2))
         else:
-            return len(self.data_iter1)
+            return len(self.data_loader1)
 
     def __next__(self):
         try:
@@ -257,6 +259,48 @@ class PairedDataLoader():
         else:
             batch2 = None
         return batch1, batch2
+
+    def next(self):
+        return self.__next__()
+
+
+
+class RoundRobinDataLoader():
+    
+    def __init__(self, data_loaders):
+        self.num_loaders = len(data_loaders)
+        self.data_loaders = data_loaders
+        self.data_iters = None
+        self.data_totals = None
+        self.ratio_remaining = np.array([1.0 for _ in data_loaders])
+
+    def _get_iter_length(self, it):
+        c = 0
+        try:
+            while True:
+                _ = next(it)
+                c += 1
+        except:
+            return c
+
+    def _set_lengths(self, iters):
+        self.data_totals = [ self._get_iter_length(it) for it in iters ]
+        
+    def __iter__(self):
+        self._set_lengths( [iter(d) for d in self.data_loaders] )
+        self.ratio_remaining[:] = 1.0
+        self.data_iters = [iter(d) for d in self.data_loaders]
+        return self
+
+    def __len__(self):
+        return sum([len(it) for it in self.data_iters])
+
+    def __next__(self):
+        it_id = np.argsort(-self.ratio_remaining)[0] ## get iterator with most elements left
+        it = self.data_iters[it_id]
+        batch = it.__next__()
+        self.ratio_remaining[it_id] = ((self.ratio_remaining[it_id] * self.data_totals[it_id]) - 1) / self.data_totals[it_id]
+        return batch
 
     def next(self):
         return self.__next__()
