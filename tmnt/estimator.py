@@ -1748,7 +1748,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
-        labels = np.arange(posteriors[0].shape[0])                
+        labels = np.arange(posteriors[0].shape[0])
+        print("Ground truth shape = {}".format(ground_truth.shape))
         if not np.any(np.isnan(posteriors)):
             avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
         else:
