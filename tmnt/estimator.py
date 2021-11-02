@@ -1731,17 +1731,14 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch)
             label1_ind = label1.argmax(axis=1)
             label2_ind = label2.argmax(axis=1)
-            label1 = label1_ind.as_in_context(self.ctx)
-            label2 = label2_ind.as_in_context(self.ctx)
-            label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)        
+            label1_ind = label1_ind.as_in_context(self.ctx)
+            label2_ind = label2_ind.as_in_context(self.ctx)
+            label_mat = self.loss_function._compute_labels(mx.ndarray, label1_ind, label2_ind)        
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
             probs = mx.nd.softmax(-dists, axis=1).asnumpy()
             posteriors += list(probs)
-            label1 = np.array(label1.squeeze().asnumpy(), dtype='int')
-            ground_truth_idx += list(label1) ## index values for labels
-            gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())+1))
-            gt[np.arange(label1.shape[0]), label1] = 1
-            ground_truth += list(gt)
+            ground_truth_idx += list(label1_ind.asnumpy()) ## index values for labels
+            ground_truth += list(label1.asnumpy())
             if emb2 is None:
                 emb2 = z_mu2.asnumpy()
             emb1 += list(z_mu1.asnumpy())
@@ -1749,7 +1746,6 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
         labels = np.arange(posteriors[0].shape[0])
-        print("Ground truth shape = {}".format(ground_truth.shape))
         if not np.any(np.isnan(posteriors)):
             avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
         else:
