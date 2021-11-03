@@ -27,11 +27,10 @@ parser.add_argument('--label_map', type=str, help='JSON object to file with mapp
 parser.add_argument('--json_out_dir', type=str, help='Create a new JSON list file with vectors added as a field in this target directory')
 parser.add_argument('--min_doc_length', type=int, help='Minimum document length (in tokens)', default=10)
 parser.add_argument('--custom_stop_words', type=str, help='Custom stop-word file (one word per line)', default=None)
-parser.add_argument('--label_prefix_chars', type=int, help='Use first N characters of label', default=-1)
-parser.add_argument('--label_min_cnt', type=int, help='Minimum label count (lower count labels mapped to -1)', default=1)
 parser.add_argument('--str_encoding', type=str, help='String/file encoding to use', default='utf-8')
 parser.add_argument('--log_dir', type=str, help='Logging directory', default='.')
 parser.add_argument('--token_pattern', type=str, help='Token regular expression for CountVectorizer', default=None)
+parser.add_argument('--max_doc_length', type=int, help='Documents exceedign this lenght will be truncated', default=-1)
 
 args = parser.parse_args()
 
@@ -46,13 +45,13 @@ if __name__ == '__main__':
     vectorizer = \
         TMNTVectorizer(text_key=args.json_text_key, 
                        label_key=args.json_label_key,
-                       min_doc_size=args.min_doc_length, label_prefix=args.label_prefix_chars,
+                       min_doc_size=args.min_doc_length,
                        file_pat=args.file_pat,
                        vocab_size=args.vocab_size,
                        json_out_dir=args.json_out_dir,
                        encoding=args.str_encoding,
-                       label_min_cnt=args.label_min_cnt,
                        stop_word_file=args.custom_stop_words,
+                       max_ws_tokens=args.max_doc_length,
                        count_vectorizer_kwargs=count_vectorizer_kwargs)
     tr_X, tr_y = \
         vectorizer.fit_transform_json_dir(args.tr_input) if os.path.isdir(args.tr_input) else vectorizer.fit_transform_json(args.tr_input)

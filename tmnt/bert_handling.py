@@ -219,7 +219,7 @@ class BERTDatasetTransform(object):
                 except:
                     labels=[0]
             #label = np.array(labels, dtype=self._label_dtype)
-            if self.num_classes > 1:
+            if self.num_classes is not None and self.num_classes > 1:
                 label_mat, _ = to_label_matrix([labels], num_labels=self.num_classes)
             else:
                 label_mat = np.array([[0.0]]) # just fill with zeros; assumption is that labels will be ignored
@@ -452,14 +452,13 @@ def get_dual_bert_datasets(class_labels,
                            train_ds2,
                            model_name,
                            dataset,
-                           batch_size,
-                           dev_bs,
                            max_len1,
                            max_len2,
                            pad,
                            use_bert_vocab=False,
                            shuffle=True,
                            aux_dataset = None,
+                           aux_batch_size = 32,
                            ctx=mx.cpu()):
     bert, bert_vocabulary = get_model(
         name=model_name,
@@ -497,12 +496,11 @@ def get_dual_bert_datasets(class_labels,
         batch_size = len(train_ds2)
         trans1 = get_transform(class_labels, max_len1)
         trans2 = get_transform(class_labels, max_len2)
-        print("train_ds2 = {}".format(train_ds2))
         train_data, num_train_examples = preprocess_data_metriclearn_separate(
             trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle=shuffle)
     if aux_dataset is not None:
-        aux_rans = get_transform([], max_len1)
-        aux_dataloader = get_aux_dataloader(aux_trans, batch_size, aux_dataset)
+        aux_trans = get_transform([], max_len1)
+        aux_dataloader = get_aux_dataloader(aux_trans, aux_batch_size, aux_dataset)
     else:
         aux_dataloader = None
     return train_data, aux_dataloader, num_train_examples, bert, bert_vocabulary

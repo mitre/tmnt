@@ -49,6 +49,7 @@ class TMNTVectorizer(object):
         stop_word_file: Path to a file containing stop words (newline separated)
         split_char: Single character string used to split label string into multiple labels 
                 (for multilabel classification tasks)
+        max_ws_tokens: Maximum number of (whitespace deliniated) tokens to use
         count_vectorizer_kwargs: Dictionary of parameter values to pass to 
                 :py:class:`sklearn.feature_extraction.text.CountVectorizer`
     """
@@ -58,8 +59,10 @@ class TMNTVectorizer(object):
                  encoding: str = 'utf-8', initial_vocabulary: Optional[nlp.Vocab] = None,
                  additional_feature_keys: List[str] = None, stop_word_file: str = None,
                  split_char: str = ',',
+                 max_ws_tokens: int = -1,
                  count_vectorizer_kwargs: Dict[str, Any] = {'max_df':0.95, 'min_df':0, 'stop_words':'english'}):
         self.encoding = encoding
+        self.max_ws_tokens = max_ws_tokens
         self.text_key = text_key
         self.label_key = label_key
         self.label_remap = label_remap
@@ -173,11 +176,22 @@ class TMNTVectorizer(object):
         for fp in fps:
             fp.close()
         return sp.csr_matrix(X_add)
-        
+
+    def _truncate_to_ws_tokens(self, s):
+        if self.max_ws_tokens > 0:
+            ns = ""
+            toks = s.split(' ')
+            for i in range(min(self.max_ws_tokens, len(toks))):
+                ns += ' '
+                ns += toks[i]
+            return ns
+        else:
+            return s
+
     
     def _tr_json(self, tr_method, json_file):
         fp = io.open(json_file, 'r', encoding=self.encoding)
-        gen = ( json.loads(l)[self.text_key] for l in fp )
+        gen = ( self._truncate_to_ws_tokens(json.loads(l)[self.text_key]) for l in fp )
         rr = tr_method(gen)
         if self.additional_feature_keys:
             X_add = self._add_features_json(json_file, rr.shape[0])
@@ -187,7 +201,7 @@ class TMNTVectorizer(object):
 
     def _tr_json_dir(self, tr_method, json_dir):
         fps = [ io.open(ff, 'r', encoding=self.encoding) for ff in glob.glob(json_dir + '/' + self.file_pat) ]
-        gen = (json.loads(l)[self.text_key] for fp in fps for l in fp)
+        gen = ( self._truncate_to_ws_tokens(json.loads(l)[self.text_key]) for fp in fps for l in fp)
         rr = tr_method(gen)
         if self.additional_feature_keys:
             X_add = self._add_features_json_dir(json_dir, rr.shape[0])
