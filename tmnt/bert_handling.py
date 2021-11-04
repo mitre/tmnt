@@ -472,7 +472,6 @@ def get_dual_bert_datasets(class_labels,
     bert_tokenizer = BERTTokenizer(bert_vocabulary, lower=do_lower_case)
 
     def get_transform(_class_labels, _max_len):
-        print("Getting transform, labels = {}, len = {}".format(_class_labels, _max_len))
         trans = BERTDatasetTransform(bert_tokenizer,
                                       _max_len,
                                       class_labels = _class_labels,
