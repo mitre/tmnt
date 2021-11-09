@@ -35,63 +35,20 @@ class BaseTrainer(object):
     a tmnt.estimator.BaseEstimator that is responsible for fitting/estimating the topic model parameters.
 
     Parameters:
-        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
+
         train_data (array-like or sparse matrix): Training input data tensor
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, use_gpu, val_each_epoch, rng_seed):
+    def __init__(self, model_out_dir, train_data_or_path=None, test_data_or_path=None, aux_data_or_path=None, use_gpu=False, val_each_epoch=False, rng_seed=1234):
+        self.model_out_dir = model_out_dir
         self.train_data_or_path   = train_data_or_path
         self.test_data_or_path    = test_data_or_path
         self.aux_data_or_path     = aux_data_or_path
         self.use_gpu      = use_gpu
-        self.rng_seed     = rng_seed
-        self.vocabulary   = vocabulary
+        self.rng_seed     = rng_seed        
         self.vocab_cache  = {}
         self.validate_each_epoch = val_each_epoch
-
-
-    def _initialize_vocabulary(self, embedding_source, set_vocab=True):
-        """Initialize the embedding layer randomly or using pre-trained embeddings provided
-        
-        Args:
-            embedding_source (str): denoting a Gluon-NLP embedding source with the format <type>:<name> where <type>
-                is 'glove', 'fasttext' or 'word2vec' and <name> denotes the embedding name (e.g. 'glove.6B.300d').
-                See `gluonnlp.embedding.list_sources()` for a full list
-            set_vocab (bool): actually instantiate vocabulary (as opposed to just caching, when set_vocab=False)
-
-        Returns:
-            (tuple): tuple containing:
-                vocab (`gluonnlp.Vocab`): Resulting GluonNLP vocabulary with initialized embedding
-                emb_size (int): Size of embedding (based on pre-trained embedding, random returns -1 for size to be set later)
-        """
-        vocab = self.vocabulary
-        if embedding_source != 'random':
-            if self.vocab_cache.get(embedding_source):
-                pt_embedding = copy.deepcopy(self.vocab_cache[embedding_source])
-            else:
-                e_type, e_name = tuple(embedding_source.split(':'))
-                if e_type == 'file':
-                    if not os.path.exists(e_name):
-                        raise Exception("Embedding file not found: {}".format(e_name))
-                    pt_embedding = nlp.embedding.TokenEmbedding.from_file(e_name)
-                else:
-                    pt_embedding = nlp.embedding.create(e_type, source=e_name)
-                self.vocab_cache[embedding_source] = copy.deepcopy(pt_embedding) ## cache another copy 
-            emb_size = len(pt_embedding.idx_to_vec[0])
-            if set_vocab:
-                vocab.set_embedding(pt_embedding)
-                num_oov = 0
-                for word in vocab.embedding._idx_to_token:
-                    if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                        logging.debug("Term {} is OOV".format(word))
-                        num_oov += 1
-                        vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
-                logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
-        else:
-            vocab.set_embedding(None) ## unset embedding
-            emb_size = -1
-        return vocab, emb_size
 
 
     def _get_x_y_data(self, data_source):
@@ -134,6 +91,69 @@ class BaseTrainer(object):
         
 
     def train_with_single_config(self, config, num_evals):
+        raise NotImplementedError()
+
+    def train_model(self, config, reporter):
+        """Train a model with config and reporter callback.
+        """
+        raise NotImplementedError()
+
+
+class TopicTrainer(BaseTrainer):
+    """
+        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
+    """
+
+    def __init__(self, vocabulary, *args):
+        super().__init__(*args)
+        self.vocabulary   = vocabulary
+        
+    
+    def _initialize_vocabulary(self, embedding_source, set_vocab=True):
+        """Initialize the embedding layer randomly or using pre-trained embeddings provided
+        
+        Args:
+            embedding_source (str): denoting a Gluon-NLP embedding source with the format <type>:<name> where <type>
+                is 'glove', 'fasttext' or 'word2vec' and <name> denotes the embedding name (e.g. 'glove.6B.300d').
+                See `gluonnlp.embedding.list_sources()` for a full list
+            set_vocab (bool): actually instantiate vocabulary (as opposed to just caching, when set_vocab=False)
+
+        Returns:
+            (tuple): tuple containing:
+                vocab (`gluonnlp.Vocab`): Resulting GluonNLP vocabulary with initialized embedding
+                emb_size (int): Size of embedding (based on pre-trained embedding, random returns -1 for size to be set later)
+        """
+        vocab = self.vocabulary
+        if embedding_source != 'random':
+            if self.vocab_cache.get(embedding_source):
+                pt_embedding = copy.deepcopy(self.vocab_cache[embedding_source])
+            else:
+                e_type, e_name = tuple(embedding_source.split(':'))
+                if e_type == 'file':
+                    if not os.path.exists(e_name):
+                        raise Exception("Embedding file not found: {}".format(e_name))
+                    pt_embedding = nlp.embedding.TokenEmbedding.from_file(e_name)
+                else:
+                    pt_embedding = nlp.embedding.create(e_type, source=e_name)
+                self.vocab_cache[embedding_source] = copy.deepcopy(pt_embedding) ## cache another copy 
+            emb_size = len(pt_embedding.idx_to_vec[0])
+            if set_vocab:
+                vocab.set_embedding(pt_embedding)
+                num_oov = 0
+                for word in vocab.embedding._idx_to_token:
+                    if (vocab.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
+                        logging.debug("Term {} is OOV".format(word))
+                        num_oov += 1
+                        vocab.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
+                logging.debug(">> {} Words did not appear in embedding source {}".format(num_oov, embedding_source))
+        else:
+            vocab.set_embedding(None) ## unset embedding
+            emb_size = -1
+        return vocab, emb_size
+
+    
+
+    def train_with_single_config(self, config, num_evals):
         """Fit models with a single configuration and report the value of the objective function.
 
         This method trains a model defined by the configuration `num_evals` times. Each time
@@ -152,6 +172,7 @@ class BaseTrainer(object):
         rng_seed = self.rng_seed
         best_obj = -1000000000.0
         best_model = None
+        best_vres = None
         if self.test_data_or_path is not None:
             #if c_args.tst_vec_file:
             #    trainer.set_heldout_data_path_as_test()        
@@ -168,6 +189,7 @@ class BaseTrainer(object):
                 redundancies.append(v_res['redundancy'])
                 objectives.append(obj)
                 if obj > best_obj:
+                    best_vres = v_res
                     best_obj = obj
                     best_model = model
             #test_type = "HELDOUT" if c_args.tst_vec_file else "VALIDATION"
@@ -186,20 +208,13 @@ class BaseTrainer(object):
                 logging.info("Final {} Perplexity     ==> {}".format(test_type, perplexities[0]))
                 logging.info("Final {} Redundancy     ==> {}".format(test_type, redundancies[0]))
                 logging.info("Final {} Objective      ==> {}".format(test_type, objectives[0]))            
-            return best_model, best_obj
+            return best_model, best_obj, best_vres
         else:
-            estimator, obj, _ = self.train_model(config, FakeReporter())
-            return estimator, obj
-
-        
-
-    def train_model(self, config, reporter):
-        """Train a model with config and reporter callback.
-        """
-        raise NotImplementedError()
+            return self.train_model(config, FakeReporter())
+    
 
 
-class BowVAETrainer(BaseTrainer):
+class BowVAETrainer(TopicTrainer):
     """Trainer for bag-of-words VAE topic models.
     
     Parameters:
@@ -217,11 +232,10 @@ class BowVAETrainer(BaseTrainer):
                  pretrained_param_file=None, topic_seed_file = None, use_labels_as_covars=False, coherence_coefficient=8.0,
                  use_gpu=False, n_labels=0,
                  val_each_epoch=True, rng_seed=1234):
-        super().__init__(vocabulary, train_data_or_path, test_data_or_path, aux_data_or_path, use_gpu, val_each_epoch, rng_seed)
+        super().__init__(vocabulary, model_out_dir, train_data_or_path, test_data_or_path, aux_data_or_path, use_gpu, val_each_epoch, rng_seed)
         if not log_utils.CONFIGURED:
             logging_config(folder=log_out_dir, name='tmnt', level='info', console_level='info')
         self.log_out_dir = log_out_dir
-        self.model_out_dir = model_out_dir
         self.seed_matrix = None
         self.pretrained_param_file = pretrained_param_file
         self.n_labels = n_labels
@@ -356,7 +370,7 @@ class BowVAETrainer(BaseTrainer):
 
 
 
-class SeqBowVEDTrainer(BaseTrainer):
+class SeqBowVEDTrainer(TopicTrainer):
     """Trainer for bag-of-words VAE topic models.
     
     Parameters:
@@ -448,7 +462,7 @@ class SeqBowVEDTrainer(BaseTrainer):
         if model_dir:
             suf = '_'+ str(epoch_id) if epoch_id > 0 else ''
             estimator.write_model(model_dir, suffix=suf)
-    
+
 
 def train_bow_vae(args):
     try:
@@ -460,7 +474,7 @@ def train_bow_vae(args):
     dd = datetime.datetime.now()
     trainer = BowVAETrainer.from_arguments(args, val_each_epoch=args.eval_each_epoch)
     config = ag.space.Dict(**config_dict)
-    estimator, obj = trainer.train_with_single_config(config, args.num_final_evals)
+    estimator, obj, vres = trainer.train_with_single_config(config, args.num_final_evals)
     trainer.write_model(estimator)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
@@ -476,6 +490,6 @@ def train_seq_bow(c_args):
         raise Exception("Invalid JSON configuration file")
     config = ag.space.Dict(**config_dict)    
     trainer = SeqBowVEDTrainer.from_arguments(c_args, config)
-    estimator, obj = trainer.train_with_single_config(config, 1)
+    estimator, obj, vres = trainer.train_with_single_config(config, 1)
     trainer.write_model(estimator)
     

@@ -1534,11 +1534,9 @@ class SeqBowEstimator(BaseEstimator):
                     with mx.autograd.record():
                         elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_batch)
                     total_ls_2.backward()
-
                 update_loss_details(total_ls, elbo_ls, red_ls, label_ls)
                 if aux_batch is not None:
                     update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
-
                 # update
                 if not accumulate or (batch_id + 1) % accumulate == 0:
                     trainer.allreduce_grads()

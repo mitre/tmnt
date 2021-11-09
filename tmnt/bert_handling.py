@@ -10,6 +10,7 @@ import numpy as np
 import mxnet as mx
 from mxnet import gluon
 from mxnet.gluon import Block, nn
+from mxnet.gluon.data.sampler import Sampler, SequentialSampler
 import gluonnlp as nlp
 from gluonnlp.model import get_model
 from gluonnlp.data import BERTTokenizer
@@ -237,6 +238,32 @@ class BERTDatasetTransform(object):
             return self._bert_xform(line)
 
 
+class FixedSeedRandomSampler(Sampler):
+    """Samples elements from [0, length) randomly without replacement but with a FIXED seed to reproduce.
+
+    Parameters
+    ----------
+    length : int
+        Length of the sequence.
+    """
+    def __init__(self, length, rng=1234):
+        self._length = length
+        self._rng    = rng
+        self._calls  = 0
+
+    def __iter__(self):
+        self._calls += 1
+        np.random.seed(self._rng + self._calls)
+        indices = np.arange(self._length)
+        np.random.shuffle(indices)
+        return iter(indices)
+
+    def __len__(self):
+        return self._length
+
+    
+
+
 
 def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train_mode=True, pad=False, aux_dataset=None):
     pool = multiprocessing.Pool()
@@ -412,7 +439,7 @@ def preprocess_data_metriclearn(trans, class_labels, train_a_ds, train_b_ds, bat
     return loader, len(final_ds)
 
 
-def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_ds, train_b_ds, batch_size, shuffle=True, aux_dataset=None):
+def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_ds, train_b_ds, batch_size, shuffle_both=False, shuffle_a_only=True):
     """Train/eval Data preparation function."""
     pool = multiprocessing.Pool()
     label_dtype = 'float32' # if not task.class_labels else 'int32'
@@ -428,17 +455,29 @@ def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_d
     b_batchify_fn = nlp.data.batchify.Tuple(
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
+
+    ## set up 'parallel' samplers that always stay in sync
+    if shuffle_both:
+        a_sampler = FixedSeedRandomSampler(len(a_data_train), rng=1234)
+        b_sampler = FixedSeedRandomSampler(len(b_data_train), rng=1234)
+    elif shuffle_a_only:
+        a_sampler = FixedSeedRandomSampler(len(a_data_train), rng=1234)
+        b_sampler = SequentialSampler(len(b_data_train))
+    else:
+        a_sampler = SequentialSampler(len(a_data_train))
+        b_sampler = SequentialSampler(len(b_data_train))
+
     a_loader_train = gluon.data.DataLoader(
         dataset=a_data_train,
         num_workers=4,
-        last_batch = 'rollover', ## need to ensure all batches are the same size here
-        shuffle=shuffle,  # shuffle optional (for training)
+        last_batch = 'discard', ## need to ensure all batches are the same size here AND stay synchronized
+        sampler    = a_sampler,
         batch_size  = batch_size,
         batchify_fn = a_batchify_fn)
     b_loader_train = gluon.data.DataLoader(
         dataset=b_data_train,
         num_workers=4,
-        shuffle=False,  # don't shuffle fixed set 'B'
+        sampler = b_sampler,
         batch_size  = batch_size,
         batchify_fn = b_batchify_fn)
     paired_loader = PairedDataLoader(a_loader_train, b_loader_train)

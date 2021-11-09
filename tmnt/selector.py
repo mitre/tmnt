@@ -58,9 +58,9 @@ class BaseSelector(object):
         for task_id in task_dicts:
             task_df = pd.DataFrame(task_dicts[task_id])
             task_df = task_df.assign(task_id=task_id,
-                                     coherence=task_df["coherence"],
-                                     perplexity=task_df["perplexity"],
-                                     redundancy=task_df["redundancy"],
+                                     coherence=task_df.get("coherence", 0.0),
+                                     perplexity=task_df.get("perplexity", 0.0),
+                                     redundancy=task_df.get("redundancy", 0.0),
                                      runtime=task_df["time_step"] - start_timestamp,
                                      objective=task_df["objective"],
                                      target_epoch=task_df["epoch"].iloc[-1])
@@ -135,14 +135,12 @@ class BaseSelector(object):
         with open(out_config_file, 'w') as fp:
             specs = json.dumps(best_config)
             fp.write(specs)
-        logging.info("===> Writing best configuration to {}".format(out_config_file))
-            
+        logging.info("===> Writing best configuration to {}".format(out_config_file))            
         logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
-        estimator, obj = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
+        estimator, obj, vres = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
         logging.info("Objective with final retrained model/estimator: {}".format(obj))
         logging.info("Writing model to: {}".format(trainer.model_out_dir))
-        trainer.write_model(estimator)
-        
+        trainer.write_model(estimator)        
         dd_finish = datetime.datetime.now()
         logging.info("Model selection run FINISHED. Time: {}".format(dd_finish - dd))
         results_df = self._process_training_history(scheduler.training_history.copy(),
@@ -156,7 +154,7 @@ class BaseSelector(object):
                 fp.write(tabulate(results_df, headers='keys', tablefmt='pqsl'))
         else:
             logging.info("Training history unavailable")
-        return estimator
+        return estimator, obj, vres
 
 
 def model_select_bow_vae(c_args):

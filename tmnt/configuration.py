@@ -202,5 +202,17 @@ class TMNTConfigSeqBOW(BaseTMNTConfig):
         sp_dict['latent_distribution'] = ag.space.Categorical(*latent_space)
 
         return sp_dict
+
+
+class TMNTConfigSeqBOWMetric(TMNTConfigSeqBOW):
+
+    def __init__(self, c_file):
+        super().__init__(c_file)
+
+    def get_configspace(self):
+        cd = self.cd
+        sp_dict = super.get_configspace()
+        sp_dict['sdml_smoothing_factor'] = self._get_range_uniform('sdml_smoothing_factor', cd)
+        return sp_dict
     
         
