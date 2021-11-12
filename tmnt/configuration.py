@@ -211,7 +211,7 @@ class TMNTConfigSeqBOWMetric(TMNTConfigSeqBOW):
 
     def get_configspace(self):
         cd = self.cd
-        sp_dict = super.get_configspace()
+        sp_dict = super().get_configspace()
         sp_dict['sdml_smoothing_factor'] = self._get_range_uniform('sdml_smoothing_factor', cd)
         return sp_dict
     
