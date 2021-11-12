@@ -525,7 +525,7 @@ def get_dual_bert_datasets(class_labels,
         trans1s = [ get_transform(class_labels[i], max_len1) for i in range(len(train_ds1)) ]
         trans2s = [ get_transform(class_labels[i], max_len2) for i in range(len(train_ds2)) ]        
         train_sets = [
-            preprocess_data_metriclearn_separate(trans1s[i], trans2s[i], class_labels[i], train_ds1[i], train_ds2[i], len(train_ds2[i]), shuffle=shuffle)
+            preprocess_data_metriclearn_separate(trans1s[i], trans2s[i], class_labels[i], train_ds1[i], train_ds2[i], len(train_ds2[i]), shuffle_a_only=shuffle)
             for i in range(len(train_ds1)) ]
         num_train_examples = list(accumulate([ s for _,s in train_sets], lambda x,y: x + y)).pop()
         loaders = [l for l,_ in train_sets]
@@ -535,7 +535,7 @@ def get_dual_bert_datasets(class_labels,
         trans1 = get_transform(class_labels, max_len1)
         trans2 = get_transform(class_labels, max_len2)
         train_data, num_train_examples = preprocess_data_metriclearn_separate(
-            trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle=shuffle)
+            trans1, trans2, class_labels, train_ds1, train_ds2, batch_size, shuffle_a_only=shuffle)
     if aux_dataset is not None:
         aux_trans = get_transform([], max_len1)
         aux_dataloader = get_aux_dataloader(aux_trans, aux_batch_size, aux_dataset)
