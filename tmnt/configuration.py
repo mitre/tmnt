@@ -125,7 +125,7 @@ class TMNTConfigBOW(BaseTMNTConfig):
         cd = self.cd
         sp_dict = {}
         sp_dict['epochs'] = int(cd['epochs'])
-        sp_dict['gamma'] = self._get_range_uniform('gamma', cd)
+        sp_dict['gamma'] = self._get_range_integer('gamma', cd)
         sp_dict['multilabel'] = self._get_atomic('multilabel', cd)
         sp_dict['lr'] = self._get_range_uniform('lr', cd)
         sp_dict['optimizer'] = self._get_categorical('optimizer', cd)
