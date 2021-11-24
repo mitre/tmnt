@@ -125,7 +125,7 @@ class TMNTConfigBOW(BaseTMNTConfig):
         cd = self.cd
         sp_dict = {}
         sp_dict['epochs'] = int(cd['epochs'])
-        sp_dict['gamma'] = self._get_range_integer('gamma', cd)
+        sp_dict['gamma'] = self._get_range_uniform('gamma', cd)
         sp_dict['multilabel'] = self._get_atomic('multilabel', cd)
         sp_dict['lr'] = self._get_range_uniform('lr', cd)
         sp_dict['optimizer'] = self._get_categorical('optimizer', cd)
@@ -186,7 +186,7 @@ class TMNTConfigSeqBOW(BaseTMNTConfig):
         cd = self.cd
         sp_dict = {}
         sp_dict['epochs'] = int(cd['epochs'])
-        sp_dict['gamma']  = self._get_range_integer('gamma', cd)
+        sp_dict['gamma']  = self._get_range_uniform('gamma', cd)
         sp_dict['lr'] = self._get_range_uniform('lr', cd)
         sp_dict['min_lr'] = self._get_range_uniform('min_lr', cd)
         sp_dict['decoder_lr'] = self._get_range_uniform('decoder_lr', cd)

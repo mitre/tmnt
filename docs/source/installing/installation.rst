@@ -23,7 +23,7 @@ Activate the environment::
 
 If planning to use a GPU, ensure cudatoolkit and cudnn packages are installed::
 
-  conda install cudatoolkit=10.1 cudnn=5.6.7
+  conda install cudatoolkit=10.1 cudnn=7.6.5
   
 
 Pip Installation
