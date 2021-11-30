@@ -498,6 +498,7 @@ def get_dual_bert_datasets(class_labels,
                            shuffle_both=False,
                            shuffle_a_only=False,
                            aux_dataset = None,
+                           forced_batch_size = 0, 
                            aux_batch_size = 32,
                            ctx=mx.cpu()):
     bert, bert_vocabulary = get_model(
@@ -527,13 +528,13 @@ def get_dual_bert_datasets(class_labels,
         trans2s = [ get_transform(class_labels[i], max_len2) for i in range(len(train_ds2)) ]        
         train_sets = [
             preprocess_data_metriclearn_separate(trans1s[i], trans2s[i], class_labels[i], train_ds1[i], train_ds2[i],
-                                                 len(train_ds2[i]), shuffle_a_only=shuffle_a_only, shuffle_both=shuffle_both)
+                                                 (forced_batch_size or len(train_ds2[i])), shuffle_a_only=shuffle_a_only, shuffle_both=shuffle_both)
             for i in range(len(train_ds1)) ]
         num_train_examples = list(accumulate([ s for _,s in train_sets], lambda x,y: x + y)).pop()
         loaders = [l for l,_ in train_sets]
         train_data = RoundRobinDataLoader(loaders)
     else:
-        batch_size = len(train_ds2)
+        batch_size = forced_batch_size or len(train_ds2)
         trans1 = get_transform(class_labels, max_len1)
         trans2 = get_transform(class_labels, max_len2)
         train_data, num_train_examples = preprocess_data_metriclearn_separate(
