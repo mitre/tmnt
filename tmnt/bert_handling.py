@@ -495,7 +495,8 @@ def get_dual_bert_datasets(class_labels,
                            max_len2,
                            pad,
                            use_bert_vocab=False,
-                           shuffle=True,
+                           shuffle_both=False,
+                           shuffle_a_only=False,
                            aux_dataset = None,
                            aux_batch_size = 32,
                            ctx=mx.cpu()):
@@ -525,7 +526,8 @@ def get_dual_bert_datasets(class_labels,
         trans1s = [ get_transform(class_labels[i], max_len1) for i in range(len(train_ds1)) ]
         trans2s = [ get_transform(class_labels[i], max_len2) for i in range(len(train_ds2)) ]        
         train_sets = [
-            preprocess_data_metriclearn_separate(trans1s[i], trans2s[i], class_labels[i], train_ds1[i], train_ds2[i], len(train_ds2[i]), shuffle_a_only=shuffle)
+            preprocess_data_metriclearn_separate(trans1s[i], trans2s[i], class_labels[i], train_ds1[i], train_ds2[i],
+                                                 len(train_ds2[i]), shuffle_a_only=(shuffle or shuffle_a_only), shuffle_both=(shuffle_both or shuffle))
             for i in range(len(train_ds1)) ]
         num_train_examples = list(accumulate([ s for _,s in train_sets], lambda x,y: x + y)).pop()
         loaders = [l for l,_ in train_sets]
