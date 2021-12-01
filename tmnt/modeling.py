@@ -725,7 +725,7 @@ class GeneralizedSDMLLoss(Loss):
         labels = self._compute_labels(F, l1, l2)
         distances = self._compute_distances(x1, x2)
         log_probabilities = F.log_softmax(-distances, axis=1)
-        # multiply for the number of labels to obtain the correct loss (gluon kl_loss averages instead of sum)
+        # multiply by the batch size to obtain the correct loss (gluon kl_loss averages instead of sum)
         return self.kl_loss(log_probabilities, labels.as_in_context(distances.context)) * batch_size
 
 

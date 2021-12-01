@@ -8,7 +8,6 @@ the estimator API supports inference/encoding with fitted models.
 
 import logging
 import math
-import logging
 import time
 import io
 import os
