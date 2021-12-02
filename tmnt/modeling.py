@@ -512,7 +512,6 @@ class BaseSeqBowVED(Block):
         super(BaseSeqBowVED, self).__init__()
         self.n_latent = latent_dist.n_latent
         self.bert = bert
-        self.latent_dist = latent_dist
         self.kld_wt = kld
         self.has_classifier = num_classes >= 2
         self.num_classes = num_classes
@@ -521,6 +520,7 @@ class BaseSeqBowVED(Block):
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.vocabulary = None ### XXX - add this as option to be passed in
         with self.name_scope():
+            self.latent_dist = latent_dist
             self.embedding = None
             self.decoder = nn.Dense(in_units=self.n_latent, units=bow_vocab_size, use_bias=True)
             self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)            

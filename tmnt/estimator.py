@@ -1287,8 +1287,7 @@ class SeqBowEstimator(BaseEstimator):
         
     
     def _get_model(self):
-        latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
-        model = SeqBowVED(self.bert_base, latent_dist, num_classes=self.n_labels, n_latent=self.n_latent,
+        model = SeqBowVED(self.bert_base, self.latent_distribution, num_classes=self.n_labels, n_latent=self.n_latent,
                           bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
@@ -1659,8 +1658,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         
     def _get_model(self, bow_size=-1):
         bow_size = bow_size if bow_size > 1 else len(self.bow_vocab)
-        latent_dist = HyperSphericalDistribution(self.n_latent, kappa=64.0, ctx=self.ctx)
-        model = MetricSeqBowVED(self.bert_base, latent_dist, n_latent=self.n_latent,
+        model = MetricSeqBowVED(self.bert_base, self.latent_distribution, n_latent=self.n_latent,
                                 bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)

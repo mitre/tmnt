@@ -76,6 +76,9 @@ estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_n
                             log_method=log_method, gamma=1.0, 
                             lr=2e-5, decoder_lr=0.02, epochs=1)
 
+
 # this will take quite some time without a GPU!
 estimator.fit_with_validation(tr_dataset, dev_dataset, None, num_examples)
+print("Estimator: {}".format(estimator.model))
+estimator.write_model('./_model_dir')
 

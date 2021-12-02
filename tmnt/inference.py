@@ -18,7 +18,7 @@ from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSe
 from tmnt.estimator import BowEstimator, CovariateBowEstimator
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
-from tmnt.distribution import HyperSphericalDistribution
+from tmnt.distribution import HyperSphericalDistribution, LogisticGaussianDistribution
 from tmnt.utils.recalibrate import recalibrate_scores
 from multiprocessing import Pool
 from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
