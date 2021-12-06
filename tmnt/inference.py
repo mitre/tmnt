@@ -15,7 +15,7 @@ import umap
 import logging
 import pickle
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
-from tmnt.estimator import BowEstimator, CovariateBowEstimator
+from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.distribution import HyperSphericalDistribution, LogisticGaussianDistribution
@@ -109,8 +109,7 @@ class BowVAEInferencer(BaseInferencer):
         if isinstance(sp_vec_file_or_X, str):
             data_csr, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab))
         else:
-            data_csr = sp_vec_file_or_X
-            labels = y
+            data_csr, labels = sp_vec_file_or_X, y
         data_csr = mx.nd.sparse.csr_matrix(data_csr, dtype='float32')
         ## 1) K x W matrix of P(term|topic) probabilities
         w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
@@ -316,53 +315,60 @@ class BowVAEInferencer(BaseInferencer):
 class SeqVEDInferencer(BaseInferencer):
     """Inferencer for sequence variational encoder-decoder models using BERT
     """
-    def __init__(self, model, bert_vocab, max_length, bow_vocab=None, pre_vectorizer=None, ctx=mx.cpu()):
+    def __init__(self, estimator, max_length, pre_vectorizer=None, ctx=mx.cpu()):
         super().__init__(ctx)
-        self.model     = model
-        self.bert_base = model.bert
-        self.tokenizer = BERTTokenizer(bert_vocab)
+        self.model     = estimator.model 
+        self.bert_base = self.model.bert
+        self.tokenizer = BERTTokenizer(estimator.bert_vocab)
         self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
-        self.bow_vocab = bow_vocab
-        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=bow_vocab)
+        self.bow_vocab = estimator.bow_vocab
+        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.bow_vocab)
 
 
     @classmethod
     def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, max_length=128, ctx=mx.cpu()):
-        if model_dir is not None:
-            param_file = os.path.join(model_dir, 'model.params')
-            vocab_file = os.path.join(model_dir, 'vocab.json')
-            config_file = os.path.join(model_dir, 'model.config')
-            serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
-        with open(config_file) as f:
-            config = json.loads(f.read())
-        with open(vocab_file) as f:
-            voc_js = f.read()
+        # if model_dir is not None:
+        #     param_file = os.path.join(model_dir, 'model.params')
+        #     vocab_file = os.path.join(model_dir, 'vocab.json')
+        #     config_file = os.path.join(model_dir, 'model.config')
+        #     serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
+        # with open(config_file) as f:
+        #     config = json.loads(f.read())
+        # with open(vocab_file) as f:
+        #     voc_js = f.read()
+        # if os.path.exists(serialized_vectorizer_file):
+        #     with open(serialized_vectorizer_file, 'rb') as fp:
+        #         vectorizer = pickle.load(fp)
+        # else:
+        #     vectorizer = None
+        # bow_vocab = nlp.Vocab.from_json(voc_js)
+        # bert_base, vocab = nlp.model.get_model(config['bert_model_name'],  
+        #                                        dataset_name=config['bert_data_name'],
+        #                                        pretrained=True, ctx=ctx, use_pooler=True,
+        #                                        use_decoder=False, use_classifier=False)
+        # latent_dist_t = config['latent_distribution']['dist_type']       
+        # n_latent    = config['n_latent']
+        # num_classes = config['n_labels']
+        # classifier_dropout = config['classifier_dropout']
+        # pad_id      = vocab[vocab.padding_token]
+        # if latent_dist_t == 'vmf':
+        #     latent_dist = HyperSphericalDistribution(n_latent, kappa=config['latent_distribution']['kappa'], ctx=ctx)
+        # elif latent_dist_t == 'logistic_gaussian':
+        #     latent_dist = LogisticGaussianDistribution(n_latent, alpha=config['latent_distribution']['alpha'], ctx=ctx)
+        # else:
+        #     latent_dist = HyperSphericalDistribution(n_latent, kappa=20.0, ctx=ctx)
+        # model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
+        #                   dropout=classifier_dropout)
+        # model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True, ctx=ctx)
+        # model.latent_dist.post_init(ctx) # need to call this after loading parameters now
+        estimator = SeqBowEstimator.from_saved(model_dir=model_dir)
+        serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
         if os.path.exists(serialized_vectorizer_file):
             with open(serialized_vectorizer_file, 'rb') as fp:
                 vectorizer = pickle.load(fp)
         else:
             vectorizer = None
-        bow_vocab = nlp.Vocab.from_json(voc_js)
-        bert_base, vocab = nlp.model.get_model(config['bert_model_name'],  
-                                               dataset_name=config['bert_data_name'],
-                                               pretrained=True, ctx=ctx, use_pooler=True,
-                                               use_decoder=False, use_classifier=False)
-        latent_dist_t = config['latent_distribution']['dist_type']       
-        n_latent    = config['n_latent']
-        num_classes = config['n_labels']
-        classifier_dropout = config['classifier_dropout']
-        pad_id      = vocab[vocab.padding_token]
-        if latent_dist_t == 'vmf':
-            latent_dist = HyperSphericalDistribution(n_latent, kappa=config['latent_distribution']['kappa'], ctx=ctx)
-        elif latent_dist_t == 'logistic_gaussian':
-            latent_dist = LogisticGaussianDistribution(n_latent, alpha=config['latent_distribution']['alpha'], ctx=ctx)
-        else:
-            latent_dist = HyperSphericalDistribution(n_latent, kappa=20.0, ctx=ctx)
-        model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
-                          dropout=classifier_dropout)
-        model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True, ctx=ctx)
-        model.latent_dist.post_init(ctx) # need to call this after loading parameters now
-        return cls(model, vocab, max_length, bow_vocab, pre_vectorizer=vectorizer, ctx=ctx)
+        return cls(estimator, max_length, pre_vectorizer=vectorizer, ctx=ctx)
 
 
     def _embed_sequence(self, ids, segs):
@@ -414,21 +420,43 @@ class SeqVEDInferencer(BaseInferencer):
         return elbos_means, elbos_var
         
 
-    def encode_data(self, dataloader, use_probs=False):
+    def encode_data(self, dataloader, use_probs=False, target_entropy=2.0):
         encodings = []
-        for _, seqs in enumerate(dataloader):
-            ids, lens, segs, _, _ = seqs
+        bow_matrix = []
+        for _, data_batch in enumerate(dataloader):
+            seqs, = data_batch
+            ids, lens, segs, bow, _ = seqs
             _, encs = self.model.bert(ids.as_in_context(self.ctx),
                                       segs.as_in_context(self.ctx), lens.astype('float32').as_in_context(self.ctx))
             encs = self.model.latent_dist.get_mu_encoding(encs)
+            bow_matrix.append(bow.as_np_ndarray().squeeze())
             if use_probs:
                 e1 = (encs - mx.nd.min(encs, axis=1).expand_dims(1)).astype('float64')
                 encs = list(mx.nd.softmax(e1).asnumpy())
-                topic_encodings = map(recalibrate, encs)
+                topic_encodings = list(map(partial(recalibrate_scores, target_entropy=target_entropy), encs))
             else:
                 topic_encodings = list(encs.astype('float64').asnumpy())
             encodings.extend(topic_encodings)
-        return encodings
+        return np.vstack(encodings), mx.np.vstack(bow_matrix)
+
+    def get_pyldavis_details(self, dataloader):
+        ## 1) K x W matrix of P(term|topic) probabilities
+        w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
+        w_pr = mx.nd.softmax(w, axis=1)
+        ## 2) D x K matrix over the test data of topic probabilities
+        dt_matrix, bow_matrix = self.encode_data(dataloader, use_probs=True)
+        ## 3) D-length vector of document sizes
+        doc_lengths = bow_matrix.sum(axis=1)
+        ## 4) vocab (in same order as W columns)
+        ## 5) frequency of each word w_i \in W over the test corpus
+        term_cnts = bow_matrix.sum(axis=0)
+        d = {'topic_term_dists': w_pr.asnumpy().tolist(),
+             'doc_topic_dists': list(map(lambda x: x.tolist(), dt_matrix)),
+             'doc_lengths': doc_lengths.asnumpy().tolist(),
+             'vocab': list(map(lambda i: self.bow_vocab.idx_to_token[i], range(len(self.bow_vocab.idx_to_token)))),
+             'term_frequency': term_cnts.asnumpy().tolist() }
+        return d
+        
 
     def get_top_k_words_per_topic(self, k):
         if self.bow_vocab:

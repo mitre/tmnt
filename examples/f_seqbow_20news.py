@@ -67,8 +67,8 @@ tr_dataset, dev_dataset, aux_dataset, num_examples, bert_base, bert_vocab = \
                       num_classes=num_classes, aux_ds = dev_ds,
                       ctx=ctx)
 
-
-estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_name = dataset,
+estimator = SeqBowEstimator(bert_base, bert_vocab,
+                            bert_model_name = model_name, bert_data_name = dataset,
                             n_labels = num_classes,
                             bow_vocab = vectorizer.get_vocab(),
                             optimizer='bertadam',
@@ -79,6 +79,29 @@ estimator = SeqBowEstimator(bert_base, bert_model_name = model_name, bert_data_n
 
 # this will take quite some time without a GPU!
 estimator.fit_with_validation(tr_dataset, dev_dataset, None, num_examples)
-print("Estimator: {}".format(estimator.model))
+os.makedirs('_model_dir', exist_ok=True)
+
+# save the model
 estimator.write_model('./_model_dir')
+
+# %%
+# An inference object is then created which enables the application of the model to raw text
+# data and/or directly to document-term matrices
+from tmnt.inference import SeqVEDInferencer
+inferencer = SeqVEDInferencer(estimator, max_length=seq_len, pre_vectorizer=vectorizer)
+
+
+# %%
+# We can visualize the topics and associated topic terms using PyLDAvis
+import pyLDAvis
+import funcy
+full_model_dict = inferencer.get_pyldavis_details(dev_dataset)
+pylda_opts = funcy.merge(full_model_dict, {'mds': 'mmds'})
+vis_data = pyLDAvis.prepare(**pylda_opts)
+
+# %%
+# The topic model terms and topic-term proportions will be written
+# to the file ``m1.html``
+pyLDAvis.save_html(vis_data, 'm1.html')
+
 

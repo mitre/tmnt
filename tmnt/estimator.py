@@ -31,6 +31,7 @@ from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import HyperSphericalDistribution, LogisticGaussianDistribution, BaseDistribution, GaussianDistribution
 import autogluon.core as ag
 from itertools import cycle
+import pickle
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 MAX_DESIGN_MATRIX = 250000000
@@ -1167,7 +1168,7 @@ class CovariateBowEstimator(BaseBowEstimator):
 
 class SeqBowEstimator(BaseEstimator):
 
-    def __init__(self, bert_base, *args,
+    def __init__(self, bert_base, bert_vocab, *args,
                  bert_model_name = 'bert_12_768_12',
                  bert_data_name = 'book_corpus_wiki_en_uncased',
                  bow_vocab = None,
@@ -1187,6 +1188,7 @@ class SeqBowEstimator(BaseEstimator):
         self.minimum_lr = 1e-9
         self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
+        self.bert_vocab = bert_vocab
         self.bert_model_name = bert_model_name
         self.bert_data_name = bert_data_name
         self.has_classifier = n_labels >= 2
@@ -1205,10 +1207,10 @@ class SeqBowEstimator(BaseEstimator):
 
     @classmethod
     def from_config(cls,
-                    config: Union[str, ag.space.Dict],
+                    config: Union[str, dict, ag.space.Dict],
                     bert_base: nlp.model.bert.BERTModel,
+                    bert_vocab: nlp.Vocab,
                     bow_vocab: nlp.Vocab,
-                    n_labels: int = 0,
                     reporter: Optional[object] = None,
                     log_interval: int = 1,
                     pretrained_param_file: Optional[str] = None,
@@ -1220,7 +1222,6 @@ class SeqBowEstimator(BaseEstimator):
             config: String to configuration path (in json format) or an autogluon dictionary representing the config
             bert_base: GluonNLP BERT model
             bow_vocab: Bag-of-words vocabulary used for decoding reconstruction target
-            n_labels: Number of labels for (semi-)supervised modeling
             repoter: Autogluon reporter object with callbacks for logging model selection
             log_interval: Logging frequency (default = 1)
             pretrained_param_file: Parameter file
@@ -1232,11 +1233,12 @@ class SeqBowEstimator(BaseEstimator):
         if isinstance(config, str):
             try:
                 with open(config, 'r') as f:
-                    config_dict = json.load(f)
+                    config = json.load(f)
             except:
                 logging.error("File {} does not appear to be a valid config instance".format(config))
                 raise Exception("Invalid Json Configuration File")
-            config = ag.space.Dict(**config_dict)
+        if isinstance(config, dict):
+            config = ag.space.Dict(**config)
         ldist_def = config.latent_distribution
         kappa = 0.0
         alpha = 1.0
@@ -1250,11 +1252,11 @@ class SeqBowEstimator(BaseEstimator):
             latent_distribution = HyperSphericalDistribution(n_latent, ctx=ctx, kappa=kappa)
         else:
             latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
-        model = cls(bert_base,
+        estimator = cls(bert_base, bert_vocab, 
                     bert_model_name = config.bert_model_name,
                     bert_data_name  = config.bert_data_name,
                     bow_vocab       = bow_vocab, 
-                    n_labels        = n_labels,
+                    n_labels        = config.n_labels,
                     latent_distribution = latent_distribution,
                     batch_size      = int(config.batch_size),
                     redundancy_reg_penalty = 0.0,
@@ -1270,7 +1272,34 @@ class SeqBowEstimator(BaseEstimator):
                     reporter=reporter,
                     ctx=ctx,
                     log_interval=log_interval)
-        return model
+        estimator.initialize_with_pretrained()
+        return estimator
+
+    @classmethod
+    def from_saved(cls, model_dir: str,
+                   reporter: Optional[object] = None,
+                   log_interval: int = 1,
+                   ctx: Optional[mx.context.Context] = mx.cpu()) -> 'SeqBowEstimator':
+        if model_dir is not None:
+            param_file = os.path.join(model_dir, 'model.params')
+            vocab_file = os.path.join(model_dir, 'vocab.json')
+            config_file = os.path.join(model_dir, 'model.config')
+            serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
+        with open(config_file) as f:
+            config = json.loads(f.read())
+        with open(vocab_file) as f:
+            voc_js = f.read()
+        if os.path.exists(serialized_vectorizer_file):
+            with open(serialized_vectorizer_file, 'rb') as fp:
+                vectorizer = pickle.load(fp)
+        else:
+            vectorizer = None
+        bow_vocab = nlp.Vocab.from_json(voc_js)
+        bert_base, bert_vocab = nlp.model.get_model(config['bert_model_name'],  
+                                               dataset_name=config['bert_data_name'],
+                                               pretrained=True, ctx=ctx, use_pooler=True,
+                                               use_decoder=False, use_classifier=False)
+        return cls.from_config(config, bert_base, bert_vocab, bow_vocab, reporter, log_interval, param_file, ctx)
     
 
     def initialize_with_pretrained(self):
