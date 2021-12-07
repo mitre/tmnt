@@ -92,10 +92,11 @@ inferencer = SeqVEDInferencer(estimator, max_length=seq_len, pre_vectorizer=vect
 
 
 # %%
-# We can visualize the topics and associated topic terms using PyLDAvis
+# We can visualize the topics and associated topic terms using PyLDAvis. Note, this simply shows the mechanics
+# for this step; reasonable topic models will require additional training on the entire dataset.
 import pyLDAvis
 import funcy
-full_model_dict = inferencer.get_pyldavis_details(dev_dataset)
+full_model_dict = inferencer.get_pyldavis_details(tr_dataset)
 pylda_opts = funcy.merge(full_model_dict, {'mds': 'mmds'})
 vis_data = pyLDAvis.prepare(**pylda_opts)
 

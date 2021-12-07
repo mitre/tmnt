@@ -32,7 +32,7 @@ if not os.path.exists(config_space):
 
 tmnt_config = TMNTConfigBOW(config_space).get_configspace()
 n_labels = int(np.max(y)) + 1
-l_selector = BaseSelector(tmnt_config, iterations=8, searcher='random',
+l_selector = BaseSelector(tmnt_config, iterations=4, searcher='random',
                           scheduler='hyperband', cpus_per_task=4, log_dir='_model_out')
 labeled_trainer = BowVAETrainer(vocab, (X[:8000],y[:8000]), (X[8000:],y[8000:]), n_labels=n_labels,
                                 log_out_dir='_exps', model_out_dir='_model_out')

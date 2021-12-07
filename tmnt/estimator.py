@@ -1501,7 +1501,10 @@ class SeqBowEstimator(BaseEstimator):
 
         #step_size = self.batch_size * accumulate if accumulate else self.batch_size
         #num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
-        num_train_steps = len(train_data) * self.epochs
+
+        joint_loader = PairedDataLoader(train_data, aux_data)
+        
+        num_train_steps = len(joint_loader) * self.epochs
         if accumulate:
             num_train_steps /= accumulate
         
@@ -1533,8 +1536,6 @@ class SeqBowEstimator(BaseEstimator):
             loss_details['red_loss'] += red_ls.mean().asscalar()
             if class_ls is not None:
                 loss_details['class_loss'] += class_ls.mean().asscalar()
-
-        joint_loader = PairedDataLoader(train_data, aux_data)
             
         for epoch_id in range(self.epochs):
             self.metric.reset()
