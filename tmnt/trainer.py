@@ -375,7 +375,6 @@ class SeqBowVEDTrainer(TopicTrainer):
     
     Parameters:
         model_out_dir (str): Explicit string path to saved model information (and logging info).
-        vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
         use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
         log_interval (int): Perform validation (NPMI and perplexity) on the validation set this many batches. Default = 10.
         rng_seed (int): Seed for random number generator. Default = 1234
@@ -412,7 +411,7 @@ class SeqBowVEDTrainer(TopicTrainer):
         or for training one off models.
         
         Parameters:
-            config (:class:`tmnt.configuration.TMNTConfigBOW`): TMNT configuration for bag-of-words models
+            config (:class:`tmnt.configuration.TMNTConfigSeqBOW`): TMNT configuration for seq-bow models
             reporter (:class:`autogluon.core.scheduler.reporter.Reporter`): object for reporting model evaluations to scheduler
         
         Returns:

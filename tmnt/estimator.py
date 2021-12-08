@@ -844,10 +844,11 @@ class BowEstimator(BaseBowEstimator):
 
 class BowMetricEstimator(BowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, non_scoring_index=-1, **kwargs):
         super(BowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
         self.plot_dir = plot_dir
+        self.non_scoring_index = non_scoring_index
 
 
     @classmethod
@@ -940,16 +941,14 @@ class BowMetricEstimator(BowEstimator):
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
         labels = np.arange(posteriors[0].shape[0])        
-        if not np.any(np.isnan(posteriors)):
-            avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
-        else:
-            avg_prec = 0.0
         try:
             auroc = roc_auc_score(ground_truth, posteriors, average='weighted', labels=labels)
         except:
             auroc = 0.0
             logging.error('ROC computation failed')
         ap_scores = []
+        wsum = 0.0
+        tot  = 0.0
         for c in range(len(labels)):
             y_vec = ground_truth[:,c]
             pred_vec = posteriors[:,c]
@@ -957,7 +956,14 @@ class BowMetricEstimator(BowEstimator):
                 ap_c = average_precision_score(y_vec, pred_vec)
             else:
                 ap_c = 0.0
+            if c != self.non_scoring_index:
+                support = int(y_vec.sum())
+                if support > 0:
+                    wsum += ap_c * support
+                    tot  += support
             ap_scores.append((ap_c, int(y_vec.sum())))
+            
+        avg_prec = wsum / tot
         ndcg = ndcg_score(ground_truth, posteriors)
         top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1, labels=labels)        
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2, labels=labels)
@@ -1675,10 +1681,11 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, non_scoring_index=-1, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
         self.plot_dir = plot_dir
+        self.non_scoring_index = non_scoring_index ## if >=0 this will avoid considering this label index in evaluation
 
 
     @classmethod
@@ -1767,7 +1774,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             if emb2 is None:
                 emb2 = z_mu2.asnumpy()
             emb1 += list(z_mu1.asnumpy())
-        posteriors = np.array(posteriors)
+        posteriors = np.array(posteriors)        
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
         labels = np.arange(posteriors[0].shape[0])
@@ -1781,6 +1788,23 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             auroc = 0.0
             logging.error('ROC computation failed')
         ndcg = ndcg_score(ground_truth, posteriors)
+
+        ## bit of hackery to only compute average precision for non-null/other categories
+        ## in many cases, we'd like to optimize over this score
+        if self.non_scoring_index >= 0:
+            wsum = 0.0
+            tot  = 0.0
+            for c in range(len(labels)):
+                y_vec = ground_truth[:,c]
+                pred_vec = posteriors[:,c]
+                ap_c = average_precision_score(y_vec, pred_vec) if not np.any(np.isnan(pred_vec)) else 0.0
+                if c != self.non_scoring_index:
+                    support = int(y_vec.sum())
+                    if support > 0:
+                        wsum += ap_c * support
+                        tot  += support
+            avg_prec = wsum / tot
+
         top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1, labels=labels)        
         top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2, labels=labels)
         top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3, labels=labels)
