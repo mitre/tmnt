@@ -22,10 +22,16 @@ if __name__ == '__main__':
     install_requires = [
         'numpy>=1.19.0,<1.20.0',
         'gluonnlp==0.10.0',
-        'autogluon.core==0.2.0',
+        'autogluon.core==0.3.1',
         'mantichora==0.9.5',
         'pandas<2.0',
+        ## pyLDAvis dependencies expressed here to avoid long dep search
         'pyLDAvis==2.1.2',
+        'MarkupSafe>=2.0',
+        'joblib>=0.8.4',
+        'future>=0.18.2',
+        'funcy>=1.16',
+        'pandas>=1.3.3',
         'pyOpenSSL==18.0.0',
         'PySocks==1.6.8',
         'sacremoses>=0.0.38',
@@ -35,7 +41,9 @@ if __name__ == '__main__':
         'umap-learn==0.4.6',
         'tabulate>=0.8.7'
     ]
+    ## need to stick with mxnet < 1.8 to maintain compatibility on Windows
     if(environ.get('USE_CUDA') == '1'):
+        #install_requires.append('mxnet-cu102==1.8.0')
         install_requires.append('mxnet-cu101<1.8.0,>=1.6.0')
     else:
         install_requires += ['mxnet<1.8.0,>=1.6.0']

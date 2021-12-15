@@ -650,9 +650,9 @@ class BaseBowEstimator(BaseEstimator):
         else:
             self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
                                 .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
-            if self.reporter:
-                self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-                              coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
+        if self.reporter:
+            self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
+                          coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
         return sc_obj, v_res
 
 
@@ -1683,7 +1683,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, non_scoring_index=-1, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
-        self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
+        self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor, x2_downweight_idx=non_scoring_index)
         self.plot_dir = plot_dir
         self.non_scoring_index = non_scoring_index ## if >=0 this will avoid considering this label index in evaluation
 

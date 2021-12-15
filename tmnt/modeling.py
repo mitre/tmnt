@@ -669,10 +669,11 @@ class GeneralizedSDMLLoss(Loss):
         - **loss**: loss tensor with shape (batch_size,).
     """
 
-    def __init__(self, smoothing_parameter=0.3, weight=1., batch_axis=0, **kwargs):
+    def __init__(self, smoothing_parameter=0.3, weight=1., batch_axis=0, x2_downweight_idx=-1, **kwargs):
         super(GeneralizedSDMLLoss, self).__init__(weight, batch_axis, **kwargs)
         self.kl_loss = KLDivLoss(from_logits=True)
         self.smoothing_parameter = smoothing_parameter # Smoothing probability mass
+        self.x2_downweight_idx = x2_downweight_idx
 
     def _compute_distances(self, x1, x2):
         """
@@ -713,7 +714,11 @@ class GeneralizedSDMLLoss(Loss):
         labels = ll * (1 - self.smoothing_parameter) + (1 - ll) * self.smoothing_parameter / (batch_size - 1)
         ## now normalize rows to sum to 1.0
         labels = labels / F.broadcast_to(F.sum(labels, axis=1, keepdims=True), (batch_size, batch_size))
-        return labels
+        if self.x2_downweight_idx >= 0:
+            down_wt = len(mx.np.where(l2.as_np_ndarray != self.x2_downweight_idx)[0]) / batch_size
+        else:
+            down_wt = 1.0
+        return labels, down_wt
 
 
     def _loss(self, F, x1, l1, x2, l2):
@@ -722,11 +727,11 @@ class GeneralizedSDMLLoss(Loss):
         and the smoothed label matrix.
         """
         batch_size = x1.shape[0]
-        labels = self._compute_labels(F, l1, l2)
+        labels, wt = self._compute_labels(F, l1, l2)
         distances = self._compute_distances(x1, x2)
         log_probabilities = F.log_softmax(-distances, axis=1)
         # multiply by the batch size to obtain the correct loss (gluon kl_loss averages instead of sum)
-        return self.kl_loss(log_probabilities, labels.as_in_context(distances.context)) * batch_size
+        return self.kl_loss(log_probabilities, labels.as_in_context(distances.context)) * batch_size * wt
 
 
     def hybrid_forward(self, F, x1, l1, x2, l2):

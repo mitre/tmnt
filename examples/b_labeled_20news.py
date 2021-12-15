@@ -105,8 +105,8 @@ l_estimator_semi_supervised = BowEstimator(vocabulary = tf_vectorizer.get_vocab(
                                            enc_dr=0.2,
                                            classifier_dropout=0.1,
                                            lr=0.0003, enc_hidden_dim=50,
-                                           epochs=40, batch_size=128)
-_ = l_estimator_semi_supervised.fit_with_validation(X_train, y_train, None, None, X_test)
+                                           epochs=20, batch_size=128)
+_ = l_estimator_semi_supervised.fit_with_validation(X_train[:500], y_train[:500], None, None, X_test)
 v_results_ss = l_estimator_semi_supervised.validate(X_test, y_test)
 print("Validation results with semi-supervised learning. acc = {}, ppl = {}, npmi = {}"
       .format(v_results_ss['accuracy'], v_results_ss['ppl'], v_results_ss['npmi']))
