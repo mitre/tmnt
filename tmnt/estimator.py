@@ -630,6 +630,8 @@ class BaseBowEstimator(BaseEstimator):
             if validation_dataloader is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 sc_obj, v_res = self._perform_validation(epoch, validation_dataloader, val_X_size, total_val_words, val_X, val_y)
         mx.nd.waitall()
+        if v_res is None:
+            sc_obj, v_res = self._perform_validation(0, validation_dataloader, val_X_size, total_val_words, val_X, val_y)
         return sc_obj, v_res
 
     
