@@ -425,11 +425,30 @@ class SeqBowVEDTrainer(TopicTrainer):
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         vectorizer = TMNTVectorizer(vocab_size=4000, text_key="text", label_key="label")
-        _, _ = vectorizer.fit_transform_json(self.train_data_or_path)
-        classes = list(vectorizer.label_map) if config.use_labels else None
-        tr_ds = JsonlDataset(self.train_data_or_path, txt_key="text", label_key="label")
-        val_ds = JsonlDataset(self.test_data_or_path, txt_key="text", label_key="label")
-        aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_or_path else None
+        if isinstance(self.train_data_or_path, str):
+            _, _ = vectorizer.fit_transform_json(self.train_data_or_path)
+            classes = list(vectorizer.label_map) if config.use_labels else None
+            tr_ds = JsonlDataset(self.train_data_or_path, txt_key="text", label_key="label")
+            val_ds = JsonlDataset(self.test_data_or_path, txt_key="text", label_key="label")
+            aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_or_path else None
+        else:
+            train_data, train_labels = self.train_data_or_path
+            val_data,  val_labels  = self.test_data_or_path
+            train_vecs, _ = vectorizer.fit_transform(train_data)
+            val_vecs, _   = vectorizer.transform(val_data)
+            tr_ds = ArrayDataset(train_vecs, train_labels)
+            val_ds = ArrayDataset(val_vecs, val_labels)
+            if self.aux_data_or_path:
+                aux_data, _ = self.aux_data_or_path
+                aux_ds, _ = vectorizer.transform(aux_data)
+            else:
+                aux_ds = None
+            if train_labels:
+                num_classes = max(train_labels)
+                classes = ['class_'+str(i) for i in range(num_classes)]
+            else:
+                num_classes, classes = 0, None
+            
 
         bert_model_name = config.bert_model_name
         bert_dataset    = config.bert_data_name
