@@ -444,11 +444,10 @@ class SeqBowVEDTrainer(TopicTrainer):
             else:
                 aux_ds = None
             if train_labels:
-                num_classes = max(train_labels)
-                classes = ['class_'+str(i) for i in range(num_classes)]
+                classes = list(set(train_labels))
+                num_classes = len(classes)
             else:
                 num_classes, classes = 0, None
-            
 
         bert_model_name = config.bert_model_name
         bert_dataset    = config.bert_data_name
