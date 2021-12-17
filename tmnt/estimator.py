@@ -1219,6 +1219,7 @@ class SeqBowEstimator(BaseEstimator):
                     bert_base: nlp.model.bert.BERTModel,
                     bert_vocab: nlp.Vocab,
                     bow_vocab: nlp.Vocab,
+                    n_labels: int,                    
                     reporter: Optional[object] = None,
                     log_interval: int = 1,
                     pretrained_param_file: Optional[str] = None,
@@ -1247,7 +1248,7 @@ class SeqBowEstimator(BaseEstimator):
                 raise Exception("Invalid Json Configuration File")
         if isinstance(config, dict):
             config = ag.space.Dict(**config)
-        ldist_def = config.latent_distribution
+        ldist_def = config['latent_distribution']
         kappa = 0.0
         alpha = 1.0
         latent_distrib = ldist_def.dist_type
@@ -1261,25 +1262,25 @@ class SeqBowEstimator(BaseEstimator):
         else:
             latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
         estimator = cls(bert_base, bert_vocab, 
-                    bert_model_name = config.bert_model_name,
-                    bert_data_name  = config.bert_data_name,
-                    bow_vocab       = bow_vocab, 
-                    n_labels        = config.n_labels,
-                    latent_distribution = latent_distribution,
-                    batch_size      = int(config.batch_size),
-                    redundancy_reg_penalty = 0.0,
-                    warmup_ratio = config.warmup_ratio,
-                    optimizer = config.optimizer,
-                    classifier_dropout = config.classifier_dropout,
-                    epochs = int(config.epochs),
-                    gamma = config.gamma,
-                    lr = config.lr,
-                    decoder_lr = config.decoder_lr,
-                    pretrained_param_file = pretrained_param_file,
-                    warm_start = (pretrained_param_file is not None),
-                    reporter=reporter,
-                    ctx=ctx,
-                    log_interval=log_interval)
+                        bert_model_name = config.bert_model_name,
+                        bert_data_name  = config.bert_dataset,
+                        bow_vocab       = bow_vocab, 
+                        n_labels        = config.get('n_labels', n_labels),
+                        latent_distribution = latent_distribution,
+                        batch_size      = int(config.batch_size),
+                        redundancy_reg_penalty = 0.0,
+                        warmup_ratio = config.warmup_ratio,
+                        optimizer = config.optimizer,
+                        classifier_dropout = config.classifier_dropout,
+                        epochs = int(config.epochs),
+                        gamma = config.gamma,
+                        lr = config.lr,
+                        decoder_lr = config.decoder_lr,
+                        pretrained_param_file = pretrained_param_file,
+                        warm_start = (pretrained_param_file is not None),
+                        reporter=reporter,
+                        ctx=ctx,
+                        log_interval=log_interval)
         estimator.initialize_with_pretrained()
         return estimator
 
@@ -1311,9 +1312,9 @@ class SeqBowEstimator(BaseEstimator):
     
 
     def initialize_with_pretrained(self):
-        assert(self.pretrained_param_file is not None)
         self.model = self._get_model()
-        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
+        if self.pretrained_param_file is not None:
+            self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
 
 
     def _get_model_bias_initialize(self, train_data):

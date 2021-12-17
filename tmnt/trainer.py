@@ -25,6 +25,7 @@ from tmnt.data_loading import load_vocab, file_to_data
 from tmnt.bert_handling import get_bert_datasets, JsonlDataset
 from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator
 from tmnt.preprocess.vectorizer import TMNTVectorizer
+from mxnet.gluon.data import ArrayDataset
 
 
 class BaseTrainer(object):
@@ -40,7 +41,7 @@ class BaseTrainer(object):
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, model_out_dir, train_data_or_path=None, test_data_or_path=None, aux_data_or_path=None, use_gpu=False, val_each_epoch=False, rng_seed=1234):
+    def __init__(self, model_out_dir=None, train_data_or_path=None, test_data_or_path=None, aux_data_or_path=None, use_gpu=False, val_each_epoch=False, rng_seed=1234):
         self.model_out_dir = model_out_dir
         self.train_data_or_path   = train_data_or_path
         self.test_data_or_path    = test_data_or_path
@@ -104,8 +105,8 @@ class TopicTrainer(BaseTrainer):
         vocabulary (`gluonnlp.Vocab`): Gluon NLP vocabulary object representing the bag-of-words used for the dataset
     """
 
-    def __init__(self, vocabulary, *args):
-        super().__init__(*args)
+    def __init__(self, vocabulary, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.vocabulary   = vocabulary
         
     
@@ -313,7 +314,7 @@ class BowVAETrainer(TopicTrainer):
         Returns:
             Estimator (:class:`tmnt.estimator.BaseEstimator`): Either BowEstimator or CovariateBowEstimator
         """
-        embedding_source = config.embedding.source
+        embedding_source = config['embedding.source']
         vocab, _ = self._initialize_vocabulary(embedding_source)
         if self.use_labels_as_covars:
             estimator = CovariateBowEstimator.from_config(self.n_labels, config, vocab,
@@ -381,7 +382,8 @@ class SeqBowVEDTrainer(TopicTrainer):
     """
     def __init__(self, model_out_dir, train_data_path, 
                  test_data_path, aux_data_path=None, use_gpu=False, log_interval=10, rng_seed=1234):
-        super().__init__(None, train_data_path, test_data_path, aux_data_path, use_gpu, True, rng_seed)
+        super().__init__(None, model_out_dir, train_data_or_path=train_data_path, test_data_or_path=test_data_path,
+                         aux_data_or_path=aux_data_path, use_gpu=use_gpu, val_each_epoch=True, rng_seed=rng_seed)
         self.model_out_dir = model_out_dir
         self.kld_wt = 1.0
         self.log_interval = log_interval
@@ -427,17 +429,17 @@ class SeqBowVEDTrainer(TopicTrainer):
         vectorizer = TMNTVectorizer(vocab_size=4000, text_key="text", label_key="label")
         if isinstance(self.train_data_or_path, str):
             _, _ = vectorizer.fit_transform_json(self.train_data_or_path)
-            classes = list(vectorizer.label_map) if config.use_labels else None
+            classes = list(vectorizer.label_map) if config['use_labels'] else None
             tr_ds = JsonlDataset(self.train_data_or_path, txt_key="text", label_key="label")
             val_ds = JsonlDataset(self.test_data_or_path, txt_key="text", label_key="label")
             aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_or_path else None
         else:
+
             train_data, train_labels = self.train_data_or_path
             val_data,  val_labels  = self.test_data_or_path
-            train_vecs, _ = vectorizer.fit_transform(train_data)
-            val_vecs, _   = vectorizer.transform(val_data)
-            tr_ds = ArrayDataset(train_vecs, train_labels)
-            val_ds = ArrayDataset(val_vecs, val_labels)
+            tr_ds = ArrayDataset(train_data, train_labels)
+            val_ds = ArrayDataset(val_data, val_labels)
+            _,_ = vectorizer.fit_transform(train_data)            
             if self.aux_data_or_path:
                 aux_data, _ = self.aux_data_or_path
                 aux_ds, _ = vectorizer.transform(aux_data)
@@ -449,22 +451,22 @@ class SeqBowVEDTrainer(TopicTrainer):
             else:
                 num_classes, classes = 0, None
 
-        bert_model_name = config.bert_model_name
-        bert_dataset    = config.bert_data_name
-        batch_size      = config.batch_size
-        max_seq_len     = config.max_seq_len
+        bert_model_name = config['bert_model_name']
+        bert_dataset    = config['bert_dataset']
+        batch_size      = config['batch_size']
+        max_seq_len     = config['max_seq_len']
         
-        tr_dataset, val_dataset, num_examples, bert_base, bert_vocab  = \
+        tr_dataset, val_dataset, aux_dataset, num_examples, bert_base, bert_vocab  = \
             get_bert_datasets(classes, vectorizer, tr_ds, val_ds, batch_size, max_seq_len, aux_ds = aux_ds, 
                               bert_model_name=bert_model_name, bert_dataset=bert_dataset, ctx=ctx)
         n_labels = len(classes) if classes else 0
         logging.info('Number of labels: {}'.format(n_labels))
         logging.info('Number of examples: {}'.format(num_examples))
-        seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, vectorizer.get_vocab(), n_labels=len(classes),
+        seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, bert_vocab, vectorizer.get_vocab(), n_labels,
                                                         log_interval=self.log_interval,
                                                         reporter=reporter, ctx=ctx)
         obj, v_res = \
-            seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, num_examples, aux_data=(aux_ds is not None))
+            seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, aux_dataset, num_examples)
         return seq_ved_estimator, obj, v_res
 
 

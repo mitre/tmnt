@@ -6,7 +6,7 @@
   bert_dataset: book_corpus_wiki_en_uncased
   latent_distribution: [{dist_type: vmf, kappa: {range: [20.0, 80.0]}}]
   max_seq_len: {i_range: [128]}
-  gamma: {i_range: [10, 20], step: 10}
+  gamma: {range: [10, 20]}
   lr: {range: [1e-5, 1e-4]}
   decoder_lr: {range: [0.0001, 0.002]}
   n_latent: {i_range: [20]}

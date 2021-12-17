@@ -177,6 +177,25 @@ class TMNTConfigBOWMetric(TMNTConfigBOW):
     
 
 
+default_seq_config_space = {
+    'epochs': 3,
+    'gamma': 1.0,
+    'multilabel': False,
+    'bert_model_name': 'bert_12_768_12',
+    'bert_dataset': 'book_corpus_wiki_en_uncased',
+    'lr': ag.space.Real(1e-5, 1e-4),
+    'decoder_lr': ag.space.Real(0.00005, 0.002),
+    'latent_distribution': ag.space.Categorical(ag.space.Dict(**{'dist_type': 'vmf', 'kappa': ag.space.Real(20.0, 80.0)}),
+                                                ag.space.Dict(**{'dist_type': 'logistic_gaussian', 'alpha': ag.space.Real(0.5, 5.0)})),
+    'optimizer': ag.space.Categorical('bertadam'),
+    'n_latent': ag.space.Categorical(15,20,25),
+    'max_seq_len': 128,
+    'warmup_ratio': ag.space.Real(0.05, 0.2),
+    'classifier_dropout': 0.2,
+    'batch_size': 8
+    }
+    
+
 class TMNTConfigSeqBOW(BaseTMNTConfig):
 
     def __init__(self, c_file):
@@ -212,7 +231,6 @@ class TMNTConfigSeqBOW(BaseTMNTConfig):
             else:
                 latent_space.append(ag.space.Dict(**{'dist_type': 'gaussian'}))
         sp_dict['latent_distribution'] = ag.space.Categorical(*latent_space)
-
         return sp_dict
 
 
