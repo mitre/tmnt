@@ -137,6 +137,7 @@ class TMNTConfigBOW(BaseTMNTConfig):
         sp_dict['num_enc_layers'] = self._get_range_integer('num_enc_layers', cd) or 1
         sp_dict['enc_dr'] = self._get_range_uniform('enc_dr', cd) or 0.0
         sp_dict['covar_net_layers'] = self._get_range_integer('covar_net_layers', cd) or 1
+        sp_dict['classifier_dropout'] = self.get_range_uniform('classifier_dropout', cd) or 0.1
 
         embedding_types = cd['embedding']
         embedding_space = []
