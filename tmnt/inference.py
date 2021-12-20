@@ -317,6 +317,7 @@ class SeqVEDInferencer(BaseInferencer):
     """
     def __init__(self, estimator, max_length, pre_vectorizer=None, ctx=mx.cpu()):
         super().__init__(ctx)
+        self.estimator = estimator
         self.model     = estimator.model 
         self.bert_base = self.model.bert
         self.tokenizer = BERTTokenizer(estimator.bert_vocab)
@@ -475,6 +476,7 @@ class MetricSeqVEDInferencer(SeqVEDInferencer):
     """
     def __init__(self, estimator, max_length, pre_vectorizer=None, ctx=mx.cpu()):
         super().__init__(estimator, max_length, pre_vectorizer=pre_vectorizer, ctx=ctx)
+
 
     @classmethod
     def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, max_length=128, ctx=mx.cpu()):
