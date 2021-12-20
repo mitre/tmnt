@@ -1221,10 +1221,10 @@ class SeqBowEstimator(BaseEstimator):
                     bert_base: nlp.model.bert.BERTModel,
                     bert_vocab: nlp.Vocab,
                     bow_vocab: nlp.Vocab,
-                    n_labels: int,                    
                     reporter: Optional[object] = None,
                     log_interval: int = 1,
                     pretrained_param_file: Optional[str] = None,
+                    n_labels: Optional[int] = None,                    
                     ctx: mx.context.Context = mx.cpu()) -> 'SeqBowEstimator':
         """
         Instantiate an object of this class using the provided `config`
@@ -1265,7 +1265,7 @@ class SeqBowEstimator(BaseEstimator):
             latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
         estimator = cls(bert_base, bert_vocab, 
                         bert_model_name = config.bert_model_name,
-                        bert_data_name  = config.bert_dataset,
+                        bert_data_name  = config.bert_data_name,
                         bow_vocab       = bow_vocab, 
                         n_labels        = config.get('n_labels', n_labels),
                         latent_distribution = latent_distribution,
@@ -1310,7 +1310,14 @@ class SeqBowEstimator(BaseEstimator):
                                                dataset_name=config['bert_data_name'],
                                                pretrained=True, ctx=ctx, use_pooler=True,
                                                use_decoder=False, use_classifier=False)
-        return cls.from_config(config, bert_base, bert_vocab, bow_vocab, reporter, log_interval, param_file, ctx)
+        return cls.from_config(config,
+                               bert_base = bert_base,
+                               bert_vocab = bert_vocab,
+                               bow_vocab = bow_vocab,
+                               reporter = reporter,
+                               log_interval = log_interval,
+                               pretrained_param_file = param_file,
+                               ctx = ctx)
     
 
     def initialize_with_pretrained(self):

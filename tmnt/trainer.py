@@ -434,7 +434,6 @@ class SeqBowVEDTrainer(TopicTrainer):
             val_ds = JsonlDataset(self.test_data_or_path, txt_key="text", label_key="label")
             aux_ds = JsonlDataset(self.aux_data_or_path, txt_key="text", label_key="label") if self.aux_data_or_path else None
         else:
-
             train_data, train_labels = self.train_data_or_path
             val_data,  val_labels  = self.test_data_or_path
             tr_ds = ArrayDataset(train_data, train_labels)

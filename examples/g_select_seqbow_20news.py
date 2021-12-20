@@ -46,6 +46,10 @@ else:
 train_y_s = ['class_'+str(y) for y in train_y]
 dev_y_s = ['class_'+str(y) for y in dev_y]
 
+## Or - if training a pure unsupervised topic model:
+#train_y_s = [ None for _ in train_y ]
+#dev_y_s   = [ None for _ in dev_y ]
+
 #config_space = './ved_config.yaml'
 #tmnt_config = TMNTConfigSeqBOW(config_space).get_configspace()
 #tmnt_config = ag.space.Dict(**default_seq_config_space)
