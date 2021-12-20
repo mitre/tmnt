@@ -666,6 +666,8 @@ class BaseBowEstimator(BaseEstimator):
             self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
         return x_size
 
+    
+
     def fit_with_validation(self, 
                             X: sp.csr.csr_matrix,
                             y: np.ndarray,

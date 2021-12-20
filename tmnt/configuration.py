@@ -140,7 +140,7 @@ class TMNTConfigBOW(BaseTMNTConfig):
         sp_dict['classifier_dropout'] = self._get_range_uniform('classifier_dropout', cd) or 0.1
 
         embedding_types = cd['embedding']
-        embedding_space = []
+        embedding_space = []        
         for et in embedding_types:
             if et['source'] == 'random':
                 embedding_space.append(ag.space.Dict(**{'source': 'random', 'size': self._get_range_integer('size', et)}))
