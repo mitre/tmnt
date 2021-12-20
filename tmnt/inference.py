@@ -15,7 +15,7 @@ import umap
 import logging
 import pickle
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
-from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator
+from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator, SeqBowMetricEstimator
 from tmnt.data_loading import DataIterLoader, file_to_data, SparseMatrixDataIter
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.distribution import HyperSphericalDistribution, LogisticGaussianDistribution
