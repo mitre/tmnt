@@ -480,7 +480,7 @@ class MetricSeqVEDInferencer(SeqVEDInferencer):
 
     @classmethod
     def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, max_length=128, ctx=mx.cpu()):
-        estimator = SeqBowMetricEstimator.from_saved(model_dir=model_dir)
+        estimator = SeqBowMetricEstimator.from_saved(model_dir=model_dir, ctx=ctx)
         serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
         if os.path.exists(serialized_vectorizer_file):
             with open(serialized_vectorizer_file, 'rb') as fp:
