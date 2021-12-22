@@ -1604,7 +1604,7 @@ class SeqBowEstimator(BaseEstimator):
             mx.nd.waitall()
 
             # inference on dev data
-            if dev_data is not None:
+            if dev_data is not None and (self.validate_each_epoch or epoch_id == self.epochs):
                 sc_obj, v_res = self._perform_validation(model, dev_data, epoch_id)
             else:
                 sc_obj, v_res = None, None
