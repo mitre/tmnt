@@ -1192,9 +1192,11 @@ class SeqBowEstimator(BaseEstimator):
                  optimizer = 'bertadam',
                  classifier_dropout = 0.0,
                  pure_classifier_objective = False,
+                 validate_each_epoch = False,
                  **kwargs):
         super(SeqBowEstimator, self).__init__(*args, optimizer=optimizer, **kwargs)
         self.pure_classifier_objective = pure_classifier_objective
+        self.validate_each_epoch = validate_each_epoch
         self.minimum_lr = 1e-9
         self.checkpoint_dir = checkpoint_dir
         self.bert_base = bert_base
