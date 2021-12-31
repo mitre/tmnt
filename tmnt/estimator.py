@@ -1497,8 +1497,9 @@ class SeqBowEstimator(BaseEstimator):
             num_train_examples: Number of training samples
         """
         if self.model is None or not self.warm_start:
-            model = self._get_model_bias_initialize(train_data)
-            self.model = model
+            self.model = self._get_model_bias_initialize(train_data)
+
+        model = self.model
 
         has_aux_data = aux_data is not None
         
