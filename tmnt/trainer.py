@@ -314,7 +314,7 @@ class BowVAETrainer(TopicTrainer):
         Returns:
             Estimator (:class:`tmnt.estimator.BaseEstimator`): Either BowEstimator or CovariateBowEstimator
         """
-        embedding_source = config['embedding.source']
+        embedding_source = config['embedding']['source']
         vocab, _ = self._initialize_vocabulary(embedding_source)
         if self.use_labels_as_covars:
             estimator = CovariateBowEstimator.from_config(self.n_labels, config, vocab,

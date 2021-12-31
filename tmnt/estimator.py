@@ -1503,6 +1503,7 @@ class SeqBowEstimator(BaseEstimator):
         has_aux_data = aux_data is not None
         
         accumulate = False
+        v_res      = None
 
         all_model_params = model.collect_params()
         optimizer_params = {'learning_rate': self.lr, 'epsilon': 1e-6, 'wd': 0.02}
@@ -1612,6 +1613,9 @@ class SeqBowEstimator(BaseEstimator):
                 sc_obj, v_res = None, None
             if self.checkpoint_dir:
                 self.write_model(self.checkpoint_dir, suffix=str(epoch_id))
+        mx.nd.waitall()
+        if v_res is None:
+            sc_obj, v_res = self._perform_validation(model, dev_data, 0)
         return sc_obj, v_res
 
 
