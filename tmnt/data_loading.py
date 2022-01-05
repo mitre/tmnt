@@ -270,7 +270,7 @@ class RoundRobinDataLoader():
     def __init__(self, data_loaders):
         self.num_loaders = len(data_loaders)
         self.data_loaders = data_loaders
-        self.data_iters = None
+        self.data_iters = [iter(d) for d in data_loaders]
         self.data_totals = None
         self.ratio_remaining = np.array([1.0 for _ in data_loaders])
 
