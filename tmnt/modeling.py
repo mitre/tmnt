@@ -553,15 +553,15 @@ class BaseSeqBowVED(Block):
             bias_param.grad_req = 'null'
             self.out_bias = bias_param.data()
 
-    def get_top_k_terms(self, k, ctx=mx.cpu()):
+    def get_top_k_terms(self, k):
         """
         Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
         probability increases the most for a unit increase in a given topic score/probability
         are those most associated with the topic. This is just the topic-term weights for a 
         linear decoder - but code here will work with arbitrary decoder.
         """
-        z = mx.nd.ones(shape=(1, self.n_latent), ctx=ctx)
-        jacobian = mx.nd.zeros(shape=(self.bow_vocab_size, self.n_latent), ctx=ctx)
+        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
+        jacobian = mx.nd.zeros(shape=(self.bow_vocab_size, self.n_latent), ctx=self.model_ctx)
         z.attach_grad()        
         for i in range(self.bow_vocab_size):
             with mx.autograd.record():

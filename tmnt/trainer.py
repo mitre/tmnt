@@ -395,7 +395,8 @@ class SeqBowVEDTrainer(TopicTrainer):
         train_out_dir = '{}/train_{}_{}_{}_{}_{}_{}'.format(args.save_dir,i_dt.year,i_dt.month,i_dt.day,i_dt.hour,
                                                             i_dt.minute,i_dt.second)
         print("Set logging config to {}".format(train_out_dir))
-        logging_config(folder=train_out_dir, name='train_trans_vae', level=args.log_level, console_level=args.log_level, no_console=False)
+        logging_config(folder=train_out_dir, name='train_trans_vae', level=args.log_level, console_level=args.log_level,
+                       no_console=False)
         logging.info(args)
         trainer = cls(
             train_out_dir,
