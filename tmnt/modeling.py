@@ -507,7 +507,8 @@ class BaseSeqBowVED(Block):
                  dropout=0.0,
                  bow_vocab_size=2000,
                  n_latent=20, 
-                 kld=0.1, 
+                 kld=0.1,
+                 ctx=mx.cpu(),
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None):
         super(BaseSeqBowVED, self).__init__()
         self.n_latent = latent_dist.n_latent
@@ -519,6 +520,7 @@ class BaseSeqBowVED(Block):
         self.bow_vocab_size = bow_vocab_size
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.vocabulary = None ### XXX - add this as option to be passed in
+        self.model_ctx = ctx
         with self.name_scope():
             self.latent_dist = latent_dist
             self.embedding = None

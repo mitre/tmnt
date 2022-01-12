@@ -1337,7 +1337,7 @@ class SeqBowEstimator(BaseEstimator):
     
     def _get_model(self):
         model = SeqBowVED(self.bert_base, self.latent_distribution, num_classes=self.n_labels, n_latent=self.n_latent,
-                          bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
+                          bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout, ctx=self.ctx)
         model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         model.latent_dist.post_init(self.ctx)
