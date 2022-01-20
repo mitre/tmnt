@@ -1180,7 +1180,7 @@ class SeqBowEstimator(BaseEstimator):
 
     def __init__(self, bert_base, bert_vocab, *args,
                  bert_model_name = 'bert_12_768_12',
-                 bert_data_name = 'book_corpus_wiki_en_uncased',
+                 bert_dataset = 'book_corpus_wiki_en_uncased',
                  bow_vocab = None,
                  n_labels = 0,
                  log_interval=5,
@@ -1202,7 +1202,7 @@ class SeqBowEstimator(BaseEstimator):
         self.bert_base = bert_base
         self.bert_vocab = bert_vocab
         self.bert_model_name = bert_model_name
-        self.bert_data_name = bert_data_name
+        self.bert_dataset = bert_dataset
         self.has_classifier = n_labels >= 2
         self.classifier_dropout = classifier_dropout
         self.multilabel = multilabel
@@ -1267,7 +1267,7 @@ class SeqBowEstimator(BaseEstimator):
             latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
         estimator = cls(bert_base, bert_vocab, 
                         bert_model_name = config.bert_model_name,
-                        bert_data_name  = config.bert_data_name,
+                        bert_dataset  = config.bert_dataset,
                         bow_vocab       = bow_vocab, 
                         n_labels        = config.get('n_labels', n_labels),
                         latent_distribution = latent_distribution,
@@ -1309,7 +1309,7 @@ class SeqBowEstimator(BaseEstimator):
             vectorizer = None
         bow_vocab = nlp.Vocab.from_json(voc_js)
         bert_base, bert_vocab = nlp.model.get_model(config['bert_model_name'],  
-                                               dataset_name=config['bert_data_name'],
+                                               dataset_name=config['bert_dataset'],
                                                pretrained=True, ctx=ctx, use_pooler=True,
                                                use_decoder=False, use_classifier=False)
         return cls.from_config(config,
@@ -1365,7 +1365,7 @@ class SeqBowEstimator(BaseEstimator):
         config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
         config['warmup_ratio'] = self.warmup_ratio
         config['bert_model_name'] = self.bert_model_name
-        config['bert_data_name'] = self.bert_data_name
+        config['bert_dataset'] = self.bert_dataset
         config['classifier_dropout'] = self.classifier_dropout
         return config
 

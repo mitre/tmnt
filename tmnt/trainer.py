@@ -462,7 +462,8 @@ class SeqBowVEDTrainer(TopicTrainer):
         n_labels = len(classes) if classes else 0
         logging.info('Number of labels: {}'.format(n_labels))
         logging.info('Number of examples: {}'.format(num_examples))
-        seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, bert_vocab, vectorizer.get_vocab(), n_labels,
+        seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, bert_vocab, vectorizer.get_vocab(),
+                                                        n_labels = n_labels,
                                                         log_interval=self.log_interval,
                                                         reporter=reporter, ctx=ctx)
         obj, v_res = \
