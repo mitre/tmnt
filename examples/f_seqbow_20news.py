@@ -88,7 +88,7 @@ estimator.write_model('./_model_dir')
 # An inference object is then created which enables the application of the model to raw text
 # data and/or directly to document-term matrices
 from tmnt.inference import SeqVEDInferencer
-inferencer = SeqVEDInferencer(estimator, max_length=seq_len, pre_vectorizer=vectorizer)
+inferencer = SeqVEDInferencer(estimator, max_length=seq_len, pre_vectorizer=vectorizer, ctx=ctx)
 
 
 # %%
