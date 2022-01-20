@@ -68,7 +68,7 @@ tr_dataset, dev_dataset, aux_dataset, num_examples, bert_base, bert_vocab = \
                       ctx=ctx)
 
 estimator = SeqBowEstimator(bert_base, bert_vocab,
-                            bert_model_name = model_name, bert_data_name = dataset,
+                            bert_model_name = model_name, bert_dataset = dataset,
                             n_labels = num_classes,
                             bow_vocab = vectorizer.get_vocab(),
                             optimizer='bertadam',

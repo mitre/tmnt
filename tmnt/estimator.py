@@ -107,7 +107,7 @@ class BaseEstimator(object):
         self.coherence_coefficient = coherence_coefficient
         self.reporter = reporter
         self.ctx = ctx
-        self.latent_distribution = latent_distribution or LogisticGaussianDistribution(20)
+        self.latent_distribution = latent_distribution or LogisticGaussianDistribution(20, ctx=ctx)
         self.optimizer = optimizer
         self.lr = lr
         self.n_latent = self.latent_distribution.n_latent
