@@ -58,6 +58,8 @@ selector = BaseSelector(tmnt_config, iterations=2, searcher='random',
                         scheduler='fifo', cpus_per_task=8, log_dir='_exp_out_dir')
 
 trainer = SeqBowVEDTrainer('_exp_out_dir', (train_data, train_y_s), (dev_data, dev_y_s), use_gpu=False, log_interval=1)
-selector.select_model(trainer)
+estimator, _, _ = selector.select_model(trainer)
+
+
 
 

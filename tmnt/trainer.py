@@ -379,14 +379,17 @@ class SeqBowVEDTrainer(TopicTrainer):
         use_gpu (bool): Flag to force use of a GPU if available.  Default = False.
         log_interval (int): Perform validation (NPMI and perplexity) on the validation set this many batches. Default = 10.
         rng_seed (int): Seed for random number generator. Default = 1234
+        tmnt_vectorizer_args (dict): Dictionary of keyword parameter values to instantiate the TMNTVectorizer
     """
     def __init__(self, model_out_dir, train_data_path, 
-                 test_data_path, aux_data_path=None, use_gpu=False, log_interval=10, rng_seed=1234):
+                 test_data_path, aux_data_path=None, use_gpu=False, log_interval=10, rng_seed=1234,
+                 tmnt_vectorizer_args=None):
         super().__init__(None, model_out_dir, train_data_or_path=train_data_path, test_data_or_path=test_data_path,
                          aux_data_or_path=aux_data_path, use_gpu=use_gpu, val_each_epoch=True, rng_seed=rng_seed)
         self.model_out_dir = model_out_dir
         self.kld_wt = 1.0
         self.log_interval = log_interval
+        self.tmnt_vectorizer_args = tmnt_vectorizer_args
 
 
     @classmethod
@@ -427,7 +430,9 @@ class SeqBowVEDTrainer(TopicTrainer):
         """
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
-        vectorizer = TMNTVectorizer(vocab_size=4000, text_key="text", label_key="label")
+        vectorizer = \
+            TMNTVectorizer(**self.tmnt_vectorizer_args) if self.tmnt_vectorizer_args \
+            else TMNTVectorizer(vocab_size=4000, text_key="text", label_key="label")
         if isinstance(self.train_data_or_path, str):
             _, _ = vectorizer.fit_transform_json(self.train_data_or_path)
             classes = list(vectorizer.label_map) if config['use_labels'] else None
