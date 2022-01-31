@@ -630,7 +630,7 @@ class BaseBowEstimator(BaseEstimator):
             if validation_dataloader is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 sc_obj, v_res = self._perform_validation(epoch, validation_dataloader, val_X_size, total_val_words, val_X, val_y)
         mx.nd.waitall()
-        if v_res is None:
+        if v_res is None and validation_dataloader is not None:
             sc_obj, v_res = self._perform_validation(0, validation_dataloader, val_X_size, total_val_words, val_X, val_y)
         return sc_obj, v_res
 
@@ -1615,7 +1615,7 @@ class SeqBowEstimator(BaseEstimator):
             if self.checkpoint_dir:
                 self.write_model(self.checkpoint_dir, suffix=str(epoch_id))
         mx.nd.waitall()
-        if v_res is None:
+        if v_res is None and dev_data is not None:
             sc_obj, v_res = self._perform_validation(model, dev_data, 0)
         return sc_obj, v_res
 
