@@ -29,16 +29,12 @@ Below is an example::
         Black Sea, to the Mediterranean, so if you use the term Greater Armenia use it with care.',
         'I have two pairs of headphones I\'d like to sell.  These are excellent, and both in great condition'])
 
-The resulting ``encodings`` is a ``list`` of ``NDArray`` objects with shape ``(,K)`` where ``K`` is the number of topics.
+The resulting ``encodings`` is a ``list`` of ``numpy.ndarray`` objects with shape ``(,K)`` where ``K`` is the number of topics.
 
-You can use the method ``mx.nd.argsort`` to get the order of components (i.e. topics) in ascending probability, e.g.::
+You can use the method ``numpy.argsort`` to get the order of components (i.e. topics) in ascending probability, e.g.::
 
-  >>> import mxnet as mx
-  >>> mx.nd.argsort(encodings[0])
-
-Note also the ``NDArray`` objects can be converted to numpy objects via::
-
-  >>> enc_0_np = encodings[0].asnumpy()
+  >>> import numpy as np
+  >>> np.argsort(encodings[0])
 
 If the model trained was a (categorical) co-variate model, each batch of texts to encoder should have corresponding
 co-variate values.  This is done by adding an array of strings of the same length as the text array passed to ``encode_batch``
