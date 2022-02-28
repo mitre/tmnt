@@ -325,6 +325,28 @@ def get_aux_dataloader(trans, batch_size, aux_dataset):
     return loader_aux
 
 
+def get_bert_tokenized_dataset(input_ds, bert_tokenizer, class_labels, max_len):
+    if bert_tokenizer is None:
+        bert, bert_vocabulary = get_model(
+            name=bert_model_name,
+            dataset_name=bert_dataset,
+            pretrained=True,
+            ctx=ctx,
+            use_pooler=True,
+            use_decoder=False,
+        use_classifier=False)
+        do_lower_case = 'uncased' in bert_dataset    
+        bert_tokenizer = BERTTokenizer(bert_vocabulary, lower=do_lower_case)
+    trans = BERTDatasetTransform(bert_tokenizer, max_len,
+                                 class_labels=class_labels,
+                                 pad=False, pair=False,
+                                 has_label=True,
+                                 vectorizer=vectorizer,
+                                 bert_vocab_size = 0,
+                                 num_classes = len(class_labels))
+    dataset, _ = preprocess_seq_data(trans, class_labels, input_ds, batch_size, max_len, train_mode=False, pad=False)
+    return dataset
+    
 
 def get_bert_datasets(class_labels,
                       vectorizer,
@@ -365,8 +387,13 @@ def get_bert_datasets(class_labels,
         aux_data = get_aux_dataloader(trans, batch_size, aux_ds)
     else:
         aux_data = None
-    dev_data, _ = preprocess_seq_data(trans, class_labels, dev_ds, batch_size, max_len, train_mode=False, pad=pad)
+    if dev_ds is not None:
+        dev_data, _ = preprocess_seq_data(trans, class_labels, dev_ds, batch_size, max_len, train_mode=False, pad=pad)
+    else:
+        dev_data = None
     return train_data, dev_data, aux_data, num_train_examples, bert, bert_vocabulary
+
+
 
 
 ############

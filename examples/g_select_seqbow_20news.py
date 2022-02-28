@@ -52,13 +52,21 @@ dev_y_s = ['class_'+str(y) for y in dev_y]
 
 #config_space = './ved_config.yaml'
 #tmnt_config = TMNTConfigSeqBOW(config_space).get_configspace()
-#tmnt_config = ag.space.Dict(**default_seq_config_space)
 tmnt_config = default_seq_config_space
 selector = BaseSelector(tmnt_config, iterations=2, searcher='random', 
                         scheduler='fifo', cpus_per_task=8, log_dir='_exp_out_dir')
 
 trainer = SeqBowVEDTrainer('_exp_out_dir', (train_data, train_y_s), (dev_data, dev_y_s), use_gpu=False, log_interval=1)
 estimator, _, _ = selector.select_model(trainer)
+
+## to explicity/separately validate the trained estimator
+
+from tmnt.bert_handling import get_bert_datasets
+
+class_labels = list(set(train_y_s)) # get unique labels here
+dataloader = get_bert_tokenized_dataset(train_data, None, class_labels, max_len=tmnt_config['max_seq_len'])
+result_dict, _ , _ = estimator.validate(estimator.model, dataloader)
+
 
 
 

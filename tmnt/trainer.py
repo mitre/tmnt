@@ -41,7 +41,8 @@ class BaseTrainer(object):
         test_data (array-like or sparse matrix): Testing/validation input data tensor
     """
 
-    def __init__(self, model_out_dir=None, train_data_or_path=None, test_data_or_path=None, aux_data_or_path=None, use_gpu=False, val_each_epoch=False, rng_seed=1234):
+    def __init__(self, model_out_dir=None, train_data_or_path=None, test_data_or_path=None, aux_data_or_path=None, use_gpu=False,
+                 val_each_epoch=False, rng_seed=1234):
         self.model_out_dir = model_out_dir
         self.train_data_or_path   = train_data_or_path
         self.test_data_or_path    = test_data_or_path
@@ -184,7 +185,7 @@ class TopicTrainer(BaseTrainer):
                 seed_rng(rng_seed) # update RNG
                 logging.info("Setting rng seed to {}".format(rng_seed))
                 rng_seed += 1
-                model, obj, v_res = self.train_model(config, FakeReporter())
+                model, obj, v_res = self.train_model(config, FakeReporter()) 
                 npmis.append(v_res['npmi'])
                 perplexities.append(v_res['ppl'])
                 redundancies.append(v_res['redundancy'])
@@ -412,24 +413,7 @@ class SeqBowVEDTrainer(TopicTrainer):
         return trainer
 
 
-    def train_model(self, config, reporter):
-        """Primary training call used for model training/evaluation by autogluon model selection
-        or for training one off models.
-        
-        Parameters:
-            config (:class:`tmnt.configuration.TMNTConfigSeqBOW`): TMNT configuration for seq-bow models
-            reporter (:class:`autogluon.core.scheduler.reporter.Reporter`): object for reporting model evaluations to scheduler
-        
-        Returns:
-            (tuple): Tuple containing:
-                - model (:class:`tmnt.estimator.SeqBowEstimator`): variational BERT encoder-decoder model with trained parameters
-                - obj (float): scaled objective with fit model
-                - npmi (float): coherence on validation set
-                - perplexity (float): perplexity score on validation data
-                - redundancy (float): topic model redundancy of top 5 terms for each topic
-        """
-        ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
-        ctx = ctx_list[0]
+    def get_dataloaders(self, config, ctx):
         vectorizer = \
             TMNTVectorizer(**self.tmnt_vectorizer_args) if self.tmnt_vectorizer_args \
             else TMNTVectorizer(vocab_size=4000, text_key="text", label_key="label")
@@ -465,6 +449,34 @@ class SeqBowVEDTrainer(TopicTrainer):
             get_bert_datasets(classes, vectorizer, tr_ds, val_ds, batch_size, max_seq_len, aux_ds = aux_ds, 
                               bert_model_name=bert_model_name, bert_dataset=bert_dataset, ctx=ctx)
         n_labels = len(classes) if classes else 0
+        return bert_base, bert_vocab, vectorizer, n_labels, tr_dataset, val_dataset, aux_dataset, num_examples
+        
+
+
+    def train_model(self, config, reporter):
+        """Primary training call used for model training/evaluation by autogluon model selection
+        or for training one off models.
+        
+        Parameters:
+            config (:class:`tmnt.configuration.TMNTConfigSeqBOW`): TMNT configuration for seq-bow models
+            reporter (:class:`autogluon.core.scheduler.reporter.Reporter`): object for reporting model evaluations to scheduler
+        
+        Returns:
+            (tuple): Tuple containing:
+                - model (:class:`tmnt.estimator.SeqBowEstimator`): variational BERT encoder-decoder model with trained parameters
+                - obj (float): scaled objective with fit model
+                - npmi (float): coherence on validation set
+                - perplexity (float): perplexity score on validation data
+                - redundancy (float): topic model redundancy of top 5 terms for each topic
+        """
+        ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
+        ctx = ctx_list[0]
+
+        
+        ## get data here
+        bert_base, bert_vocab, vectorizer, n_labels, tr_dataset, val_dataset, aux_dataset, num_examples = \
+            self.get_dataloaders(config, ctx)
+        
         logging.info('Number of labels: {}'.format(n_labels))
         logging.info('Number of examples: {}'.format(num_examples))
         seq_ved_estimator = SeqBowEstimator.from_config(config, bert_base, bert_vocab, vectorizer.get_vocab(),
