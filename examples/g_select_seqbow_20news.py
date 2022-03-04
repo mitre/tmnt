@@ -24,7 +24,7 @@ data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                               remove=('headers', 'footers', 'quotes'),
                               return_X_y=True)
 
-tr_size = 8000
+tr_size = 20 # 8000
 train_data = data[:tr_size]
 dev_data   = data[-tr_size:]
 train_y    = y[:tr_size]
@@ -61,10 +61,11 @@ estimator, _, _ = selector.select_model(trainer)
 
 ## to explicity/separately validate the trained estimator
 
-from tmnt.bert_handling import get_bert_datasets
+from tmnt.bert_handling import get_bert_tokenized_dataset
 
 class_labels = list(set(train_y_s)) # get unique labels here
-dataloader = get_bert_tokenized_dataset(train_data, None, class_labels, max_len=tmnt_config['max_seq_len'])
+dataloader = get_bert_tokenized_dataset(ArrayDataset(train_data, train_y_s),
+                                        trainer.vectorizer, None, class_labels, max_len=tmnt_config['max_seq_len'])
 result_dict, _ , _ = estimator.validate(estimator.model, dataloader)
 
 

@@ -325,7 +325,8 @@ def get_aux_dataloader(trans, batch_size, aux_dataset):
     return loader_aux
 
 
-def get_bert_tokenized_dataset(input_ds, bert_tokenizer, class_labels, max_len):
+def get_bert_tokenized_dataset(input_ds, vectorizer, bert_tokenizer, class_labels, max_len, batch_size=8,
+                               ctx=mx.cpu(), bert_model_name='bert_12_768_12', bert_dataset='book_corpus_wiki_en_uncased'):
     if bert_tokenizer is None:
         bert, bert_vocabulary = get_model(
             name=bert_model_name,

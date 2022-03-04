@@ -109,6 +109,7 @@ class TopicTrainer(BaseTrainer):
     def __init__(self, vocabulary, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.vocabulary   = vocabulary
+        self.vectorizer   = None
         
     
     def _initialize_vocabulary(self, embedding_source, set_vocab=True):
@@ -185,7 +186,7 @@ class TopicTrainer(BaseTrainer):
                 seed_rng(rng_seed) # update RNG
                 logging.info("Setting rng seed to {}".format(rng_seed))
                 rng_seed += 1
-                model, obj, v_res = self.train_model(config, FakeReporter()) 
+                model, obj, v_res, vectorizer = self.train_model(config, FakeReporter()) 
                 npmis.append(v_res['npmi'])
                 perplexities.append(v_res['ppl'])
                 redundancies.append(v_res['redundancy'])
@@ -194,6 +195,7 @@ class TopicTrainer(BaseTrainer):
                     best_vres = v_res
                     best_obj = obj
                     best_model = model
+            self.vectorizer = vectorizer
             #test_type = "HELDOUT" if c_args.tst_vec_file else "VALIDATION"
             test_type = "VALIDATION"
             if ntimes > 1:
@@ -355,7 +357,7 @@ class BowVAETrainer(TopicTrainer):
         else:
             vX, vy = self._get_x_y_data(self.test_data_or_path)
         obj, v_res = vae_estimator.fit_with_validation(X, y, vX, vy)
-        return vae_estimator, obj, v_res
+        return vae_estimator, obj, v_res, None
 
     def write_model(self, estimator):
         """Method to write an estimated model to disk
@@ -485,7 +487,7 @@ class SeqBowVEDTrainer(TopicTrainer):
                                                         reporter=reporter, ctx=ctx)
         obj, v_res = \
             seq_ved_estimator.fit_with_validation(tr_dataset, val_dataset, aux_dataset, num_examples)
-        return seq_ved_estimator, obj, v_res
+        return seq_ved_estimator, obj, v_res, vectorizer
 
 
     def write_model(self, estimator, epoch_id=0):
