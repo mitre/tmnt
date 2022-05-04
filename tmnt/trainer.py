@@ -212,7 +212,7 @@ class TopicTrainer(BaseTrainer):
                 logging.info("Final {} Perplexity     ==> {}".format(test_type, perplexities[0]))
                 logging.info("Final {} Redundancy     ==> {}".format(test_type, redundancies[0]))
                 logging.info("Final {} Objective      ==> {}".format(test_type, objectives[0]))            
-            return best_model, best_obj, best_vres
+            return best_model, best_obj, best_vres, self.vectorizer
         else:
             return self.train_model(config, FakeReporter())
     
@@ -513,7 +513,7 @@ def train_bow_vae(args):
     dd = datetime.datetime.now()
     trainer = BowVAETrainer.from_arguments(args, val_each_epoch=args.eval_each_epoch)
     config = ag.space.Dict(**config_dict)
-    estimator, obj, vres = trainer.train_with_single_config(config, args.num_final_evals)
+    estimator, obj, vres, _ = trainer.train_with_single_config(config, args.num_final_evals)
     trainer.write_model(estimator)
     dd_finish = datetime.datetime.now()
     logging.info("Model training FINISHED. Time: {}".format(dd_finish - dd))
@@ -529,6 +529,6 @@ def train_seq_bow(c_args):
         raise Exception("Invalid JSON configuration file")
     config = ag.space.Dict(**config_dict)    
     trainer = SeqBowVEDTrainer.from_arguments(c_args, config)
-    estimator, obj, vres = trainer.train_with_single_config(config, 1)
+    estimator, obj, vres, _ = trainer.train_with_single_config(config, 1)
     trainer.write_model(estimator)
     
