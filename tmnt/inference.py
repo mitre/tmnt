@@ -34,11 +34,25 @@ class BaseInferencer(object):
     """Base inference object for text encoding with a trained topic model.
 
     """
-    def __init__(self, ctx):
+    def __init__(self, estimator, vectorizer, ctx):
         self.ctx = ctx
+        self.estimator = estimator
+        self.vectorizer = vectorizer
+        
 
-    def save(self, model_dir):
-        raise NotImplementedError
+    def save(self, model_dir: str) -> None:
+        """
+        Save model and vectorizer to disk
+
+        Parameters:
+            model_dir: Model directory to save parmaeters, config, vocabulary and vectorizer
+        """
+        self.estimator.write_model(model_dir)
+        serialized_vector_file = os.path.join(model_dir, 'vectorizer.pkl')
+        if self.vectorizer:
+            with io.open(serialized_vector_file, 'wb') as fp:
+                pickle.dump(self.vectorizer, fp)
+
 
     def encode_texts(self, intexts):
         raise NotImplementedError
@@ -54,13 +68,13 @@ class BowVAEInferencer(BaseInferencer):
     """
     """
     def __init__(self, estimator, pre_vectorizer=None):
-        super().__init__(estimator.model.model_ctx)
+        super().__init__(estimator,
+                         pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.model.vocabulary),
+                         estimator.model.model_ctx)
         self.max_batch_size = 16
         self.vocab = estimator.model.vocabulary
-        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.model.vocabulary)
         self.n_latent = estimator.model.n_latent
         self.model = estimator.model
-        self.estimator = estimator
         if isinstance(estimator.model, CovariateBowVAEModel):
             self.covar_model = True
             self.n_covars = estimator.model.n_covars
@@ -90,19 +104,6 @@ class BowVAEInferencer(BaseInferencer):
         else:
             vectorizer = None
         return cls(estimator, pre_vectorizer=vectorizer)
-
-    def save(self, model_dir: str) -> None:
-        """
-        Save model and vectorizer to disk
-
-        Parameters:
-            model_dir: Model directory to save parmaeters, config, vocabulary and vectorizer
-        """
-        self.estimator.write_model(model_dir)
-        serialized_vector_file = os.path.join(model_dir, 'vectorizer.pkl')
-        if self.vectorizer:
-            with io.open(serialized_vector_file, 'wb') as fp:
-                pickle.dump(self.vectorizer, fp)
 
 
     def get_model_details(self, sp_vec_file_or_X, y=None):
@@ -316,14 +317,14 @@ class SeqVEDInferencer(BaseInferencer):
     """Inferencer for sequence variational encoder-decoder models using BERT
     """
     def __init__(self, estimator, max_length, pre_vectorizer=None, ctx=mx.cpu()):
-        super().__init__(ctx)
-        self.estimator = estimator
+        super().__init__(estimator,
+                         pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.bow_vocab),
+                         ctx)
         self.model     = estimator.model 
         self.bert_base = self.model.bert
         self.tokenizer = BERTTokenizer(estimator.bert_vocab)
         self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
         self.bow_vocab = estimator.bow_vocab
-        self.vectorizer = pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.bow_vocab)
 
 
     @classmethod
