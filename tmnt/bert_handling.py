@@ -272,6 +272,7 @@ def preprocess_seq_data(trans, class_labels, dataset, batch_size, max_len, train
     bow_count_dtype = 'float32'
     # data train
     data_ds = mx.gluon.data.SimpleDataset(pool.map(trans, dataset))
+    pool.close()    
 
     #data_ds_len = data_ds.transform(lambda input_id, length, segment_id, bow, label_id: length, lazy=False)
 
@@ -312,6 +313,7 @@ def get_aux_dataloader(trans, batch_size, aux_dataset):
     bow_count_dtype = 'float32'
     
     aux_ds = mx.gluon.data.SimpleDataset(pool.map(trans, aux_dataset))
+    pool.close()
     a_batchify_fn = nlp.data.batchify.Tuple(
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype))
@@ -446,6 +448,7 @@ def preprocess_data_metriclearn(trans, class_labels, train_a_ds, train_b_ds, bat
             nlp.data.batchify.Tuple(
                     nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
                     nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(bow_count_dtype), nlp.data.batchify.Stack(label_dtype)))
+    pool.close()
     if bucket_sample:
         batch_sampler = nlp.data.sampler.FixedBucketSampler(
             final_len,
@@ -475,6 +478,7 @@ def preprocess_data_metriclearn_separate(trans1, trans2, class_labels, train_a_d
 
     a_data_train = mx.gluon.data.SimpleDataset(pool.map(trans1, train_a_ds))
     b_data_train = mx.gluon.data.SimpleDataset(pool.map(trans2, train_b_ds))
+    pool.close()    
 
     a_batchify_fn = nlp.data.batchify.Tuple(
         nlp.data.batchify.Pad(axis=0), nlp.data.batchify.Stack(),
