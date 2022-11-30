@@ -166,10 +166,10 @@ class HyperSphericalDistribution(BaseDistribution):
     Parameters:
         n_latent (int): Dimentionality of the latent distribution
         kappa (float): Concentration parameter for vMF distributioin (default = 100.0)
-        dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
+        dr (float): Dropout value for dropout applied post sample. optional (default = 0.1)
         ctx (:class:`mxnet.context.Context`): Mxnet computational context (cpu or gpu[id])
     """
-    def __init__(self, n_latent, kappa=100.0, dr=0.2, ctx=mx.cpu()):
+    def __init__(self, n_latent, kappa=100.0, dr=0.1, ctx=mx.cpu()):
         super(HyperSphericalDistribution, self).__init__(n_latent, ctx)
         self.ctx = ctx
         self.kappa = kappa
