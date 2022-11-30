@@ -347,7 +347,7 @@ class BowVAETrainer(TopicTrainer):
                 - obj (float): scaled objective
                 - results_details (dict): Dictionary of estimator metrics on validation data
         """
-        logging.debug("Evaluating with Config: {}".format(config))
+        logging.info("Evaluating with Config: {}".format(config))
         ctx_list = self._get_mxnet_visible_gpus() if self.use_gpu else [mx.cpu()]
         ctx = ctx_list[0]
         vae_estimator = self._get_estimator(config, reporter, ctx)

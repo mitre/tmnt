@@ -160,9 +160,10 @@ class BowVAEInferencer(BaseInferencer):
         data_mat, labels = load_svmlight_file(sp_vec_file, n_features=len(self.vocab), zero_based=True)
         return self.encode_data(data_mat, labels, use_probs=use_probs), labels
 
-    def encode_texts(self, texts, use_probs=True, include_bn=True):
+    def encode_texts(self, texts, use_probs=True, include_bn=True, target_entropy=1.5):
         X, _ = self.vectorizer.transform(texts)
-        encodings = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn)
+        encodings = self.encode_data(X, None, use_probs=use_probs, include_bn=include_bn, 
+                                     target_entropy=target_entropy)
         return encodings
 
     def _get_data_iterator(self, data_mat, labels):

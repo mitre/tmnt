@@ -475,6 +475,7 @@ class BaseBowEstimator(BaseEstimator):
                                                               last_batch_handle='pad', shuffle=False),
                                             num_batches=num_val_batches, last_batch_size = last_batch_size)
         else:
+            logging.info("Getting validation dataset .. Using specialized SparseMatrixDataIter")
             val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = test_batch_size,
                                                                  last_batch_handle='pad', shuffle=False),
                                             )
