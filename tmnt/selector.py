@@ -137,7 +137,11 @@ class BaseSelector(object):
             fp.write(specs)
         logging.info("===> Writing best configuration to {}".format(out_config_file))            
         logging.info("******************************* RETRAINING WITH BEST CONFIGURATION **************************")
-        estimator, obj, vres, _ = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
+        rr = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
+        estimator = rr[0]
+        obj = rr[1]
+        vres = rr[2]
+        #estimator, obj, vres, _ = trainer.train_with_single_config(best_config_dict, self.num_final_evals)
         logging.info("Objective with final retrained model/estimator: {}".format(obj))
         logging.info("Writing model to: {}".format(trainer.model_out_dir))
         trainer.write_model(estimator)        

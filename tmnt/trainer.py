@@ -51,6 +51,7 @@ class BaseTrainer(object):
         self.rng_seed     = rng_seed        
         self.vocab_cache  = {}
         self.validate_each_epoch = val_each_epoch
+        self.vectorizer   = None
 
 
     def _get_x_y_data(self, data_source):
@@ -109,7 +110,7 @@ class TopicTrainer(BaseTrainer):
     def __init__(self, vocabulary, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.vocabulary   = vocabulary
-        self.vectorizer   = None
+
         
     
     def _initialize_vocabulary(self, embedding_source, set_vocab=True):
