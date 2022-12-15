@@ -8,22 +8,24 @@ import math
 import mxnet as mx
 import numpy as np
 from mxnet import gluon as nn
-from mxnet import gluon
+from torch import nn
+from torch.distributions.normal import Normal
+from torch.distributions.uniform import Uniform
 from scipy import special as sp
 
 
 __all__ = ['GaussianDistribution', 'GaussianUnitVarDistribution', 'LogisticGaussianDistribution', 'HyperSphericalDistribution']
 
 
-class BaseDistribution(nn.HybridBlock):
+class BaseDistribution(nn.Module):
     
-    def __init__(self, n_latent, ctx):
+    def __init__(self, enc_size, n_latent, device):
         super(BaseDistribution, self).__init__()
         self.n_latent = n_latent
-        self.model_ctx = ctx
-        with self.name_scope():
-            self.mu_encoder = gluon.nn.Dense(units = n_latent)
-            self.mu_bn = gluon.nn.BatchNorm(momentum = 0.8, epsilon=0.0001)
+        self.device = device
+        self.mu_encoder = nn.Linear(enc_size, n_latent)
+        self.mu_bn = nn.BatchNorm(n_latent, momentum = 0.8, epsilon=0.0001)
+        self.softmax = nn.Softmax(dim=n_latent)        
         #self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     ## perform any postinitialization setup
@@ -31,13 +33,14 @@ class BaseDistribution(nn.HybridBlock):
         pass
 
     ## this is required by most priors
-    def _get_gaussian_sample(self, F, mu, lv, batch_size):
-        eps = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent), ctx=self.model_ctx)
-        return mu + F.exp(0.5*lv) * eps
+    def _get_gaussian_sample(self, mu, lv, batch_size):
+        #eps = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent), ctx=self.model_ctx)
+        eps = Normal(nn.zeros(batch_size, self.n_latent), nn.ones(batch_size, self.n_latent)).sample()
+        return mu + torch.exp(0.5*lv) * eps
 
     ## this is required by most priors
-    def _get_unit_var_gaussian_sample(self, F, mu, batch_size):
-        eps = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent), ctx=self.model_ctx)
+    def _get_unit_var_gaussian_sample(self, mu, batch_size):
+        eps = Normal(nn.zeros(batch_size, self.n_latent), nn.ones(batch_size, self.n_latent)).sample()
         return mu + eps
 
     def get_mu_encoding(self, data, include_bn=False):
@@ -63,26 +66,24 @@ class GaussianDistribution(BaseDistribution):
         ctx (mxnet.context.Context): Mxnet computational context (cpu or gpu[id])
         dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
     """
-    def __init__(self, n_latent, ctx=mx.cpu(), dr=0.2):
-        super(GaussianDistribution, self).__init__(n_latent, ctx)
-        with self.name_scope():
-            self.lv_encoder = gluon.nn.Dense(units = n_latent)            
-            self.lv_bn = gluon.nn.BatchNorm(momentum = 0.8, epsilon=0.001)
-            self.post_sample_dr_o = gluon.nn.Dropout(dr)        
-        #self.lv_bn.collect_params().setattr('grad_req', 'null')        
+    def __init__(self, enc_size, n_latent, device='cpu', dr=0.2):
+        super(GaussianDistribution, self).__init__(enc_size, n_latent, device)
+        self.lv_encoder = nn.Linear(enc_size, n_latent)            
+        self.lv_bn = nn.BatchNorm(n_latent, momentum = 0.8, epsilon=0.001)
+        self.post_sample_dr_o = nn.Dropout(p=dr)        
 
-    def _get_kl_term(self, F, mu, lv):
-        return -0.5 * F.sum(1 + lv - mu*mu - F.exp(lv), axis=1)
+    def _get_kl_term(self, mu, lv):
+        return -0.5 * torch.sum(1 + lv - mu*mu - torch.exp(lv), 1)
 
-    def hybrid_forward(self, F, data, batch_size):
+    def hybrid_forward(self, data, batch_size):
         """Generate a sample according to the Gaussian given the encoder outputs
         """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
         lv = self.lv_encoder(data)
         lv_bn = self.lv_bn(lv)
-        z = self._get_gaussian_sample(F, mu_bn, lv_bn, batch_size)
-        KL = self._get_kl_term(F, mu_bn, lv_bn)
+        z = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
+        KL = self._get_kl_term(mu_bn, lv_bn)
         z = self.post_sample_dr_o(z)
         return z, KL
 
@@ -102,16 +103,16 @@ class GaussianUnitVarDistribution(BaseDistribution):
         with self.name_scope():
             self.post_sample_dr_o = gluon.nn.Dropout(dr)
 
-    def _get_kl_term(self, F, mu):
-        return -0.5 * F.sum(1.0 + self.log_variance - mu*mu - self.variance, axis=1)
+    def _get_kl_term(self, mu):
+        return -0.5 * torch.sum(1.0 + self.log_variance - mu*mu - self.variance, axis=1)
 
-    def hybrid_forward(self, F, data, batch_size):
+    def hybrid_forward(self, data, batch_size):
         """Generate a sample according to the unit variance Gaussian given the encoder outputs
         """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
-        z = self._get_gaussian_sample(F, mu_bn, self.log_variance, batch_size)
-        KL = self._get_kl_term(F, mu_bn)
+        z = self._get_gaussian_sample(mu_bn, self.log_variance, batch_size)
+        KL = self._get_kl_term(mu_bn)
         return self.post_sample_dr_o(z), KL
 
 
@@ -124,40 +125,40 @@ class LogisticGaussianDistribution(BaseDistribution):
         dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
         alpha (float): Value the determines prior variance as 1/alpha - (2/n_latent) + 1/(n_latent^2)
     """
-    def __init__(self, n_latent, ctx=mx.cpu(), dr=0.1, alpha=1.0):
-        super(LogisticGaussianDistribution, self).__init__(n_latent, ctx)
+    def __init__(self, enc_size, n_latent, ctx=mx.cpu(), dr=0.1, alpha=1.0):
+        super(LogisticGaussianDistribution, self).__init__(enc_size, n_latent, ctx)
         self.alpha = alpha
 
         prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
         self.prior_var = mx.nd.array([prior_var], ctx=ctx)
         self.prior_logvar = mx.nd.array([math.log(prior_var)], ctx=ctx)
 
-        with self.name_scope():
-            self.lv_encoder = gluon.nn.Dense(units = n_latent)
-            self.lv_bn = gluon.nn.BatchNorm(momentum = 0.8, epsilon=0.001)
-            self.post_sample_dr_o = gluon.nn.Dropout(dr)
+        self.lv_encoder = nn.Linear(enc_size, n_latent)
+        self.lv_bn = nn.BatchNorm(n_latent, momentum = 0.8, epsilon=0.001)
+        self.post_sample_dr_o = nn.Dropout(dr)
+
         #self.lv_bn.collect_params().setattr('grad_req', 'null')        
             
 
-    def _get_kl_term(self, F, mu, lv):
-        posterior_var = F.exp(lv)
+    def _get_kl_term(self, mu, lv):
+        posterior_var = torch.exp(lv)
         delta = mu
-        dt = F.broadcast_div(delta * delta, self.prior_var)
-        v_div = F.broadcast_div(posterior_var, self.prior_var)
+        dt = torch.div(delta * delta, self.prior_var)
+        v_div = torch.div(posterior_var, self.prior_var)
         lv_div = self.prior_logvar - lv
-        return 0.5 * (F.sum((v_div + dt + lv_div), axis=1) - self.n_latent)
+        return 0.5 * (torch.sum((v_div + dt + lv_div), 1) - self.n_latent)
 
-    def hybrid_forward(self, F, data, batch_size):
+    def hybrid_forward(self, data, batch_size):
         """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
         """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)        
         lv = self.lv_encoder(data)
         lv_bn = self.lv_bn(lv)
-        z_p = self._get_gaussian_sample(F, mu_bn, lv_bn, batch_size)
-        KL = self._get_kl_term(F, mu, lv)
+        z_p = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
+        KL = self._get_kl_term(mu, lv)
         z = self.post_sample_dr_o(z_p)
-        return F.softmax(z), KL
+        return self.softmax(z), KL
     
 
 class HyperSphericalDistribution(BaseDistribution):
@@ -169,8 +170,8 @@ class HyperSphericalDistribution(BaseDistribution):
         dr (float): Dropout value for dropout applied post sample. optional (default = 0.1)
         ctx (:class:`mxnet.context.Context`): Mxnet computational context (cpu or gpu[id])
     """
-    def __init__(self, n_latent, kappa=100.0, dr=0.1, ctx=mx.cpu()):
-        super(HyperSphericalDistribution, self).__init__(n_latent, ctx)
+    def __init__(self, enc_size, n_latent, kappa=100.0, dr=0.1, device='cpu'):
+        super(HyperSphericalDistribution, self).__init__(enc_size, n_latent, device)
         self.ctx = ctx
         self.kappa = kappa
         self.kld_v = float(HyperSphericalDistribution._vmf_kld(self.kappa, self.n_latent))
@@ -182,11 +183,11 @@ class HyperSphericalDistribution(BaseDistribution):
         self.approx_var = np.sqrt(aa * aa / ( (4 * aa * aa)  * (2 * aa + 1) ))
         self.num_samples = 100000
         self.w_samples = self._pregenerate_samples(num_samples=self.num_samples)
-        with self.name_scope():
-            self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
-            self.vmf_samples = self.params.get('vmf_samples', shape=(self.num_samples,), grad_req='null',
+
+        self.kld_const = self.params.get('kld_const', shape=(1,), init=mx.init.Constant([self.kld_v]), differentiable=False)
+        self.vmf_samples = self.params.get('vmf_samples', shape=(self.num_samples,), grad_req='null',
                                                init = mx.init.Constant([self.kld_v]), differentiable=False)
-            self.post_sample_dr_o = gluon.nn.Dropout(dr)            
+        self.post_sample_dr_o = nn.Dropout(dr)            
         self.been_initialized = False
 
     def post_init(self, ctx):
@@ -195,17 +196,17 @@ class HyperSphericalDistribution(BaseDistribution):
         self.vmf_samples.set_data(self.w_samples.as_in_context(ctx))
         self.been_initialized = True
 
-    def hybrid_forward(self, F, data, batch_size, kld_const, vmf_samples):
+    def hybrid_forward(self, data, batch_size, kld_const, vmf_samples):
         """Generate a sample according to the vFM latent distribution given the encoder outputs
         """
         if not self.been_initialized:
             raise Exception("Hyperspherical distribution needs to be initialized after other layers by calling the 'post_init' method")
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
-        kld = F.broadcast_to(kld_const, shape=(batch_size,))
-        z_p = self._get_hypersphere_sample(F, mu_bn, batch_size, vmf_samples)
+        kld = kld_const.expand(batch_size)
+        z_p = self._get_hypersphere_sample(mu_bn, batch_size, vmf_samples)
         z = z_p # self.post_sample_dr_o(z_p)
-        z_r = F.softmax(z)
+        z_r = self.softmax(z)
         return z_r, kld
 
     def _pregenerate_samples(self, num_samples=100000):
@@ -233,10 +234,10 @@ class HyperSphericalDistribution(BaseDistribution):
     def _get_hypersphere_sample(self, F, mu, batch_size, vmf_samples):
         sw = self._get_weight_from_cache(F, batch_size, vmf_samples)
         #sw = self._get_weight_batch(F, batch_size)
-        sw = F.expand_dims(sw, axis=1)
-        sw_v = F.broadcast_to(sw, shape=(batch_size, self.n_latent))
-        vv = self._get_orthonormal_batch(F, mu, batch_size)
-        sc11 = F.ones((batch_size, self.n_latent), ctx=self.model_ctx)
+        sw = sw.unsqueeze(1)
+        sw_v = sw.expand(batch_size, self.n_latent)
+        vv = self._get_orthonormal_batch(mu, batch_size)
+        sc11 = torch.ones((batch_size, self.n_latent), device=self.device)
         sc22 = sw_v ** 2.0
         sc_factor = F.sqrt(sc11 - sc22)
         orth_term = vv * sc_factor
@@ -261,22 +262,25 @@ class HyperSphericalDistribution(BaseDistribution):
         dim = self.dim
         x = self.x
         c = self.c
-        mask = F.ones(batch_size, ctx=self.ctx)
-        zeros = F.zeros(batch_size, ctx=self.ctx)
-        w_f = F.zeros(batch_size, ctx=self.ctx)
-        zz = F.zeros(1, ctx=self.ctx)
-        while F.broadcast_greater(F.sum(mask), zz):
-            z = F.clip(F.random.normal(0.5, self.approx_var, batch_size, ctx=self.ctx), 0.000001, 0.99999)
+        mask = torch.ones(batch_size, ctx=self.device)
+        zeros = torch.zeros(batch_size, ctx=self.device)
+        w_f = torch.zeros(batch_size, ctx=self.device)
+        zz = torch.zeros(1, ctx=self.device)
+        #while F.broadcast_greater(F.sum(mask), zz):
+        while (torch.sum(mask) > zz)
+            z = Normal(torch.full((batch_size,), 0.5),
+                       torch.full((batch_size,), self.approx_var),
+                       device=self.device).sample().clamp(0.000001, 0.99999)
             w = (1. - (1. + b) * z) / (1. - (1. - b) * z)
-            u = F.random.uniform(0, 1, batch_size, ctx=self.ctx)
-            accept = kappa * w + dim * F.log(1. - x * w) - c >= F.log(u)
+            u = Uniform(torch.zeros((batch_size,)), torch.ones((batch_size,)), device=self.device).sample()
+            accept = kappa * w + dim * torch.log(1. - x * w) - c >= torch.log(u)
             reject = 1 - accept
-            mask = F.where(accept, zeros, mask)  # if reject = 1 then return mask as is, otherwise turn it off 
-            w_f = F.where(mask, w_f, w)  # if mask is 1, then don't use w and leave as unset 
+            mask = torch.where(accept, zeros, mask)  # if reject = 1 then return mask as is, otherwise turn it off 
+            w_f = torch.where(mask, w_f, w)  # if mask is 1, then don't use w and leave as unset 
         return w
 
-    def _get_weight_batch_old(self, F, batch_size):
-        batch_sample = F.zeros((batch_size,), ctx=self.model_ctx)
+    def _get_weight_batch_old(self, batch_size):
+        batch_sample = torch.zeros((batch_size,), device=self.device)
         for i in range(batch_size):
             batch_sample[i] = self._get_single_weight()
         return batch_sample
@@ -301,13 +305,15 @@ class HyperSphericalDistribution(BaseDistribution):
             if kappa * w + dim * np.log(1. - x * w) - c >= np.log(u):  # thresh is dim *(kdiv * (w-x) + log(1-x*w) -log(1-x**2))
                 return w
 
-    def _get_orthonormal_batch(self, F, mu, batch_size):
-        mu_1       = F.expand_dims(mu, axis=1)
-        rv         = F.random_normal(loc=0, scale=1, shape=(batch_size, self.n_latent, 1), ctx=self.model_ctx)
-        rescaled_1 = F.squeeze(F.linalg.gemm2(mu_1, rv), axis=2)
-        rescaled   = F.broadcast_to(rescaled_1, shape=(batch_size, self.n_latent))
-        proj_mu_v  = F.broadcast_mul(mu, rescaled)        # shape =  (batch_size, n_latent)
+    def _get_orthonormal_batch(self, mu, batch_size):
+        mu_1       = mu.unsqueeze(1)
+        rv         = Normal(torch.zeros(batch_size, self.n_latent, 1),
+                            torch.ones(batch_size, self.n_latent, 1),
+                            device=self.device)
+        rescaled_1 = torch.bmm(mu_1, rv).squeeze(2)
+        rescaled   = rescaled_1.expand(batch_size, self.n_latent)
+        proj_mu_v  = mu * rescaled        # shape =  (batch_size, n_latent)
         o_vec      = rv.squeeze() - proj_mu_v
-        o_norm     = F.norm(o_vec, axis=1, keepdims=True)
-        return F.broadcast_div(o_vec, o_norm)
+        o_norm     = torch.norm(o_vec, dim=1, keepdim=True)
+        return     torch.div(o_vec, o_norm)
     

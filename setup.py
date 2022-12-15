@@ -39,7 +39,8 @@ if __name__ == '__main__':
         'scikit-learn>=0.24.1',
         'numba<=0.52.0',
         'umap-learn==0.4.6',
-        'tabulate>=0.8.7'
+        'tabulate>=0.8.7',
+        'torch>=1.13.0'
     ]
     ## need to stick with mxnet < 1.8 to maintain compatibility on Windows
     if(environ.get('USE_CUDA') == '1'):
