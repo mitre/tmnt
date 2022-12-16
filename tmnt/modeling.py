@@ -19,37 +19,36 @@ from tmnt.distribution import GaussianDistribution
 from tmnt.distribution import HyperSphericalDistribution
 from tmnt.distribution import GaussianUnitVarDistribution
 from mxnet.gluon.loss import Loss, KLDivLoss
+from torch import nn
 
 class BaseVAE(HybridBlock):
 
-    def __init__(self, vocabulary=None, latent_distribution=LogisticGaussianDistribution(20),
+    def __init__(self, vocabulary=None, latent_distribution=LogisticGaussianDistribution(100, 20),
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
-                 n_covars=0, ctx=mx.cpu(), **kwargs):
+                 n_covars=0, device='cpu', **kwargs):
         super(BaseVAE, self).__init__(**kwargs)        
         self.vocabulary = vocabulary
         self.vocab_size = len(vocabulary)        
         self.n_latent   = latent_distribution.n_latent
+        self.enc_size   = latent_distribution.enc_size
         self.coherence_reg_penalty = coherence_reg_penalty
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.n_covars = n_covars
-        self.model_ctx = ctx
+        self.device = device
         self.embedding = None
 
-        ## common aspects of all(most!) variational topic models
-        with self.name_scope():
-            self.latent_distribution = latent_distribution
-            self.decoder = gluon.nn.Dense(in_units=self.n_latent, units=self.vocab_size, activation=None)
-            self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
+        self.latent_distribution = latent_distribution
+        self.decoder = nn.Linear(self.n_latent, self.vocab_size, activation=None)
+        #self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
 
     def initialize_bias_terms(self, wd_freqs):
         if wd_freqs is not None:
             freq_nd = wd_freqs + 1 # simple smoothing
             total = freq_nd.sum()
             log_freq = freq_nd.log() - freq_nd.sum().log()
-            bias_param = self.decoder.collect_params().get('bias')
-            bias_param.set_data(log_freq)
-            bias_param.grad_req = 'null'
-            self.out_bias = bias_param.data()            
+            with torch.no_grad():
+                self.decoder.bias = nn.Parameter(log_freq)
+                self.decoder.bias.requires_grad_(False)
 
     def get_ordered_terms(self):
         """
@@ -57,53 +56,35 @@ class BaseVAE(HybridBlock):
         probability increases the most for a unit increase in a given topic score/probability
         are those most associated with the topic.
         """
-        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
-        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
-        for i in range(self.vocab_size):
-            z.attach_grad()        
-            with mx.autograd.record():
-                y = self.decoder(z)
-                yi = y[0][i]
-            yi.backward()
-            jacobian[i] = z.grad
-        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
-        return sorted_j.asnumpy()
+        z = torch.ones((1, self.n_latent), device=self.device)
+        jacobian = torch.autograd.functional.jacobian(self.decoder, z)
+        sorted_j = jacobian.argsort(dim=0, descending=True)
+        return sorted_j.numpy()
     
 
     def get_topic_vectors(self):
         """
         Returns unnormalized topic vectors
         """
-        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
-        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
-        z.attach_grad()
-        for i in range(self.vocab_size):
-            with mx.autograd.record():
-                y = self.decoder(z)
-                yi = y[0][i]
-            yi.backward()
-            jacobian[i] = z.grad
+        z = torch.ones((1, self.n_latent), device=self.device)
+        jacobian = torch.autograd.functional.jacobian(self.decoder, z)
         return jacobian.asnumpy()        
 
 
-    def add_coherence_reg_penalty(self, F, cur_loss):
+    def add_coherence_reg_penalty(self, cur_loss):
         if self.coherence_reg_penalty > 0.0 and self.embedding is not None:
-            if F is mx.ndarray:
-                w = self.decoder.params.get('weight').data()
-                emb = self.embedding.params.get('weight').data()
-            else:
-                w = self.decoder.params.get('weight').var()
-                emb = self.embedding.params.get('weight').var()
+            w = self.decoder.weight.data
+            emb = self.embedding.weight.data
             c, d = self.coherence_regularization(w, emb)
             return (cur_loss + c + d), c, d
         else:
-            return (cur_loss, F.zeros_like(cur_loss), F.zeros_like(cur_loss))
+            return (cur_loss, torch.zeros_like(cur_loss), torch.zeros_like(cur_loss))
 
-    def get_loss_terms(self, F, data, y, KL, batch_size):
-        rr = data * F.log(y+1e-12)
-        recon_loss = -F.sparse.sum( rr, axis=1 )
-        i_loss = F.broadcast_plus(recon_loss, KL)
-        ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(F, i_loss)
+    def get_loss_terms(self, data, y, KL, batch_size):
+        rr = data * torch.log(y+1e-12)
+        recon_loss = -torch.sparse.sum( rr, dim=1 )
+        i_loss = recon_loss + KL
+        ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(i_loss)
         return ii_loss, recon_loss, coherence_loss, redundancy_loss
 
 
@@ -144,76 +125,80 @@ class BowVAEModel(BaseVAE):
             assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
         self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
         
-        with self.name_scope():
-            self.embedding = gluon.nn.Dense(in_units=self.vocab_size, units=self.embedding_size, activation='tanh')
-            self.encoder = self._get_encoder(self.encoding_dims, dr=enc_dr)
-            if self.has_classifier:
-                self.lab_dr = gluon.nn.Dropout(self.enc_dr*2.0)
-                self.classifier = gluon.nn.Dense(in_units=self.n_latent, units=self.n_labels, activation=None, use_bias=True)
-            #self.lab_loss_fn = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
+        self.embedding = torch.nn.Linear(self.vocab_size, self.embedding_size)
+        self.act1      = torch.nn.Tanh()
+        self.encoder   = self._get_encoder(self.encoding_dims, dr=enc_dr)
+        if self.has_classifier:
+            self.lab_dr = torch.nn.Dropout(self.enc_dr*2.0)
+            self.classifier = torch.nn.Linear(self.n_latent, self.n_labels)
             
-        self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-        ## vmf needs to set weight values post-initialization
-        self.latent_distribution.post_init(self.model_ctx)
+        self.apply(self._init_weights)
         if self.vocabulary.embedding:            
             emb = self.vocabulary.embedding.idx_to_vec.transpose()
-            emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
+            emb_norm_val = torch.norm(emb, keepdim=True, dim=0) + 1e-10
             emb_norm = emb / emb_norm_val
-            self.embedding.weight.set_data(emb_norm)
+            self.embedding.weight.data = emb_norm
             if fixed_embedding:
-                self.embedding.collect_params().setattr('grad_req', 'null')
+                self.embedding.requires_grad_(False)
 
+
+    def _init_weights(self, module):
+        if isinstance(module, torch.nn.Linear):
+            torch.nn.init.xavier_uniform_(module.weight.data)
+        elif isinstance(module, tmnt.distribution.BaseDistribution):
+            module.post_init(self.device) # vmf needs this
+            
+            
     def _get_encoder(self, dims, dr=0.1):
-        encoder = gluon.nn.HybridSequential()
+        encoder = torch.nn.Sequential()
         for i in range(len(dims)-1):
-            encoder.add(gluon.nn.Dense(in_units=dims[i], units=dims[i+1], activation='softrelu'))
+            encoder.add_module("linear_"+i, torch.nn.Linear(dims[i], dims[i+1]))
+            encoder.add_module("soft_"+i, torch.nn.Softplus())
             if dr > 0.0:
-                encoder.add(gluon.nn.Dropout(dr))
+                encoder.add_module("drop_"+i, torch.nn.Dropout(dr))
         return encoder
 
     def get_ordered_terms_encoder(self, dataloader, sample_size=-1):
         jacobians = np.zeros(shape=(self.n_latent, self.vocab_size))
         samples = 0
+        
+        def partial_network(data):
+            emb_out = self.embedding(data)
+            enc_out = self.latent_distribution.get_mu_encoding(self.encoder(emb_out), include_bn=True)
+            return enc_out
+        
         for bi, (data, _) in enumerate(dataloader):
             if sample_size > 0 and samples >= sample_size:
                 print("Sample processed, exiting..")
                 break
             samples += data.shape[0]
-            x_data = data.tostype('default')
-            x_data = x_data.as_in_context(self.model_ctx)
-            x_data = mx.nd.minimum(x_data, 1.0)
-            for i in range(self.n_latent):
-                x_data.attach_grad()
-                with mx.autograd.record():
-                    emb_out = self.embedding(x_data)
-                    enc_out = self.latent_distribution.get_mu_encoding(self.encoder(emb_out), include_bn=True)
-                    yi = enc_out[:, i] ## for the ith topic, over batch
-                dx = mx.autograd.grad(yi, x_data, train_mode=False)
-                ss = dx[0].sum(axis=0).asnumpy()
-                jacobians[i] += ss
-        sorted_j = (- jacobians).argsort(axis=1).transpose()
+            x_data = x_data.to(device = self.device)
+            x_data = torch.minimum(x_data, torch.Tensor([1.0]))
+            jacobian = torch.autograd.functional.jacobian(partial_network, x_data)
+            ss = jacobian.sum(dim=0).numpy()
+            jacobians[i] += ss
+        sorted_j = (- jacobians).argsort(dim=1).transpose()
         return sorted_j
 
     def get_ordered_terms_per_item(self, dataloader, sample_size=-1):
         jacobian_list = [[] for i in range(self.n_latent)]
         samples = 0
+        
+        def partial_network(data):
+            emb_out = self.embedding(data)
+            enc_out = self.latent_distribution.get_mu_encoding(self.encoder(emb_out), include_bn=True)
+            return enc_out
+        
         for bi, (data, _) in enumerate(dataloader):
             if sample_size > 0 and samples >= sample_size:
                 print("Sample processed, exiting..")
                 break
             samples += data.shape[0]
-            x_data = data.tostype('default')
-            x_data = x_data.as_in_context(self.model_ctx)
-            x_data = mx.nd.minimum(x_data, 1.0)
-            for i in range(self.n_latent):
-                x_data.attach_grad()
-                with mx.autograd.record():
-                    emb_out = self.embedding(x_data)
-                    enc_out = self.latent_distribution.get_mu_encoding(self.encoder(emb_out), include_bn=True)
-                    yi = enc_out[:, i] ## for the ith topic, over batch
-                dx = mx.autograd.grad(yi, x_data, train_mode=False)
-                ss = dx[0].asnumpy()
-                jacobian_list[i] += list(ss)
+            x_data = x_data.to(device = self.device)
+            x_data = torch.minimum(x_data, torch.Tensor([1.0]))
+            jacobian = torch.autograd.functional.jacobian(partial_network, x_data)
+            ss = jacobian.numpy()
+            jacobian_list[i] += list(ss)
         return jacobian_list
 
 
@@ -234,7 +219,7 @@ class BowVAEModel(BaseVAE):
         return self.latent_distribution.get_mu_encoding(self.encoder(self.embedding(data)), include_bn=include_bn)
     
 
-    def run_encode(self, F, in_data, batch_size):
+    def run_encode(self, in_data, batch_size):
         enc_out = self.encoder(in_data)
         return self.latent_distribution(enc_out, batch_size)
 
@@ -250,16 +235,16 @@ class BowVAEModel(BaseVAE):
         return self.classifier(self.lab_dr(self.encode_data(data)))
     
 
-    def hybrid_forward(self, F, data):
+    def forward(self, data):
         batch_size = data.shape[0]
         emb_out = self.embedding(data)
         #z, KL = self.run_encode(F, emb_out, batch_size)
         enc_out = self.encoder(emb_out)
         mu_out  = self.latent_distribution.get_mu_encoding(enc_out)
         z, KL   = self.latent_distribution(enc_out, batch_size)
-        y = F.softmax(self.decoder(z), axis=1)
+        y = torch.functional.softmax(self.decoder(z), dim=1)
         ii_loss, recon_loss, coherence_loss, redundancy_loss = \
-            self.get_loss_terms(F, data, y, KL, batch_size)
+            self.get_loss_terms(data, y, KL, batch_size)
         if self.has_classifier:
             classifier_outputs = self.classifier(self.lab_dr(mu_out))
         else:
@@ -275,8 +260,8 @@ class MetricBowVAEModel(BowVAEModel):
 
 
     def get_redundancy_penalty(self):
-        w = self.decoder.params.get('weight').data()
-        emb = self.embedding.params.get('weight').data() if self.embedding is not None else w.transpose()
+        w = self.decoder.weight.data
+        emb = self.embedding.weight.data if self.embedding is not None else w.transpose()
         _, redundancy_loss = self.coherence_regularization(w, emb)
         return redundancy_loss
         
@@ -285,8 +270,8 @@ class MetricBowVAEModel(BowVAEModel):
         batch_size = bow.shape[0]
         z, KL = self.latent_distribution(enc, batch_size)
         KL_loss = (KL * self.kld_wt)
-        y = mx.nd.softmax(self.decoder(z), axis=1)
-        rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
+        y = torch.functional.softmax(self.decoder(z), dim=1)
+        rec_loss = -torch.sum( bow * torch.log(y+1e-12), dim=1 )
         elbo = rec_loss + KL_loss
         return elbo, rec_loss, KL_loss
 
@@ -333,7 +318,6 @@ class CovariateBowVAEModel(BowVAEModel):
         emb_out = self.embedding(data)
         enc_out = self.encoder(mx.nd.concat(emb_out, covars))
         return self.latent_distribution.get_mu_encoding(enc_out, include_bn=include_bn)
-
 
 
     def get_ordered_terms_with_covar_at_data(self, data, k, covar):
@@ -406,7 +390,7 @@ class CovariateBowVAEModel(BowVAEModel):
         return ii_loss, KL, recon_loss, coherence_loss, redundancy_loss, None
 
         
-class CovariateModel(HybridBlock):
+class CovariateModel(nn.Module):
 
     def __init__(self, n_topics, n_covars, vocab_size, interactions=False, ctx=mx.cpu()):
         self.n_topics = n_topics
@@ -416,21 +400,24 @@ class CovariateModel(HybridBlock):
         self.model_ctx = ctx
         super(CovariateModel, self).__init__()
         with self.name_scope():
-            self.cov_decoder = gluon.nn.Dense(in_units=n_covars, units=self.vocab_size, activation=None, use_bias=False)
+            self.cov_decoder = torch.nn.Linear(n_covars, self.vocab_size, bias=False)
             if self.interactions:
-                self.cov_inter_decoder = gluon.nn.Dense(in_units = self.n_covars * self.n_topics, units=self.vocab_size, 
-                                                       activation=None, use_bias=False)
-        self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+                self.cov_inter_decoder = torch.nn.Dense(self.n_covars * self.n_topics, self.vocab_size, bias=False)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, torch.nn.Linear):
+            torch.nn.init.xavier_uniform_(module.weight.data)
                 
 
-    def hybrid_forward(self, F, topic_distrib, covars):
+    def forward(self, topic_distrib, covars):
         score_C = self.cov_decoder(covars)
         if self.interactions:
-            td_rsh = F.expand_dims(topic_distrib, 1)
-            cov_rsh = F.expand_dims(covars, 2)
+            td_rsh = topic_distrib.unsqueeze(1)
+            cov_rsh = covars.unsqueeze(2)
             cov_interactions = cov_rsh * td_rsh    ## shape (N, Topics, Covariates) -- outer product
             batch_size = cov_interactions.shape[0]
-            cov_interactions_rsh = F.reshape(cov_interactions, (batch_size, self.n_topics * self.n_covars))
+            cov_interactions_rsh = torch.reshape(cov_interactions, (batch_size, self.n_topics * self.n_covars))
             score_CI = self.cov_inter_decoder(cov_interactions_rsh)
             return score_CI + score_C
         else:

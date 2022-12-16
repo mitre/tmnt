@@ -22,6 +22,7 @@ class BaseDistribution(nn.Module):
     def __init__(self, enc_size, n_latent, device):
         super(BaseDistribution, self).__init__()
         self.n_latent = n_latent
+        self.enc_size = enc_size
         self.device = device
         self.mu_encoder = nn.Linear(enc_size, n_latent)
         self.mu_bn = nn.BatchNorm(n_latent, momentum = 0.8, epsilon=0.0001)
