@@ -36,7 +36,9 @@ logging_config(folder='.', name='train_20news', level='info', console_level='inf
 # The fit method applied to the term-document matrix will estimate the model parameters.
 from tmnt.estimator import BowEstimator
 from tmnt.distribution import LogisticGaussianDistribution, HyperSphericalDistribution
-distribution = HyperSphericalDistribution(20)
+distribution = HyperSphericalDistribution(100,20)
+
+print("**** ==> Creating estimator ...")
 estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=distribution,
                          log_method='log', lr=0.08, batch_size=100, embedding_source='random', embedding_size=100,
                          epochs=10, enc_hidden_dim=100, validate_each_epoch=True)

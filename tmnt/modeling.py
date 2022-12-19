@@ -424,7 +424,7 @@ class CovariateModel(nn.Module):
             return score_C
             
 
-class ContinuousCovariateModel(HybridBlock):
+class ContinuousCovariateModel(nn.Module):
 
     def __init__(self, n_topics, vocab_size, total_layers = 1, ctx=mx.cpu()):
         self.n_topics  = n_topics
@@ -445,13 +445,13 @@ class ContinuousCovariateModel(HybridBlock):
             self.cov_decoder.add(gluon.nn.Dense(in_units=self.time_topic_dim, units=vocab_size, activation=None, use_bias=False))
         self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
 
-    def hybrid_forward(self, F, topic_distrib, scalars):
-        inputs = F.concat(topic_distrib, scalars)
+    def forward(self, topic_distrib, scalars):
+        inputs = torch.cat((topic_distrib, scalars), 0)
         sc_transform = self.cov_decoder(inputs)
         return sc_transform
         
 
-class CoherenceRegularizer(HybridBlock):
+class CoherenceRegularizer(nn.Module):
 
     ## Follows paper to add coherence loss: http://aclweb.org/anthology/D18-1096
 
@@ -461,27 +461,27 @@ class CoherenceRegularizer(HybridBlock):
         self.redundancy_pen = redundancy_pen
         
 
-    def hybrid_forward(self, F, w, emb):
+    def forward(self, w, emb):
         ## emb should have shape (D x V)
         ## w should have shape (V x K)
         # w NORM over columns
-        w_min = F.min(w, keepdims=True, axis=0)
+        w_min = w.min(keepdim=True, dim=0)
         ww = w - w_min # ensure weights are non-negative
-        w_norm_val = F.norm(ww, keepdims=True, axis=0)
-        emb_norm_val = F.norm(emb, keepdims=True, axis=1)
+        w_norm_val = torch.norm(ww, keepdim=True, dim=0)
+        emb_norm_val = torch.norm(emb, keepdim=True, dim=1)
         
-        w_norm = F.broadcast_div(ww, w_norm_val)
-        emb_norm = F.broadcast_div(emb, emb_norm_val)
+        w_norm = ww / w_norm_val
+        emb_norm = emb / emb_norm_val
 
-        T = F.linalg.gemm2(emb_norm, w_norm)
-        T_norm_vals = F.norm(T, keepdims=True, axis=0)
-        T_norm = F.broadcast_div(T, T_norm_vals) # (D x K)
+        T = torch.bmm(emb_norm, w_norm)
+        T_norm_vals = torch.norm(T, keepdim=True, dim=0)
+        T_norm = T / T_norm_vals # (D x K)
 
-        S = F.linalg.gemm2(F.transpose(emb_norm), T_norm) # (V x K)
-        C = -F.sum(S * w_norm)
+        S = torch.bmm(emb_norm.t(), T_norm) # (V x K)
+        C = -(S * w_norm).sum()
         ## diversity component
-        D1 = F.linalg.gemm2(F.transpose(T_norm), T_norm)
-        D = F.sum(D1)
+        D1 = torch.bmm(T_norm.t(), T_norm)
+        D = D1.sum()
         return C * self.coherence_pen , D * self.redundancy_pen
 
 
@@ -567,10 +567,10 @@ class SeqBowVED(BaseSeqBowVED):
         super(SeqBowVED, self).__init__(*args, **kwargs)
         with self.name_scope():
             if self.has_classifier:
-                self.classifier = nn.HybridSequential()
+                self.classifier = torch.nn.Sequential()
                 if self.dropout:
-                    self.classifier.add(nn.Dropout(rate=self.dropout))
-                self.classifier.add(nn.Dense(in_units=self.n_latent, units=self.num_classes))
+                    self.classifier.add_module("dr", nn.Dropout(rate=self.dropout))
+                self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes))
 
     def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
         _, enc = self.bert(inputs, token_types, valid_length)
@@ -682,7 +682,7 @@ class GeneralizedSDMLLoss(Loss):
         return squared_diffs.sum(axis=2)
 
 
-    def _compute_labels(self, F, l1, l2):
+    def _compute_labels(self, l1, l2):
         """
         Example:
         l1 = [1,2,2]
@@ -697,33 +697,36 @@ class GeneralizedSDMLLoss(Loss):
         l1 = l1.squeeze()
         l2 = l2.squeeze()
         batch_size = l1.shape[0]
-        l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
-        l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
-        ll = F.equal(l1_x, l2_x)
+        l1_x = l1.unsqueeze(1).expand(batch_size, batch_size)
+        l2_x = l2.unsqueeze(0).expand(batch_size, batch_size)
+        #l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
+        #l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
+        ll = torch.equal(l1_x, l2_x)
         labels = ll * (1 - self.smoothing_parameter) + (1 - ll) * self.smoothing_parameter / (batch_size - 1)
         ## now normalize rows to sum to 1.0
-        labels = labels / F.broadcast_to(F.sum(labels, axis=1, keepdims=True), (batch_size, batch_size))
+        labels = labels / labels.sum(dim=1,keepdim=True).expand(batch_size, batch_size)
         if self.x2_downweight_idx >= 0:
-            down_wt = len(mx.np.where(l2.as_np_ndarray != self.x2_downweight_idx)[0]) / batch_size
+            #down_wt = len(mx.np.where(l2.as_np_ndarray != self.x2_downweight_idx)[0]) / batch_size
+            down_wt = len(np.where(l2 != self.x2_downweight_idx)[0]) / batch_size
         else:
             down_wt = 1.0
         return labels, down_wt
 
 
-    def _loss(self, F, x1, l1, x2, l2):
+    def _loss(self, x1, l1, x2, l2):
         """
         the function computes the kl divergence between the negative distances
         and the smoothed label matrix.
         """
         batch_size = x1.shape[0]
-        labels, wt = self._compute_labels(F, l1, l2)
+        labels, wt = self._compute_labels(l1, l2)
         distances = self._compute_distances(x1, x2)
-        log_probabilities = F.log_softmax(-distances, axis=1)
+        log_probabilities = torch.log_softmax(-distances, axis=1)
         # multiply by the batch size to obtain the correct loss (gluon kl_loss averages instead of sum)
         return self.kl_loss(log_probabilities, labels.as_in_context(distances.context)) * batch_size * wt
 
 
-    def hybrid_forward(self, F, x1, l1, x2, l2):
-        return self._loss(F, x1, l1, x2, l2)    
+    def forward(self, x1, l1, x2, l2):
+        return self._loss(x1, l1, x2, l2)    
 
 
