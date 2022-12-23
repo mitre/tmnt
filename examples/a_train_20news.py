@@ -35,14 +35,18 @@ logging_config(folder='.', name='train_20news', level='info', console_level='inf
 # We use the ``LogisticGaussian`` latent distribution here with 25 latent dimensions or *topics*
 # The fit method applied to the term-document matrix will estimate the model parameters.
 from tmnt.estimator import BowEstimator
-from tmnt.distribution import LogisticGaussianDistribution, HyperSphericalDistribution
-distribution = HyperSphericalDistribution(100,20)
+from tmnt.distribution import LogisticGaussianDistribution, HyperSphericalDistribution, GaussianDistribution, VonMisesDistribution
+#distribution = HyperSphericalDistribution(100,20)
+#distribution = LogisticGaussianDistribution(100,20)
+distribution = VonMisesDistribution(100,20, kappa=2.0)
+#distribution = GaussianDistribution(100,20,dr=0.0)
 
 print("**** ==> Creating estimator ...")
 estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=distribution,
-                         log_method='log', lr=0.08, batch_size=100, embedding_source='random', embedding_size=100,
-                         epochs=10, enc_hidden_dim=100, validate_each_epoch=True)
+                         log_method='log', lr=0.001, batch_size=500, embedding_source='random', embedding_size=100,
+                         epochs=10, enc_hidden_dim=100, validate_each_epoch=False, quiet=False)
 #estimator = BowEstimator.from_config(config='../data/configs/train_model/model.config', vocabulary=tf_vectorizer.get_vocab())
+#tr_X, val_X = X[:1000], X[:1000] # in this case, use same data for training and validation
 tr_X, val_X = X, X # in this case, use same data for training and validation
 tr_y, val_y = None, None # dependent variables (labels) aren't used
 _ = estimator.fit_with_validation(tr_X, tr_y, val_X, val_y)

@@ -25,6 +25,13 @@ from sklearn.utils import shuffle as sk_shuffle
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 
 
+from scipy import sparse as sp
+from typing import List, Tuple, Dict, Optional, Union, NoReturn
+
+import torch
+from torch.utils.data import DataLoader
+
+
 def to_label_matrix(yvs, num_labels=0):
     """Convert [(id1, id2, ...), (id1,id2,...) ... ] to Numpy matrix with multi-labels
     """
@@ -43,148 +50,83 @@ def to_label_matrix(yvs, num_labels=0):
     return np.array(li), num_labels
 
 
-
-class SparseMatrixDataIter(DataIter):
-    def __init__(self, data, label=None, batch_size=1, shuffle=False,
-                 last_batch_handle='pad', data_name='data',
-                 label_name='softmax_label'):
-        super(SparseMatrixDataIter, self).__init__(batch_size)
-
-        assert(isinstance(data, scipy.sparse.csr.csr_matrix))
+class SparseDataset():
+    """
+    Custom Dataset class for scipy sparse matrix
+    """
+    def __init__(self, 
+                 data:Union[np.ndarray, sp.coo_matrix, sp.csr_matrix], 
+                 targets: Optional[Union[np.ndarray, sp.coo_matrix, sp.csr_matrix]]):
         
-        self.data = _init_data(data, allow_empty=False, default_name=data_name)
-        self.label = _init_data(label, allow_empty=True, default_name=label_name)
-        self.num_data = self.data[0][1].shape[0]
+        # Transform data coo_matrix to csr_matrix for indexing
+        if type(data) == sp.coo_matrix:
+            self.data = data.tocsr()
+        else:
+            self.data = data
+            
+        # Transform targets coo_matrix to csr_matrix for indexing
+        if type(targets) == sp.coo_matrix:
+            self.targets = targets.tocsr()
+        else:
+            self.targets = targets
+        
+    def __getitem__(self, index):
+        targets_i = self.targets[index] if self.targets is not None else None
+        return self.data[index], targets_i
 
-        # shuffle data
-        if shuffle:
-            sh_data = []
-            d = self.data[0][1]
-            if len(self.label[0][1]) > 0:
-                l = self.label[0][1]
-                ds, dl = sk_shuffle(d, l)
-                self.data = _init_data(ds, allow_empty=False, default_name=data_name)
-                self.label = _init_data(dl, allow_empty=True, default_name=label_name)
-            else:
-                ds = sk_shuffle(d)
-                self.data = _init_data(ds, allow_empty=False, default_name=data_name)
+    def __len__(self):
+        return self.data.shape[0]
+      
+def sparse_coo_to_tensor(coo: sp.coo_matrix):
+    """
+    Transform scipy coo matrix to pytorch sparse tensor
+    """
+    values = coo.data
+    indices = (coo.row, coo.col)
+    shape = coo.shape
 
-        # batching
-        if last_batch_handle == 'discard':
-            new_n = self.data[0][1].shape[0] - self.data[0][1].shape[0] % batch_size
-            self.num_data = new_n
+    i = torch.LongTensor(indices)
+    v = torch.FloatTensor(values)
+    s = torch.Size(shape)
 
-        self.data_list = [x[1] for x in self.data] + [x[1] for x in self.label]
-        assert self.num_data >= batch_size, "batch_size needs to be smaller than data size."
-        self.cursor = -batch_size
+    return torch.sparse.FloatTensor(i, v, s)
+    
+def sparse_batch_collate(batch): 
+    """
+    Collate function which to transform scipy coo matrix to pytorch sparse tensor
+    """
+    # batch[0] since it is returned as a one element list
+    data_batch, targets_batch = batch[0]
+    
+    if type(data_batch[0]) == sp.csr_matrix:
+        data_batch = data_batch.tocoo() # removed vstack
+        data_batch = sparse_coo_to_tensor(data_batch)
+    else:
+        data_batch = torch.FloatTensor(data_batch)
+
+    if targets_batch:
+        if type(targets_batch[0]) == sp.csr_matrix:
+            targets_batch = targets_batch.tocoo() # removed vstack
+            targets_batch = sparse_coo_to_tensor(targets_batch)
+        else:
+            targets_batch = torch.FloatTensor(targets_batch)
+    return data_batch, targets_batch
+
+
+class SparseDataLoader(DataLoader):
+
+    def __init__(self, 
+                 X: Union[sp.csr_matrix, sp.coo_matrix], y: Union[np.array], shuffle=False, drop_last=False,
+                 batch_size=1024, device='cpu'):
         self.batch_size = batch_size
-        self.last_batch_handle = last_batch_handle
-
-
-    @property
-    def provide_data(self):
-        """The name and shape of data provided by this iterator."""
-        return [
-            DataDesc(k, tuple([self.batch_size] + list(v.shape[1:])), v.dtype)
-            for k, v in self.data
-        ]
-
-    @property
-    def provide_label(self):
-        """The name and shape of label provided by this iterator."""
-        return [
-            DataDesc(k, tuple([self.batch_size] + list(v.shape[1:])), v.dtype)
-            for k, v in self.label
-        ]
-
-    def hard_reset(self):
-        """Ignore roll over data and set to start."""
-        self.cursor = -self.batch_size
-
-
-    def reset(self):
-        if self.last_batch_handle == 'roll_over' and self.cursor > self.num_data:
-            self.cursor = -self.batch_size + (self.cursor%self.num_data)%self.batch_size
-        else:
-            self.cursor = -self.batch_size
-
-    def iter_next(self):
-        self.cursor += self.batch_size
-        return self.cursor < self.num_data
-
-    def next(self):
-        if self.iter_next():
-            return DataBatch(data=self.getdata(), label=self.getlabel(), \
-                    pad=self.getpad(), index=None)
-        else:
-            raise StopIteration
-
-    def getdata(self):
-        assert(self.cursor < self.num_data), "DataIter needs reset."
-        if self.cursor + self.batch_size <= self.num_data:
-            return [ x[1][self.cursor:self.cursor + self.batch_size] for x in self.data ]
-        else:
-            pad = self.batch_size - self.num_data + self.cursor
-            return [ scipy.sparse.vstack([x[1][self.cursor:], x[1][:pad]]) for x in self.data ]
-
-    def getlabel(self):
-        assert(self.cursor < self.num_data), "DataIter needs reset."
-        if self.cursor + self.batch_size <= self.num_data:
-            return [ x[1][self.cursor:self.cursor + self.batch_size] for x in self.label ]
-        else:
-            pad = self.batch_size - self.num_data + self.cursor
-            return [ np.concatenate([x[1][self.cursor:], x[1][:pad]]) for x in self.label ]
-
-    def getpad(self):
-        if self.last_batch_handle == 'pad' and self.cursor + self.batch_size > self.num_data:
-            return self.cursor + self.batch_size - self.num_data
-        else:
-            return 0
-
-
-class DataIterLoader():
-    """
-    DataIter wrapper that handles case where data may stay on disk with iterator
-    using mx.io.LibSVMIter for extremely large datasets unable to fit into memory
-    (even when using scipy sparse matrices).
-    """
-    def __init__(self, data_iter=None, data_file=None, col_shape=-1,
-                 num_batches=-1, last_batch_size=-1, handle_last_batch='discard'):
-        self.using_file = data_iter is None
-        self.data_file = data_file
-        self.col_shape = col_shape
-        self.data_iter = data_iter
-        self.num_batches = num_batches
-        self.last_batch_size = last_batch_size
-        self.handle_last_batch = handle_last_batch
-        self.batch_index = 0
-        self.batch_size = 1000
-
-
-    def __iter__(self):
-        if not self.using_file:
-            self.data_iter.reset()
-        else:
-            self.data_iter = mx.io.LibSVMIter(data_libsvm=self.data_file, data_shape=(self.col_shape,),
-                                              batch_size=self.batch_size)
-        self.batch_index = 0
-        return self
-
-    def __next__(self):
-        batch = self.data_iter.__next__()
-        data = mx.nd.sparse.csr_matrix(batch.data[0], dtype='float32')
-        if batch.label and len(batch.label) > 0 and len(batch.label[0]) > 0 and batch.data[0].shape[0] == batch.label[0].shape[0]:
-            label = mx.nd.array(batch.label[0], dtype='float32')
-        else:
-            label = None
-        self.batch_index += 1
-        return data, label
-
-    def get_data(self):
-        return self.data_iter.data
-
-    def next(self):
-        return self.__next__()
+        ds = SparseDataset(X, y)
+        sampler = torch.utils.data.sampler.BatchSampler(
+            torch.utils.data.sampler.RandomSampler(ds,
+                                                   generator=torch.Generator(device=device)),
+            batch_size=batch_size,
+            drop_last=False)
+        super().__init__(ds, batch_size=1, collate_fn=sparse_batch_collate, generator=torch.Generator(device=device), sampler=sampler, drop_last=drop_last)
+        
 
 
 class SingletonWrapperLoader():
@@ -192,9 +134,6 @@ class SingletonWrapperLoader():
     def __init__(self, data_loader):
         self.data_loader = data_loader
         self.data_iter   = iter(data_loader)
-        self.last_batch_size = data_loader.last_batch_size
-        self.num_batches = data_loader.num_batches
-        self.handle_last_batch = data_loader.handle_last_batch
 
     def __iter__(self):
         self.data_iter = iter(self.data_loader)

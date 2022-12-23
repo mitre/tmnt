@@ -24,17 +24,23 @@ import umap
 import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
-from tmnt.data_loading import DataIterLoader, SparseMatrixDataIter, PairedDataLoader, SingletonWrapperLoader
+from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
 from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import HyperSphericalDistribution, LogisticGaussianDistribution, BaseDistribution, GaussianDistribution
+
 import autogluon.core as ag
 from itertools import cycle
 import pickle
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
+import torch
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+
 MAX_DESIGN_MATRIX = 250000000
+
 
 def multilabel_pr_fn(cutoff, recall=False):
 
@@ -89,8 +95,8 @@ class BaseEstimator(object):
                  quiet: bool = False,
                  coherence_coefficient: float = 8.0,
                  reporter: Optional[object] = None,
-                 ctx: Optional[mx.context.Context] = mx.cpu(),
-                 latent_distribution: Optional[BaseDistribution] = None,
+                 device: Optional[str] = 'cpu',
+                 latent_distribution: BaseDistribution = None,
                  optimizer: str = "adam",
                  lr: float = 0.005, 
                  coherence_reg_penalty: float = 0.0,
@@ -106,8 +112,8 @@ class BaseEstimator(object):
         self.model = None
         self.coherence_coefficient = coherence_coefficient
         self.reporter = reporter
-        self.ctx = ctx
-        self.latent_distribution = latent_distribution or LogisticGaussianDistribution(20, ctx=ctx)
+        self.device = device
+        self.latent_distribution = latent_distribution
         self.optimizer = optimizer
         self.lr = lr
         self.n_latent = self.latent_distribution.n_latent
@@ -120,7 +126,7 @@ class BaseEstimator(object):
         self.pretrained_param_file = pretrained_param_file
         self.warm_start = warm_start
         self.num_val_words = -1 ## will be set later for computing Perplexity on validation dataset
-        self.latent_distribution.ctx = self.ctx
+        self.latent_distribution.device = self.device
 
 
     def _np_one_hot(self, vec, n_outputs):
@@ -183,7 +189,7 @@ class BaseEstimator(object):
         raise NotImplementedError()
     
 
-    def fit(self, X: sp.csr.csr_matrix, y: np.ndarray) -> NoReturn:
+    def fit(self, X: torch.Tensor, y: torch.Tensor) -> NoReturn:
         """
         Fit VAE model according to the given training data X with optional co-variates y.
   
@@ -194,7 +200,7 @@ class BaseEstimator(object):
         raise NotImplementedError()
     
 
-    def fit_with_validation(self, X: sp.csr.csr_matrix, y: np.ndarray, val_X: sp.csr.csr_matrix, val_Y: np.ndarray) -> NoReturn:
+    def fit_with_validation(self, X: torch.Tensor, y: torch.Tensor, val_X: torch.Tensor, val_Y: torch.Tensor) -> NoReturn:
         """
         Fit VAE model according to the given training data X with optional co-variates y;
         validate (potentially each epoch) with validation data val_X and optional co-variates val_Y
@@ -259,7 +265,7 @@ class BaseBowEstimator(BaseEstimator):
         self.loss_function = gluon.loss.SigmoidBCELoss() if multilabel else gluon.loss.SoftmaxCELoss()
 
     @classmethod
-    def from_saved(cls, model_dir: str, ctx: Optional[mx.context.Context] = mx.cpu()) -> 'BaseBowEstimator':
+    def from_saved(cls, model_dir: str, device: Optional[str] = mx.cpu()) -> 'BaseBowEstimator':
         """
         Instantiate a BaseBowEstimator object from a saved model
 
@@ -271,7 +277,7 @@ class BaseBowEstimator(BaseEstimator):
         return cls.from_config(config     = model_dir+'/model.config',
                                vocabulary = model_dir+'/vocab.json',
                                pretrained_param_file = model_dir+'/model.params',
-                               ctx        = ctx)
+                               device        = device)
 
     @classmethod
     def from_config(cls, config: Union[str, dict], vocabulary: Union[str, nlp.Vocab],
@@ -281,7 +287,7 @@ class BaseBowEstimator(BaseEstimator):
                     validate_each_epoch: bool = False,
                     pretrained_param_file: Optional[str] = None,
                     reporter: Optional[object] = None,
-                    ctx: mx.context.Context = mx.cpu()) -> 'BaseBowEstimator':
+                    device: str = 'cpu') -> 'BaseBowEstimator':
         """
         Create an estimator from a configuration file/object rather than by keyword arguments
         
@@ -290,7 +296,7 @@ class BaseBowEstimator(BaseEstimator):
             vocabulary: Path to a json representation of a vocabulary or GluonNLP vocabulary object
             pretrained_param_file: Path to pretrained parameter file if using pretrained model
             reporter: Callback reporter to include information for model selection via AutoGluon
-            ctx: MXNet context for the estimator
+            device: PyTorch Device
 
         Returns:
             An estimator for training and evaluation of a single model
@@ -341,12 +347,12 @@ class BaseBowEstimator(BaseEstimator):
         latent_distrib = ldist_def.dist_type
         if latent_distrib == 'logistic_gaussian':
             alpha = ldist_def.alpha
-            latent_distribution = LogisticGaussianDistribution(n_latent, ctx=ctx, alpha=alpha)
+            latent_distribution = LogisticGaussianDistribution(enc_hidden_dim, n_latent, device=device, alpha=alpha)
         elif latent_distrib == 'vmf':
             kappa = ldist_def.kappa
-            latent_distribution = HyperSphericalDistribution(n_latent, ctx=ctx, kappa=kappa)
+            latent_distribution = HyperSphericalDistribution(enc_hidden_dim, n_latent, device=device, kappa=kappa)
         else:
-            latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
+            latent_distribution = GaussianDistribution(enc_hidden_dim, n_latent, device=device)
         n_labels = config.get('n_labels', n_labels)
         model = \
                 cls(vocabulary,
@@ -356,7 +362,7 @@ class BaseBowEstimator(BaseEstimator):
                     validate_each_epoch=validate_each_epoch,
                     coherence_coefficient=coherence_coefficient,
                     reporter=reporter, 
-                    ctx=ctx, lr=lr, latent_distribution=latent_distribution, optimizer=optimizer,
+                    device=device, lr=lr, latent_distribution=latent_distribution, optimizer=optimizer,
                     enc_hidden_dim=enc_hidden_dim,
                     coherence_reg_penalty=coherence_reg_penalty,
                     redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
@@ -415,7 +421,7 @@ class BaseBowEstimator(BaseEstimator):
 
     def _get_wd_freqs(self, X, max_sample_size=1000000):
         sample_size = min(max_sample_size, X.shape[0])
-        sums = X.sum(axis=0)
+        sums = np.array(X[:sample_size].sum(axis=0))
         return sums
 
     def _get_model(self):
@@ -439,17 +445,11 @@ class BaseBowEstimator(BaseEstimator):
     def _perplexity(self, dataloader, total_words):
         total_rec_loss = 0
         total_kl_loss  = 0
-        last_batch_size = dataloader.last_batch_size
-        num_batches = dataloader.num_batches
         for i, ((data,labels),) in enumerate(dataloader):
-            data = data.as_in_context(self.ctx)
+            data = data.to(self.device)
             _, kl_loss, rec_loss, _, _, _ = self._forward(self.model, data)
-            if i == num_batches - 1 and last_batch_size > 0:
-                total_rec_loss += rec_loss[:last_batch_size].sum().asscalar()
-                total_kl_loss  += kl_loss[:last_batch_size].sum().asscalar()
-            else:
-                total_rec_loss += rec_loss.sum().asscalar()
-                total_kl_loss += kl_loss.sum().asscalar()
+            total_rec_loss += float(rec_loss.sum())
+            total_kl_loss += float(kl_loss.sum())
         if ((total_rec_loss + total_kl_loss) / total_words) < 709.0:
             perplexity = math.exp((total_rec_loss + total_kl_loss) / total_words)
         else:
@@ -461,26 +461,6 @@ class BaseBowEstimator(BaseEstimator):
         self.num_val_words = X.sum()
         return self._perplexity(dataloader, self.num_val_words)
 
-    def _get_val_dataloader(self, val_X, val_y):
-        test_size = val_X.shape[0] * val_X.shape[1]
-        test_batch_size = min(val_X.shape[0], self.test_batch_size)
-        last_batch_size = val_X.shape[0] % test_batch_size if test_batch_size < val_X.shape[0] else test_batch_size
-        num_val_batches = val_X.shape[0] // test_batch_size
-        if last_batch_size > 0 and last_batch_size < test_batch_size:
-            num_val_batches += 1
-        if test_size < MAX_DESIGN_MATRIX:
-            val_X = mx.nd.sparse.csr_matrix(val_X).tostype('default')
-            val_y = mx.nd.array(val_y) if val_y is not None else None
-            val_dataloader = DataIterLoader(mx.io.NDArrayIter(val_X, val_y, test_batch_size,
-                                                              last_batch_handle='pad', shuffle=False),
-                                            num_batches=num_val_batches, last_batch_size = last_batch_size)
-        else:
-            logging.info("Getting validation dataset .. Using specialized SparseMatrixDataIter")
-            val_dataloader = DataIterLoader(SparseMatrixDataIter(val_X, val_y, batch_size = test_batch_size,
-                                                                 last_batch_handle='pad', shuffle=False),
-                                            )
-        val_dataloader = SingletonWrapperLoader(val_dataloader)
-        return val_dataloader
 
     def validate_with_loader(self, val_dataloader, val_size, total_val_words, val_X=None, val_y=None):
         ppl = self._perplexity(val_dataloader, total_val_words)
@@ -498,8 +478,8 @@ class BaseBowEstimator(BaseEstimator):
             num_std_batches = val_size // bs
             last_batch_size = val_size % bs
             for i, ((data, labels),) in enumerate(val_dataloader):
-                data = data.as_in_context(self.ctx)
-                labels = labels.as_in_context(self.ctx)
+                data = data.to(self.device)
+                labels = labels.to(self.device)
                 if i == num_std_batches - 1 and last_batch_size > 0:
                     data = data[:last_batch_size]
                     labels = labels[:last_batch_size]
@@ -507,9 +487,9 @@ class BaseBowEstimator(BaseEstimator):
                 predictions_lists = [ p.asnumpy() for p in list(predictions) ]
                 prediction_arrays.extend(predictions_lists)
                 if len(labels.shape) == 1:  ## standard single-label classification
-                    correct = mx.nd.argmax(predictions, axis=1) == labels
-                    tot_correct += mx.nd.sum(correct).asscalar()
-                tot += (data.shape[0] - (labels < 0.0).sum().asscalar()) # subtract off labels < 0 (for unlabeled data)
+                    correct = torch.argmax(predictions, dim=1) == labels
+                    tot_correct += float(correct.sum())
+                tot += float((data.shape[0] - (labels < 0.0).sum())) # subtract off labels < 0 (for unlabeled data)
             acc = float(tot_correct) / float(tot)
             v_res['accuracy'] = acc
             prediction_mat = np.array(prediction_arrays)
@@ -530,7 +510,7 @@ class BaseBowEstimator(BaseEstimator):
         return v_res
 
     def validate(self, val_X, val_y):
-        val_dataloader = self._get_val_dataloader(val_X, val_y)
+        val_dataloader = SparseDataLoader(val_X, val_y, batch_size=self.test_batch_size)
         total_val_words = val_X.sum()
         if self.num_val_words < 0:
             self.num_val_words = total_val_words
@@ -561,10 +541,10 @@ class BaseBowEstimator(BaseEstimator):
     def _get_losses(self, model, batch_data):
         # batch_data has form: ((data, labels),)
         (data,labels), = batch_data
-        data = data.as_in_context(self.ctx)
+        data = data.to(self.device)
         if labels is None:
-            labels = mx.nd.expand_dims(mx.nd.zeros(data.shape[0]), 1)
-        labels = labels.as_in_context(self.ctx)
+            labels = torch.zeros(data.shape[0]).unsqueeze(dim=1)
+        labels = labels.to(self.device)
         
         elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
             self._forward(self.model, data)
@@ -573,7 +553,7 @@ class BaseBowEstimator(BaseEstimator):
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
         else:
             total_ls = elbo_ls.mean()
-            label_ls = mx.nd.zeros(total_ls.shape)
+            label_ls = torch.zeros(total_ls.shape)
         return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
 
     def _get_unlabeled_losses(self, model, data):
@@ -584,12 +564,8 @@ class BaseBowEstimator(BaseEstimator):
 
     def fit_with_validation_loaders(self, train_dataloader, validation_dataloader, aux_dataloader,
                                     train_X_size, val_X_size, aux_X_size, total_val_words, val_X=None, val_y=None):
-        all_model_params = self.model.collect_params()                
-        params = [p for p in all_model_params.values() if p.grad_req != 'null']                
-        for p in params:
-            p.grad_req = 'add'
-            
-        trainer = gluon.Trainer(self.model.collect_params(), self.optimizer, {'learning_rate': self.lr})
+        
+        trainer = torch.optim.Adam(self.model.parameters(), lr = self.lr)
         sc_obj, npmi, ppl, redundancy = 0.0, 0.0, 0.0, 0.0
         v_res = None
         joint_loader = PairedDataLoader(train_dataloader, aux_dataloader)
@@ -598,39 +574,37 @@ class BaseBowEstimator(BaseEstimator):
             elbo_losses = []
             lab_losses  = []
             for i, (data_batch, aux_batch) in enumerate(joint_loader):
-                with autograd.record():
-                    elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data_batch)
-                    elbo_mean = elbo_ls.mean()
-                total_ls.backward()
-
+                elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data_batch)
+                elbo_mean = elbo_ls.mean()
                 if aux_batch is not None:
+                    total_ls.backward(retain_graph=True)
                     aux_data, = aux_batch
                     aux_data, _ = aux_data # ignore (null) label
-                    aux_data = aux_data.as_in_context(self.ctx)
-                    with autograd.record():
-                        elbo_ls_a, kl_loss_a, _, _, total_ls_a = \
-                            self._get_unlabeled_losses(self.model, aux_data)
+                    aux_data = aux_data.to(self.device)
+                    elbo_ls_a, kl_loss_a, _, _, total_ls_a = self._get_unlabeled_losses(self.model, aux_data)
                     total_ls_a.backward()
-                
-                trainer.allreduce_grads()
-                trainer.update(1)
-                all_model_params.zero_grad()
+                else:
+                    total_ls.backward()
+                #print("decoder bias = {}".format(self.model.decoder.bias))
+                #print("mu grad = {}".format(self.model.latent_distribution.mu_encoder.weight.grad))
+                #print("lv grad = {}".format(self.model.latent_distribution.lv_encoder.weight.grad))
+                #print("encoder grad = {}".format(self.model.encoder[0].weight.grad))
+                trainer.step()
+                trainer.zero_grad()
                 if not self.quiet:
                     if aux_batch is not None:
-                        elbo_losses.append(float(elbo_mean.asscalar()) + float(elbo_ls_a.mean().asscalar()))
+                        elbo_losses.append(float(elbo_mean) + float(elbo_ls_a.mean()))
                     else:
-                        elbo_losses.append(float(elbo_mean.asscalar()))                        
+                        elbo_losses.append(float(elbo_mean))                        
                     if lab_loss is not None:
-                        lab_losses.append(float(lab_loss.mean().asscalar()))
+                        lab_losses.append(float(lab_loss.mean()))
             if not self.quiet and not self.validate_each_epoch:
                 elbo_mean = np.mean(elbo_losses) if len(elbo_losses) > 0 else 0.0
                 lab_mean  = np.mean(lab_losses) if len(lab_losses) > 0 else 0.0
                 self._output_status("Epoch [{}] finished in {} seconds. [elbo = {}, label loss = {}]"
                                     .format(epoch+1, (time.time()-ts_epoch), elbo_mean, lab_mean))
-            mx.nd.waitall()
             if validation_dataloader is not None and (self.validate_each_epoch or epoch == self.epochs-1):
                 sc_obj, v_res = self._perform_validation(epoch, validation_dataloader, val_X_size, total_val_words, val_X, val_y)
-        mx.nd.waitall()
         if v_res is None and validation_dataloader is not None:
             sc_obj, v_res = self._perform_validation(0, validation_dataloader, val_X_size, total_val_words, val_X, val_y)
         return sc_obj, v_res
@@ -659,22 +633,22 @@ class BaseBowEstimator(BaseEstimator):
         return sc_obj, v_res
 
 
-    def setup_model_with_biases(self, X: sp.csr.csr_matrix) -> int:
+    def setup_model_with_biases(self, X: sp.csr_matrix) -> int:
         wd_freqs = self._get_wd_freqs(X)
         x_size = X.shape[0] * X.shape[1]
         if self.model is None or not self.warm_start:
             self.model = self._get_model()
-            self.model.initialize_bias_terms(mx.nd.array(wd_freqs).squeeze())  ## initialize bias weights to log frequencies
+            self.model.initialize_bias_terms(wd_freqs.squeeze())  ## initialize bias weights to log frequencies
         return x_size
 
     
 
     def fit_with_validation(self, 
-                            X: sp.csr.csr_matrix,
-                            y: np.ndarray,
-                            val_X: Optional[sp.csr.csr_matrix],
-                            val_y: Optional[np.ndarray],
-                            aux_X: Optional[sp.csr.csr_matrix] = None) -> Tuple[float, dict]:
+                            X: Union[torch.Tensor, sp.coo_matrix, sp.csr_matrix],
+                            y: Union[torch.Tensor, sp.coo_matrix, sp.csr_matrix],
+                            val_X: Optional[Union[torch.Tensor, np.ndarray]],
+                            val_y: Optional[Union[torch.Tensor, np.ndarray]],
+                            aux_X: Optional[Union[torch.Tensor, sp.coo_matrix, sp.csr_matrix]] = None) -> Tuple[float, dict]:
         """
         Fit a model according to the options of this estimator and optionally evaluate on validation data
 
@@ -688,39 +662,28 @@ class BaseBowEstimator(BaseEstimator):
         Returns:
             sc_obj, v_res
         """
-        
-        x_size = self.setup_model_with_biases(X)
-        
-        if x_size > MAX_DESIGN_MATRIX:
-            logging.info("Sparse matrix has total size = {}. Using Sparse Matrix data batcher.".format(x_size))
-            train_dataloader = \
-                DataIterLoader(SparseMatrixDataIter(X, y, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
-            train_X_size = X.shape[0]
-        else:
-            y = mx.nd.array(y) if y is not None else None
-            X = mx.nd.sparse.csr_matrix(X)
-            train_dataloader = DataIterLoader(mx.io.NDArrayIter(X, y, self.batch_size, last_batch_handle='discard', shuffle=True))
-            train_X_size = X.shape[0]
+
+        train_dataloader = SparseDataLoader(X, y, batch_size=self.batch_size, drop_last=True)
+        X_data = train_dataloader.dataset.data
+        train_X_size = X_data.shape
+        _ = self.setup_model_with_biases(X_data)
+
         if aux_X is not None:
-            aux_X_size = aux_X.shape[0] * aux_X.shape[1]
-            if aux_X_size > MAX_DESIGN_MATRIX:
-                aux_dataloader = \
-                    DataIterLoader(SparseMatrixDataIter(aux_X, None, batch_size = self.batch_size, last_batch_handle='discard', shuffle=True))
-            else:
-                aux_X = mx.nd.sparse.csr_matrix(aux_X)
-                aux_dataloader = \
-                    DataIterLoader(mx.io.NDArrayIter(aux_X, None, self.batch_size, last_batch_handle='discard', shuffle=True))
+            aux_dataloader = SparseDataLoader(X, y, batch_size=self.batch_size)
+            aux_shape = aux_dataloader.dataset.data.shape
+            aux_X_size = aux_shape[0] * aux_shape[1]
+            aux_dataloader   = SingletonWrapperLoader(aux_dataloader)        
         else:
             aux_dataloader, aux_X_size = None, 0
         if val_X is not None:
-            val_dataloader = self._get_val_dataloader(val_X, val_y) # already wrapped in a singleton
+            val_dataloader = SparseDataLoader(val_X, val_y, batch_size=self.test_batch_size)
             total_val_words = val_X.sum()
-            val_X_size = val_X.shape[0]
+            val_X_size = val_X.shape[0] * val_X.shape[1]
+            val_dataloader = SingletonWrapperLoader(val_dataloader)
         else:
             val_dataloader, total_val_words, val_X_size = None, 0, 0
         train_dataloader = SingletonWrapperLoader(train_dataloader)
-        if aux_dataloader is not None:
-            aux_dataloader   = SingletonWrapperLoader(aux_dataloader)        
+        
         return self.fit_with_validation_loaders(train_dataloader, val_dataloader, aux_dataloader, train_X_size, val_X_size,
                                          aux_X_size, total_val_words, val_X=val_X, val_y=val_y)
 
@@ -768,7 +731,7 @@ class BowEstimator(BaseBowEstimator):
         """
         return super().perplexity(X, None)
 
-    def _forward(self, model: BowVAEModel, data: mx.nd.NDArray):
+    def _forward(self, model: BowVAEModel, data: torch.Tensor):
         """
         Forward pass of BowVAE model given the supplied data
 
@@ -803,8 +766,8 @@ class BowEstimator(BaseBowEstimator):
             self.vocabulary.set_embedding(pt_embedding)
             emb_size = len(self.vocabulary.embedding.idx_to_vec[0])
             for word in self.vocabulary.embedding._idx_to_token:
-                if (self.vocabulary.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-                    self.vocabulary.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
+                if (self.vocabulary.embedding[word] == torch.zeros(emb_size)).sum() == emb_size:
+                    self.vocabulary.embedding[word] = torch.random.normal(0, 0.1, emb_size)
         else:
             emb_size = self.embedding_size
         model = \
@@ -817,13 +780,13 @@ class BowEstimator(BaseBowEstimator):
                             vocabulary=self.vocabulary, 
                             latent_distribution=self.latent_distribution, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                            n_covars=0, ctx=self.ctx)
+                            n_covars=0, device=self.device)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
     
 
-    def get_topic_vectors(self) -> mx.nd.NDArray:
+    def get_topic_vectors(self) -> torch.Tensor:
         """
         Get topic vectors of the fitted model.
 
@@ -833,7 +796,7 @@ class BowEstimator(BaseBowEstimator):
 
         return self.model.get_topic_vectors() 
 
-    def transform(self, X: sp.csr.csr_matrix) -> mx.nd.NDArray:
+    def transform(self, X: sp.csr.csr_matrix) -> torch.Tensor:
         """
         Transform data X according to the fitted model.
 
@@ -882,7 +845,7 @@ class BowMetricEstimator(BowEstimator):
                             vocabulary=self.vocabulary, 
                             latent_distribution=self.latent_distribution, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                            n_covars=0, ctx=self.ctx)
+                              n_covars=0, device=self.device)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
@@ -900,10 +863,10 @@ class BowMetricEstimator(BowEstimator):
 
     def _ff_batch(self, model, batch_data):
         (batch1, labels1), (batch2, labels2) = batch_data
-        batch1 = batch1.as_in_context(self.ctx)
-        batch2 = batch2.as_in_context(self.ctx)
-        labels1 = labels1.as_in_context(self.ctx)
-        labels2 = labels2.as_in_context(self.ctx)
+        batch1 = batch1.to(self.device)
+        batch2 = batch2.to(self.device)
+        labels1 = labels1.to(self.device)
+        labels2 = labels2.to(self.device)
         elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(batch1, batch2)
         return elbos_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, labels1, labels2
 
@@ -1058,8 +1021,8 @@ class CovariateBowEstimator(BaseBowEstimator):
     def _get_losses(self, model, batch_data):
         # batch_data has form: ((data, covars),)
         (data,covars), = batch_data
-        data = data.as_in_context(self.ctx)
-        covars = covars.as_in_context(self.ctx)        
+        data = data.to(self.device)
+        covars = covars.to(self.device)        
         elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
             self._forward(self.model, data, covars)
         total_ls = elbo_ls.mean()
@@ -1456,10 +1419,10 @@ class SeqBowEstimator(BaseEstimator):
         seqs, = batch_data
         input_ids, valid_length, type_ids, bow, label = seqs
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
-            input_ids.as_in_context(self.ctx), type_ids.as_in_context(self.ctx),
-            valid_length.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+            input_ids.to(self.device), type_ids.to(self.device),
+            valid_length.astype('float32').to(self.device), bow.to(self.device))
         if self.has_classifier:
-            label = label.as_in_context(self.ctx)
+            label = label.to(self.device)
             label_ls = self.loss_function(out, label)
             label_ls = label_ls.mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
@@ -1477,8 +1440,8 @@ class SeqBowEstimator(BaseEstimator):
     def _get_unlabeled_losses(self, model, batch_data):
         inputs, vl, tt, bow, _ = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
-            inputs.as_in_context(self.ctx), tt.as_in_context(self.ctx),
-            vl.astype('float32').as_in_context(self.ctx), bow.as_in_context(self.ctx))
+            inputs.to(self.device), tt.to(self.device),
+            vl.astype('float32').to(self.device), bow.to(self.device))
         total_ls = elbo_ls.mean() / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
         
@@ -1747,10 +1710,10 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         in1, vl1, tt1, bow1, label1 = batch1
         in2, vl2, tt2, bow2, label2 = batch2
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(
-            in1.as_in_context(self.ctx), tt1.as_in_context(self.ctx),
-            vl1.astype('float32').as_in_context(self.ctx), bow1.as_in_context(self.ctx),
-            in2.as_in_context(self.ctx), tt2.as_in_context(self.ctx),
-            vl2.astype('float32').as_in_context(self.ctx), bow2.as_in_context(self.ctx))
+            in1.to(self.device), tt1.to(self.device),
+            vl1.astype('float32').to(self.device), bow1.to(self.device),
+            in2.to(self.device), tt2.to(self.device),
+            vl2.astype('float32').to(self.device), bow2.to(self.device))
         return elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2
 
     def _get_losses(self, model, batch_data):
@@ -1758,8 +1721,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         ## convert back to label indices rather than 1-hot vecs
         label1_ind = label1.argmax(axis=1)
         label2_ind = label2.argmax(axis=1)
-        label1 = label1_ind.as_in_context(self.ctx)
-        label2 = label2_ind.as_in_context(self.ctx)
+        label1 = label1_ind.to(self.device)
+        label2 = label2_ind.to(self.device)
         label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
         label_ls = label_ls.mean()
         total_ls = (self.gamma * label_ls) + elbo_ls.mean()
@@ -1768,8 +1731,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def _get_unlabeled_losses(self, model, batch_data):
         in1, vl1, tt1, bow1, label1 = batch_data
         elbo_ls, rec_ls, kl_ls, red_ls = model.unpaired_input_forward(
-            in1.as_in_context(self.ctx), tt1.as_in_context(self.ctx),
-            vl1.astype('float32').as_in_context(self.ctx), bow1.as_in_context(self.ctx))
+            in1.to(self.device), tt1.to(self.device),
+            vl1.astype('float32').to(self.device), bow1.to(self.device))
         total_ls = elbo_ls / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
     
@@ -1783,8 +1746,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch)
             label1_ind = label1.argmax(axis=1)
             label2_ind = label2.argmax(axis=1)
-            label1_ind = label1_ind.as_in_context(self.ctx)
-            label2_ind = label2_ind.as_in_context(self.ctx)
+            label1_ind = label1_ind.to(self.device)
+            label2_ind = label2_ind.to(self.device)
             label_mat = self.loss_function._compute_labels(mx.ndarray, label1_ind, label2_ind)        
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
             probs = mx.nd.softmax(-dists, axis=1).asnumpy()

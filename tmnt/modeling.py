@@ -18,10 +18,14 @@ from tmnt.distribution import LogisticGaussianDistribution
 from tmnt.distribution import GaussianDistribution
 from tmnt.distribution import HyperSphericalDistribution
 from tmnt.distribution import GaussianUnitVarDistribution
+from tmnt.distribution import BaseDistribution
 from mxnet.gluon.loss import Loss, KLDivLoss
 from torch import nn
+import torch
 
-class BaseVAE(HybridBlock):
+from typing import List, Tuple, Dict, Optional, Union, NoReturn
+
+class BaseVAE(nn.Module):
 
     def __init__(self, vocabulary=None, latent_distribution=LogisticGaussianDistribution(100, 20),
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
@@ -38,16 +42,15 @@ class BaseVAE(HybridBlock):
         self.embedding = None
 
         self.latent_distribution = latent_distribution
-        self.decoder = nn.Linear(self.n_latent, self.vocab_size, activation=None)
+        self.decoder = nn.Linear(self.n_latent, self.vocab_size)
         #self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
 
-    def initialize_bias_terms(self, wd_freqs):
+    def initialize_bias_terms(self, wd_freqs: Optional[np.ndarray]):
         if wd_freqs is not None:
             freq_nd = wd_freqs + 1 # simple smoothing
-            total = freq_nd.sum()
-            log_freq = freq_nd.log() - freq_nd.sum().log()
+            log_freq = np.log(freq_nd) - np.log(freq_nd.sum())
             with torch.no_grad():
-                self.decoder.bias = nn.Parameter(log_freq)
+                self.decoder.bias = nn.Parameter(torch.Tensor(log_freq))
                 self.decoder.bias.requires_grad_(False)
 
     def get_ordered_terms(self):
@@ -56,8 +59,9 @@ class BaseVAE(HybridBlock):
         probability increases the most for a unit increase in a given topic score/probability
         are those most associated with the topic.
         """
-        z = torch.ones((1, self.n_latent), device=self.device)
+        z = torch.ones((self.n_latent,), device=self.device)
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
+        print("jacobian shape = {}".format(jacobian.shape))
         sorted_j = jacobian.argsort(dim=0, descending=True)
         return sorted_j.numpy()
     
@@ -82,12 +86,10 @@ class BaseVAE(HybridBlock):
 
     def get_loss_terms(self, data, y, KL, batch_size):
         rr = data * torch.log(y+1e-12)
-        recon_loss = -torch.sparse.sum( rr, dim=1 )
-        i_loss = recon_loss + KL
+        recon_loss = -(rr.sum(dim=1))
+        i_loss = KL + recon_loss
         ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(i_loss)
         return ii_loss, recon_loss, coherence_loss, redundancy_loss
-
-
 
 
 class BowVAEModel(BaseVAE):
@@ -125,8 +127,10 @@ class BowVAEModel(BaseVAE):
             assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
         self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
         
-        self.embedding = torch.nn.Linear(self.vocab_size, self.embedding_size)
-        self.act1      = torch.nn.Tanh()
+        self.embedding = torch.nn.Sequential()
+        self.embedding.add_module("linear", torch.nn.Linear(self.vocab_size, self.embedding_size))
+        self.embedding.add_module("tanh", torch.nn.Tanh())
+        #self.embedding = torch.nn.Linear(self.vocab_size, self.embedding_size)
         self.encoder   = self._get_encoder(self.encoding_dims, dr=enc_dr)
         if self.has_classifier:
             self.lab_dr = torch.nn.Dropout(self.enc_dr*2.0)
@@ -137,7 +141,7 @@ class BowVAEModel(BaseVAE):
             emb = self.vocabulary.embedding.idx_to_vec.transpose()
             emb_norm_val = torch.norm(emb, keepdim=True, dim=0) + 1e-10
             emb_norm = emb / emb_norm_val
-            self.embedding.weight.data = emb_norm
+            self.embedding[0].weight.data = emb_norm
             if fixed_embedding:
                 self.embedding.requires_grad_(False)
 
@@ -145,17 +149,17 @@ class BowVAEModel(BaseVAE):
     def _init_weights(self, module):
         if isinstance(module, torch.nn.Linear):
             torch.nn.init.xavier_uniform_(module.weight.data)
-        elif isinstance(module, tmnt.distribution.BaseDistribution):
+        elif isinstance(module, BaseDistribution):
             module.post_init(self.device) # vmf needs this
             
             
     def _get_encoder(self, dims, dr=0.1):
         encoder = torch.nn.Sequential()
         for i in range(len(dims)-1):
-            encoder.add_module("linear_"+i, torch.nn.Linear(dims[i], dims[i+1]))
-            encoder.add_module("soft_"+i, torch.nn.Softplus())
+            encoder.add_module("linear_"+str(i), torch.nn.Linear(dims[i], dims[i+1]))
+            encoder.add_module("soft_"+str(i), torch.nn.Softplus())
             if dr > 0.0:
-                encoder.add_module("drop_"+i, torch.nn.Dropout(dr))
+                encoder.add_module("drop_"+str(i), torch.nn.Dropout(dr))
         return encoder
 
     def get_ordered_terms_encoder(self, dataloader, sample_size=-1):
@@ -236,13 +240,14 @@ class BowVAEModel(BaseVAE):
     
 
     def forward(self, data):
+        data = data.to_dense()
         batch_size = data.shape[0]
         emb_out = self.embedding(data)
         #z, KL = self.run_encode(F, emb_out, batch_size)
         enc_out = self.encoder(emb_out)
         mu_out  = self.latent_distribution.get_mu_encoding(enc_out)
         z, KL   = self.latent_distribution(enc_out, batch_size)
-        y = torch.functional.softmax(self.decoder(z), dim=1)
+        y = torch.nn.functional.softmax(self.decoder(z), dim=1)
         ii_loss, recon_loss, coherence_loss, redundancy_loss = \
             self.get_loss_terms(data, y, KL, batch_size)
         if self.has_classifier:
@@ -270,7 +275,7 @@ class MetricBowVAEModel(BowVAEModel):
         batch_size = bow.shape[0]
         z, KL = self.latent_distribution(enc, batch_size)
         KL_loss = (KL * self.kld_wt)
-        y = torch.functional.softmax(self.decoder(z), dim=1)
+        y = torch.nn.functional.softmax(self.decoder(z), dim=1)
         rec_loss = -torch.sum( bow * torch.log(y+1e-12), dim=1 )
         elbo = rec_loss + KL_loss
         return elbo, rec_loss, KL_loss
@@ -284,8 +289,7 @@ class MetricBowVAEModel(BowVAEModel):
         redundancy_loss = self.get_redundancy_penalty()
         return elbo, rec_loss, kl_loss, redundancy_loss
 
-
-    def hybrid_forward(self, F, data1, data2):
+    def forward(self, F, data1, data2):
         enc1 = self._get_encoding(data1)
         enc2 = self._get_encoding(data2)
         mu1  = self.latent_distribution.get_mu_encoding(enc1)
@@ -305,10 +309,10 @@ class CovariateBowVAEModel(BowVAEModel):
         with self.name_scope():
             if self.n_covars < 1:  
                 self.cov_decoder = ContinuousCovariateModel(self.n_latent, self.vocab_size,
-                                                            total_layers=self.covar_net_layers, ctx=self.model_ctx)
+                                                            total_layers=self.covar_net_layers, device=self.device)
             else:
                 self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size,
-                                                  interactions=True, ctx=self.model_ctx)
+                                                  interactions=True, device=self.device)
 
 
     def encode_data_with_covariates(self, data, covars, include_bn=False):
@@ -324,14 +328,14 @@ class CovariateBowVAEModel(BowVAEModel):
         """
         Uses test/training data-point as the input points around which term sensitivity is computed
         """
-        data = data.as_in_context(self.model_ctx)
-        covar = covar.as_in_context(self.model_ctx)
-        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
+        data = data.to(self.device)
+        covar = covar.to(self.device)
+        jacobian = torch.zeros((self.vocab_size, self.n_latent), device=self.device)
 
         batch_size = data.shape[0]
         emb_out = self.embedding(data)
 
-        co_emb = mx.nd.concat(emb_out, covar)
+        co_emb = torch.cat(emb_out, covar)
         z = self.latent_distribution.get_mu_encoding(self.encoder(co_emb))
 
         z.attach_grad()
@@ -375,7 +379,7 @@ class CovariateBowVAEModel(BowVAEModel):
         return jacobian
         
 
-    def hybrid_forward(self, F, data, covars):
+    def forward(self, F, data, covars):
         batch_size = data.shape[0]
         emb_out = self.embedding(data)
         if self.n_covars > 0:
@@ -392,17 +396,17 @@ class CovariateBowVAEModel(BowVAEModel):
         
 class CovariateModel(nn.Module):
 
-    def __init__(self, n_topics, n_covars, vocab_size, interactions=False, ctx=mx.cpu()):
+    def __init__(self, n_topics, n_covars, vocab_size, interactions=False, device='cpu'):
         self.n_topics = n_topics
         self.n_covars = n_covars
         self.vocab_size = vocab_size
         self.interactions = interactions
-        self.model_ctx = ctx
+        self.device = device
         super(CovariateModel, self).__init__()
         with self.name_scope():
             self.cov_decoder = torch.nn.Linear(n_covars, self.vocab_size, bias=False)
             if self.interactions:
-                self.cov_inter_decoder = torch.nn.Dense(self.n_covars * self.n_topics, self.vocab_size, bias=False)
+                self.cov_inter_decoder = torch.nn.Linear(self.n_covars * self.n_topics, self.vocab_size, bias=False)
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
@@ -426,7 +430,7 @@ class CovariateModel(nn.Module):
 
 class ContinuousCovariateModel(nn.Module):
 
-    def __init__(self, n_topics, vocab_size, total_layers = 1, ctx=mx.cpu()):
+    def __init__(self, n_topics, vocab_size, total_layers = 1, device='device'):
         self.n_topics  = n_topics
         self.n_scalars = 1   # number of continuous variables
         self.model_ctx = ctx
@@ -434,16 +438,17 @@ class ContinuousCovariateModel(nn.Module):
         super(ContinuousCovariateModel, self).__init__()
 
         with self.name_scope():
-            self.cov_decoder = gluon.nn.HybridSequential()
+            self.cov_decoder = nn.Sequential()
             for i in range(total_layers):
                 if i < 1:
                     in_units = self.n_scalars + self.n_topics
                 else:
                     in_units = self.time_topic_dim
-                self.cov_decoder.add(gluon.nn.Dense(in_units = in_units, units=self.time_topic_dim,
-                                                    activation='relu', use_bias=(i < 1)))
-            self.cov_decoder.add(gluon.nn.Dense(in_units=self.time_topic_dim, units=vocab_size, activation=None, use_bias=False))
-        self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+                self.cov_decoder.add_module("linear_"+str(i), nn.Linear(in_units, self.time_topic_dim,
+                                               bias=(i < 1)))
+                self.cov_decoder.add_module("relu_"+str(i), nn.Relu())
+            self.cov_decoder.add_module("linear_out_", nn.Linear(self.time_topic_dim, vocab_size, bias=False))
+        #self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
 
     def forward(self, topic_distrib, scalars):
         inputs = torch.cat((topic_distrib, scalars), 0)
@@ -537,10 +542,11 @@ class BaseSeqBowVED(Block):
             freq_nd = wd_freqs + 1 # simple smoothing
             total = freq_nd.sum()
             log_freq = freq_nd.log() - freq_nd.sum().log()
-            bias_param = self.decoder.collect_params().get('bias')
-            bias_param.set_data(log_freq)
-            bias_param.grad_req = 'null'
-            self.out_bias = bias_param.data()
+            with torch.no_grad():
+                self.decoder.bias = nn.Parameter(log_freq)
+                self.decoder.bias.requires_grad_(False)
+                self.out_bias = freq_nd
+
 
     def get_top_k_terms(self, k):
         """
@@ -660,7 +666,7 @@ class GeneralizedSDMLLoss(Loss):
 
     def __init__(self, smoothing_parameter=0.3, weight=1., batch_axis=0, x2_downweight_idx=-1, **kwargs):
         super(GeneralizedSDMLLoss, self).__init__(weight, batch_axis, **kwargs)
-        self.kl_loss = KLDivLoss(from_logits=True)
+        self.kl_loss = nn.KLDivLoss()
         self.smoothing_parameter = smoothing_parameter # Smoothing probability mass
         self.x2_downweight_idx = x2_downweight_idx
 
