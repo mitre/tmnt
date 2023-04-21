@@ -8,7 +8,6 @@ from math import log10
 from collections import Counter
 
 import numpy as np
-import mxnet as mx
 import scipy
 import scipy.sparse
 
@@ -59,11 +58,12 @@ class EvaluateNPMI(object):
             is_sparse = True
             mat = csr_mat
         else:
-            is_sparse = isinstance(csr_mat, mx.nd.sparse.CSRNDArray)
+            #is_sparse = isinstance(csr_mat, mx.nd.sparse.CSRNDArray)
+            is_sparse = False
             if is_sparse:
                 mat = csr_mat.asscipy()
             else:
-                mat = csr_mat.asnumpy()
+                mat = csr_mat.to_dense().numpy()
         n_docs = mat.shape[0]
         total_npmi = 0
         for i, words_per_topic in enumerate(self.top_k_words_per_topic):

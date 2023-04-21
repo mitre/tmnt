@@ -4,23 +4,15 @@
 Core Neural Net architectures for topic modeling.
 """
 
-import mxnet as mx
-from mxnet import gluon
 import math
 import os
 import numpy as np
-import gluonnlp as nlp
 import logging
-from mxnet.gluon import HybridBlock, Block
-from mxnet.gluon import nn
 
 from tmnt.distribution import LogisticGaussianDistribution
-from tmnt.distribution import GaussianDistribution
-from tmnt.distribution import HyperSphericalDistribution
-from tmnt.distribution import GaussianUnitVarDistribution
 from tmnt.distribution import BaseDistribution
-from mxnet.gluon.loss import Loss, KLDivLoss
 from torch import nn
+from torch.nn.modules.loss import _Loss
 import torch
 
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
@@ -61,7 +53,6 @@ class BaseVAE(nn.Module):
         """
         z = torch.ones((self.n_latent,), device=self.device)
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
-        print("jacobian shape = {}".format(jacobian.shape))
         sorted_j = jacobian.argsort(dim=0, descending=True)
         return sorted_j.numpy()
     
@@ -97,14 +88,14 @@ class BowVAEModel(BaseVAE):
     Defines the neural architecture for a bag-of-words topic model.
 
     Parameters:
-        vocabulary (:class:`gluon.Vocab`): GluonNLP Vocabulary
+        vocabulary (:class:`torchtext.vocab.Vocab`): Torchtext Vocabulary
         enc_dim (int): Number of dimension of input encoder (first FC layer)
         embedding_size (int): Number of dimensions for embedding layer
         fixed_embedding (bool): Whether to fix embedding weights (default = False)
         n_encoding_layers (int): Number of layers used for the encoder. (default = 1)
         enc_dr (float): Dropout after each encoder layer. (default = 0.1)
         n_covars (int): Number of values for categorical co-variate (0 for non-CovariateData BOW model)
-        ctx (int): context device (default is mx.cpu())
+        device (str): context device 
     """
     def __init__(self,
                  enc_dim, embedding_size, n_encoding_layers, enc_dr, fixed_embedding,
@@ -123,34 +114,29 @@ class BowVAEModel(BaseVAE):
         self.gamma    = gamma
         self.classifier_dropout=classifier_dropout
         self.has_classifier = self.n_labels > 1
-        if self.vocabulary.embedding:
-            assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
+        #if self.vocabulary.embedding:
+        #    assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
         self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
-        
         self.embedding = torch.nn.Sequential()
         self.embedding.add_module("linear", torch.nn.Linear(self.vocab_size, self.embedding_size))
         self.embedding.add_module("tanh", torch.nn.Tanh())
-        #self.embedding = torch.nn.Linear(self.vocab_size, self.embedding_size)
         self.encoder   = self._get_encoder(self.encoding_dims, dr=enc_dr)
         if self.has_classifier:
-            self.lab_dr = torch.nn.Dropout(self.enc_dr*2.0)
-            self.classifier = torch.nn.Linear(self.n_latent, self.n_labels)
+            self.lab_dr = torch.nn.Dropout(self.classifier_dropout)
+            self.classifier = torch.nn.Linear(self.n_latent, self.n_labels, bias=True)
             
         self.apply(self._init_weights)
-        if self.vocabulary.embedding:            
-            emb = self.vocabulary.embedding.idx_to_vec.transpose()
-            emb_norm_val = torch.norm(emb, keepdim=True, dim=0) + 1e-10
-            emb_norm = emb / emb_norm_val
-            self.embedding[0].weight.data = emb_norm
-            if fixed_embedding:
-                self.embedding.requires_grad_(False)
-
+        #if self.vocabulary.embedding:            
+        #    emb = self.vocabulary.embedding.idx_to_vec.transpose()
+        #    emb_norm_val = torch.norm(emb, keepdim=True, dim=0) + 1e-10
+        #    emb_norm = emb / emb_norm_val
+        #    self.embedding[0].weight.data = emb_norm
+        #    if fixed_embedding:
+        #        self.embedding.requires_grad_(False)
 
     def _init_weights(self, module):
         if isinstance(module, torch.nn.Linear):
             torch.nn.init.xavier_uniform_(module.weight.data)
-        elif isinstance(module, BaseDistribution):
-            module.post_init(self.device) # vmf needs this
             
             
     def _get_encoder(self, dims, dr=0.1):
@@ -245,12 +231,12 @@ class BowVAEModel(BaseVAE):
         emb_out = self.embedding(data)
         #z, KL = self.run_encode(F, emb_out, batch_size)
         enc_out = self.encoder(emb_out)
-        mu_out  = self.latent_distribution.get_mu_encoding(enc_out)
         z, KL   = self.latent_distribution(enc_out, batch_size)
         y = torch.nn.functional.softmax(self.decoder(z), dim=1)
         ii_loss, recon_loss, coherence_loss, redundancy_loss = \
             self.get_loss_terms(data, y, KL, batch_size)
         if self.has_classifier:
+            mu_out  = self.latent_distribution.get_mu_encoding(enc_out)
             classifier_outputs = self.classifier(self.lab_dr(mu_out))
         else:
             classifier_outputs = None
@@ -337,7 +323,6 @@ class CovariateBowVAEModel(BowVAEModel):
 
         co_emb = torch.cat(emb_out, covar)
         z = self.latent_distribution.get_mu_encoding(self.encoder(co_emb))
-
         z.attach_grad()
         outputs = []
         with mx.autograd.record():
@@ -448,7 +433,6 @@ class ContinuousCovariateModel(nn.Module):
                                                bias=(i < 1)))
                 self.cov_decoder.add_module("relu_"+str(i), nn.Relu())
             self.cov_decoder.add_module("linear_out_", nn.Linear(self.time_topic_dim, vocab_size, bias=False))
-        #self.initialize(mx.init.Xavier(), ctx=self.model_ctx)
 
     def forward(self, topic_distrib, scalars):
         inputs = torch.cat((topic_distrib, scalars), 0)
@@ -470,7 +454,7 @@ class CoherenceRegularizer(nn.Module):
         ## emb should have shape (D x V)
         ## w should have shape (V x K)
         # w NORM over columns
-        w_min = w.min(keepdim=True, dim=0)
+        w_min,_ = w.min(keepdim=True, dim=0)
         ww = w - w_min # ensure weights are non-negative
         w_norm_val = torch.norm(ww, keepdim=True, dim=0)
         emb_norm_val = torch.norm(emb, keepdim=True, dim=1)
@@ -478,33 +462,32 @@ class CoherenceRegularizer(nn.Module):
         w_norm = ww / w_norm_val
         emb_norm = emb / emb_norm_val
 
-        T = torch.bmm(emb_norm, w_norm)
+        T = torch.matmul(emb_norm, w_norm)
         T_norm_vals = torch.norm(T, keepdim=True, dim=0)
         T_norm = T / T_norm_vals # (D x K)
 
-        S = torch.bmm(emb_norm.t(), T_norm) # (V x K)
+        S = torch.matmul(emb_norm.t(), T_norm) # (V x K)
         C = -(S * w_norm).sum()
         ## diversity component
-        D1 = torch.bmm(T_norm.t(), T_norm)
+        D1 = torch.matmul(T_norm.t(), T_norm)
         D = D1.sum()
         return C * self.coherence_pen , D * self.redundancy_pen
 
 
-
-class BaseSeqBowVED(Block):
+class BaseSeqBowVED(nn.Module):
     def __init__(self,
-                 bert,
+                 llm,
                  latent_dist,
                  num_classes=0,
                  dropout=0.0,
                  bow_vocab_size=2000,
                  n_latent=20, 
                  kld=0.1,
-                 ctx=mx.cpu(),
+                 device='cpu',
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None):
         super(BaseSeqBowVED, self).__init__()
         self.n_latent = latent_dist.n_latent
-        self.bert = bert
+        self.llm = llm
         self.kld_wt = kld
         self.has_classifier = num_classes >= 2
         self.num_classes = num_classes
@@ -512,91 +495,78 @@ class BaseSeqBowVED(Block):
         self.bow_vocab_size = bow_vocab_size
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.vocabulary = None ### XXX - add this as option to be passed in
-        self.model_ctx = ctx
-        with self.name_scope():
-            self.latent_dist = latent_dist
-            self.embedding = None
-            self.decoder = nn.Dense(in_units=self.n_latent, units=bow_vocab_size, use_bias=True)
-            self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)            
-            if pre_trained_embedding is not None:
-                self.embedding = nn.Dense(in_units = len(pre_trained_embedding.idx_to_vec),
-                                          units = pre_trained_embedding.idx_to_vec[0].size, use_bias=False)
-            if self.vocabulary:
-                self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary),
-                                                units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
-                self.embedding.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-                emb = self.vocabulary.embedding.idx_to_vec.transpose()
-                emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
-                emb_norm = emb / emb_norm_val
-                self.embedding.collect_params().setattr('grad_req', 'null')
+        self.latent_dist = latent_dist
+        self.embedding = None
+        self.decoder = nn.Linear(self.n_latent, bow_vocab_size, bias=True)
+        self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)
+        self.device = device        
+        if pre_trained_embedding is not None:
+            self.embedding = nn.Linear(len(pre_trained_embedding.idx_to_vec),
+                                           pre_trained_embedding.idx_to_vec[0].size, bias=False)
+        self.apply(self._init_weights)
+            #if self.vocabulary:
+            #    self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary),
+            #                                    units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
+            #    self.embedding.initialize(mx.init.Xavier(), ctx=self.model_ctx)
+            #    emb = self.vocabulary.embedding.idx_to_vec.transpose()
+            #    emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
+            #    emb_norm = emb / emb_norm_val
+            #    self.embedding.collect_params().setattr('grad_req', 'null')
+
+    def _init_weights(self, module):
+        if isinstance(module, torch.nn.Linear):
+            torch.nn.init.xavier_uniform_(module.weight.data)
+
+
+    def get_ordered_terms(self):
+        """
+        Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
+        probability increases the most for a unit increase in a given topic score/probability
+        are those most associated with the topic.
+        """
+        z = torch.ones((self.n_latent,), device=self.device)
+        jacobian = torch.autograd.functional.jacobian(self.decoder, z)
+        sorted_j = jacobian.argsort(dim=0, descending=True)
+        return sorted_j.numpy()
+            
 
     def get_redundancy_penalty(self):
-        w = self.decoder.params.get('weight').data()
-        emb = self.embedding.params.get('weight').data() if self.embedding is not None else w.transpose()
+        w = self.decoder.weight.data
+        emb = self.embedding.weight.data if self.embedding is not None else w.transpose(0,1)
         _, redundancy_loss = self.coherence_regularization(w, emb)
         return redundancy_loss
 
 
-    def initialize_bias_terms(self, wd_freqs):
-        if wd_freqs is not None:
-            freq_nd = wd_freqs + 1 # simple smoothing
-            total = freq_nd.sum()
-            log_freq = freq_nd.log() - freq_nd.sum().log()
-            with torch.no_grad():
-                self.decoder.bias = nn.Parameter(log_freq)
-                self.decoder.bias.requires_grad_(False)
-                self.out_bias = freq_nd
-
-
-    def get_top_k_terms(self, k):
-        """
-        Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
-        probability increases the most for a unit increase in a given topic score/probability
-        are those most associated with the topic. This is just the topic-term weights for a 
-        linear decoder - but code here will work with arbitrary decoder.
-        """
-        z = mx.nd.ones(shape=(1, self.n_latent), ctx=self.model_ctx)
-        jacobian = mx.nd.zeros(shape=(self.bow_vocab_size, self.n_latent), ctx=self.model_ctx)
-        z.attach_grad()        
-        for i in range(self.bow_vocab_size):
-            with mx.autograd.record():
-                y = self.decoder(z)
-                yi = y[0][i]
-            yi.backward()
-            jacobian[i] = z.grad
-        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
-        return sorted_j.asnumpy()
-            
 
 class SeqBowVED(BaseSeqBowVED):
     def __init__(self, *args, **kwargs):
         super(SeqBowVED, self).__init__(*args, **kwargs)
-        with self.name_scope():
-            if self.has_classifier:
-                self.classifier = torch.nn.Sequential()
-                if self.dropout:
-                    self.classifier.add_module("dr", nn.Dropout(rate=self.dropout))
-                self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes))
+        if self.has_classifier:
+            self.classifier = torch.nn.Sequential()
+            self.classifier.add_module("dr", nn.Dropout(self.dropout))
+            self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes))
 
-    def forward(self, inputs, token_types, valid_length=None, bow=None):  # pylint: disable=arguments-differ
-        _, enc = self.bert(inputs, token_types, valid_length)
-        return self.forward_with_cached_encoding(inputs, enc, bow)
+    def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
+        llm_output = self.llm(input_ids, attention_mask)
+        cls_vec = llm_output.last_hidden_state[:,0,:]
+        return self.forward_with_cached_encoding(cls_vec, bow)
 
-    def forward_with_cached_encoding(self, inputs, enc, bow):
+    def forward_with_cached_encoding(self, enc, bow):
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
-            bow = bow.squeeze(axis=1)
-            z, KL = self.latent_dist(enc, inputs.shape[0])
+            #bow = bow.squeeze(axis=1)
+            z, KL = self.latent_dist(enc, enc.size()[0])
             KL_loss = (KL * self.kld_wt)
-            y = mx.nd.softmax(self.decoder(z), axis=1)
-            rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
-            elbo = rec_loss + KL_loss
+            y = torch.nn.functional.softmax(self.decoder(z), dim=1)
+            rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
+            elbo = KL_loss + rec_loss
         if self.has_classifier:
             z_mu = self.latent_dist.get_mu_encoding(enc)            
             classifier_outputs = self.classifier(z_mu)
         else:
             classifier_outputs = None
-        redundancy_loss = self.get_redundancy_penalty()
+        #redundancy_loss = self.get_redundancy_penalty()
+        redundancy_loss = 0.0
         elbo = elbo + redundancy_loss
         return elbo, rec_loss, KL_loss, redundancy_loss, classifier_outputs
 
@@ -634,7 +604,7 @@ class MetricSeqBowVED(BaseSeqBowVED):
         return elbo, rec_loss, KL_loss, redundancy_loss, z_mu1, z_mu2
 
 
-class GeneralizedSDMLLoss(Loss):
+class GeneralizedSDMLLoss(_Loss):
     r"""Calculates Batchwise Smoothed Deep Metric Learning (SDML) Loss given two input tensors and a smoothing weight
     SDM Loss learns similarity between paired samples by using unpaired samples in the minibatch
     as potential negative examples.

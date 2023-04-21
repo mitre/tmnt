@@ -10,16 +10,11 @@ import itertools
 import os
 import logging
 import scipy
-import gluonnlp as nlp
-import mxnet as mx
 import numpy as np
 import string
 import re
 import json
-from mxnet import gluon
-from gluonnlp.data import BERTTokenizer, BERTSentenceTransform
 from collections import OrderedDict
-from mxnet.io import DataDesc, DataIter, DataBatch
 from sklearn.datasets import load_svmlight_file
 from sklearn.utils import shuffle as sk_shuffle
 from tmnt.preprocess.vectorizer import TMNTVectorizer
@@ -30,7 +25,61 @@ from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 import torch
 from torch.utils.data import DataLoader
+from torchtext.vocab import vocab as build_vocab
+from torchtext.data.utils import get_tokenizer
+from torchtext.vocab import build_vocab_from_iterator
+from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, DistilBertTokenizer, BertModel, DistilBertModel, OpenAIGPTModel
 
+
+#### Huggingface LLM-specific dataloading ####
+
+llm_catalog = {
+    'distilbert-base-uncased': (DistilBertTokenizer.from_pretrained, DistilBertModel.from_pretrained),
+    'bert-base-uncased' : (AutoTokenizer.from_pretrained, BertModel.from_pretrained),
+    'openai-gpt' : (AutoTokenizer.from_pretrained, OpenAIGPTModel.from_pretrained)
+    ## add more model options here if desired
+    }
+
+def get_llm(model_name):
+    tok_fn, model_fn = llm_catalog[model_name]
+    return tok_fn(model_name), model_fn(model_name)
+
+def get_llm_tokenizer(model_name):
+    tok_fn, _ = llm_catalog[model_name]
+    return tok_fn(model_name)
+
+def get_llm_model(model_name):
+    _, model_fn = llm_catalog[model_name]
+    return model_fn(model_name)
+
+def get_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False):
+    #device = get_device()
+    device = 'cpu'
+    label_pipeline = lambda x: label_map.get(x, 0)
+    text_pipeline  = get_llm_tokenizer(llm_name)
+    
+    def collate_batch(batch):
+        label_list, text_list, mask_list, bow_list = [], [], [], []
+        for (_label, _text) in batch:
+            label_list.append(label_pipeline(_label))
+            tokenized_result = text_pipeline(_text, return_tensors='pt', padding='max_length',
+                                           max_length=max_len, truncation=True)
+            bag_of_words,_ = bow_vectorizer.transform([_text])
+            processed_text = tokenized_result['input_ids']
+            mask = tokenized_result['attention_mask']
+            mask_list.append(mask)
+            text_list.append(processed_text)
+            bow_list.append(bag_of_words)
+        label_list = torch.tensor(label_list, dtype=torch.int64)
+        text_list  = torch.vstack(text_list)
+        mask_list  = torch.vstack(mask_list)
+        bow_list   = torch.vstack([ sparse_coo_to_tensor(bow_vec.tocoo()) for bow_vec in bow_list ])
+        return label_list.to(device), text_list.to(device), mask_list.to(device), bow_list.to(device)
+
+    return SingletonWrapperLoader(DataLoader(data, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_batch))
+
+
+##############################################
 
 def to_label_matrix(yvs, num_labels=0):
     """Convert [(id1, id2, ...), (id1,id2,...) ... ] to Numpy matrix with multi-labels
@@ -45,7 +94,7 @@ def to_label_matrix(yvs, num_labels=0):
     li = []
     for yi in yvs:
         a = np.zeros(num_labels)
-        a[np.array(yi, dtype='int64')] = 1.0
+        a[np.array(yi, dtype='int64')] = 1
         li.append(a)
     return np.array(li), num_labels
 
@@ -90,7 +139,8 @@ def sparse_coo_to_tensor(coo: sp.coo_matrix):
     s = torch.Size(shape)
 
     return torch.sparse.FloatTensor(i, v, s)
-    
+
+
 def sparse_batch_collate(batch): 
     """
     Collate function which to transform scipy coo matrix to pytorch sparse tensor
@@ -104,12 +154,12 @@ def sparse_batch_collate(batch):
     else:
         data_batch = torch.FloatTensor(data_batch)
 
-    if targets_batch:
+    if targets_batch is not None:
         if type(targets_batch[0]) == sp.csr_matrix:
             targets_batch = targets_batch.tocoo() # removed vstack
             targets_batch = sparse_coo_to_tensor(targets_batch)
         else:
-            targets_batch = torch.FloatTensor(targets_batch)
+            targets_batch = torch.LongTensor(targets_batch)
     return data_batch, targets_batch
 
 
@@ -125,7 +175,8 @@ class SparseDataLoader(DataLoader):
                                                    generator=torch.Generator(device=device)),
             batch_size=batch_size,
             drop_last=False)
-        super().__init__(ds, batch_size=1, collate_fn=sparse_batch_collate, generator=torch.Generator(device=device), sampler=sampler, drop_last=drop_last)
+        super().__init__(ds, batch_size=1, collate_fn=sparse_batch_collate, generator=torch.Generator(device=device),
+                         sampler=sampler, drop_last=drop_last)
         
 
 
@@ -246,7 +297,6 @@ class RoundRobinDataLoader():
     
 
 
-
 def _init_data(data, allow_empty, default_name):
     """Convert data into canonical form."""
     assert (data is not None) or allow_empty
@@ -270,8 +320,7 @@ def load_vocab(vocab_file, encoding='utf-8'):
     ln_wds = len(words)
     for i in range(ln_wds):
         w_dict[words[i]] = ln_wds - i
-    counter = nlp.data.Counter(w_dict)
-    return nlp.Vocab(counter, unknown_token=None, padding_token=None, bos_token=None, eos_token=None)
+    return build_vocab(w_dict)
 
 
 def file_to_data(sp_file, voc_size, batch_size=1000):

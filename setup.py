@@ -20,11 +20,10 @@ if __name__ == '__main__':
         'numpy>=1.5.0'
     ]
     install_requires = [
-        'numpy>=1.19.0,<1.20.0',
-        'gluonnlp==0.10.0',
-        'autogluon.core==0.3.1',
-        'mantichora==0.9.5',
-        'pandas<2.0',
+        'optuna',
+        'mantichora>=0.9.5',
+        'transformers[torch]',
+        'torcheval',
         ## pyLDAvis dependencies expressed here to avoid long dep search
         'pyLDAvis==2.1.2',
         'MarkupSafe>=2.0',
@@ -36,18 +35,11 @@ if __name__ == '__main__':
         'PySocks==1.6.8',
         'sacremoses>=0.0.38',
         'sentence-splitter==1.4',
-        'scikit-learn>=0.24.1',
-        'numba<=0.52.0',
         'umap-learn==0.4.6',
         'tabulate>=0.8.7',
-        'torch>=1.13.0'
+        'torch>=1.13.0',
+        'torchtext>=0.13.0'
     ]
-    ## need to stick with mxnet < 1.8 to maintain compatibility on Windows
-    if(environ.get('USE_CUDA') == '1'):
-        #install_requires.append('mxnet-cu102==1.8.0')
-        install_requires.append('mxnet-cu101<1.8.0,>=1.6.0')
-    else:
-        install_requires += ['mxnet<1.8.0,>=1.6.0']
 
     class GPUCommand(install):
         user_options = install.user_options + [

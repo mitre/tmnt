@@ -35,16 +35,14 @@ logging_config(folder='.', name='train_20news', level='info', console_level='inf
 # We use the ``LogisticGaussian`` latent distribution here with 25 latent dimensions or *topics*
 # The fit method applied to the term-document matrix will estimate the model parameters.
 from tmnt.estimator import BowEstimator
-from tmnt.distribution import LogisticGaussianDistribution, HyperSphericalDistribution, GaussianDistribution, VonMisesDistribution
-#distribution = HyperSphericalDistribution(100,20)
-#distribution = LogisticGaussianDistribution(100,20)
-distribution = VonMisesDistribution(100,20, kappa=2.0)
-#distribution = GaussianDistribution(100,20,dr=0.0)
+from tmnt.distribution import LogisticGaussianDistribution, GaussianDistribution, VonMisesDistribution
 
-print("**** ==> Creating estimator ...")
+distribution = LogisticGaussianDistribution(100,20,dr=0.2,alpha=0.5)
+
 estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=distribution,
-                         log_method='log', lr=0.001, batch_size=500, embedding_source='random', embedding_size=100,
-                         epochs=10, enc_hidden_dim=100, validate_each_epoch=False, quiet=False)
+                         log_method='log', lr=0.0075, batch_size=400, embedding_source='random', embedding_size=200,
+                         epochs=96, enc_hidden_dim=100, validate_each_epoch=True, quiet=False)
+
 #estimator = BowEstimator.from_config(config='../data/configs/train_model/model.config', vocabulary=tf_vectorizer.get_vocab())
 #tr_X, val_X = X[:1000], X[:1000] # in this case, use same data for training and validation
 tr_X, val_X = X, X # in this case, use same data for training and validation
@@ -68,20 +66,17 @@ reloaded_inferencer = BowVAEInferencer.from_saved(model_dir='_model_dir')
 import pyLDAvis
 import funcy
 full_model_dict = inferencer.get_pyldavis_details(X)
+
 pylda_opts = funcy.merge(full_model_dict, {'mds': 'mmds'})
 vis_data = pyLDAvis.prepare(**pylda_opts)
 
 # %%
 # The topic model terms and topic-term proportions will be written
 # to the file ``m1.html``
+
+import numpy as np
 pyLDAvis.save_html(vis_data, 'm1.html')
 
-
-# %%
-# Now let's visualize the encodings for the training set using UMAP:
-import numpy as np
-import umap
-import matplotlib.pyplot as plt
 
 # %%
 # As we've already preprocessed the entire training set, we can use the method :py:meth:`tmnt.inference.BowVAEInferencer.encode_data`
@@ -89,11 +84,20 @@ import matplotlib.pyplot as plt
 enc_list = reloaded_inferencer.encode_data(X)
 encodings = np.array(enc_list)
 
+top_k_topics = inferencer.get_top_k_words_per_topic(10)
+
+
+# %%
+# Now let's visualize the encodings for the training set using UMAP:
+
+#import umap
+#import matplotlib.pyplot as plt
+
 # %%
 # We leverage UMAP to fit (another) embedding from the topic encodings appropriate
 # for visualizing the data.  See UMAP for more `here <https://umap-learn.readthedocs.io/en/latest/>`_
-umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
-embeddings = umap_model.fit_transform(encodings)
+#umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
+#embeddings = umap_model.fit_transform(encodings)
 
 
 # %%
@@ -101,5 +105,5 @@ embeddings = umap_model.fit_transform(encodings)
 # For this dataset, although we did not use the provided labels ``y`` to help fit the
 # topic model, it can be helpful to use the labels to color-code the documents
 # in order to see how documents with the same label are encoded.
-plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
-plt.show()
+#plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
+#plt.show()

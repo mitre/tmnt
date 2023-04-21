@@ -8,12 +8,11 @@ building a model using the labels as prediction targets.
 
 from tmnt.estimator import BowEstimator
 import numpy as np
-import gluonnlp as nlp
 import os
 from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import BowVAEInferencer
-from tmnt.distribution import HyperSphericalDistribution, LogisticGaussianDistribution
+from tmnt.distribution import LogisticGaussianDistribution
 from sklearn.linear_model import SGDClassifier
 from sklearn.metrics import accuracy_score
 
@@ -34,6 +33,8 @@ tf_vectorizer = TMNTVectorizer(vocab_size=10000, count_vectorizer_kwargs=cv_para
 X_train, _ = tf_vectorizer.fit_transform(train_data.data)
 X_test, _  = tf_vectorizer.transform(test_data.data)
 y_train, y_test = train_data.target, test_data.target
+
+print("y_test = {}".format(y_test[:10]))
 
 # %%
 # Note that when processing a JSON list
@@ -66,8 +67,8 @@ print("SGD accuracy score = {}".format(accuracy_score(y_test, sgd_y_pred)))
 gamma = 100.0
 
 # %%
-# Let's also use a larger latent space - size 40 - with a Hyperspherical distribution
-latent_distribution = HyperSphericalDistribution(40)
+# Let's also use a larger latent space - size 40 
+latent_distribution = LogisticGaussianDistribution(100,40,dr=0.2,alpha=1.0)
 
 num_label_values = int(np.max(y_train)) + 1
 
@@ -80,9 +81,9 @@ l_estimator = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
                            gamma=gamma,
                            log_method='print',
                            enc_dr=0.2,
-                           classifier_dropout=0.1,
-                           lr=0.0003, enc_hidden_dim=50,
-                           epochs=12, batch_size=128)
+                           classifier_dropout=0.2,
+                           lr=0.001, enc_hidden_dim=100,
+                           epochs=12, batch_size=200)
 
 # %%
 # Fit the model
@@ -90,6 +91,10 @@ _ = l_estimator.fit(X_train, y_train)
 
 # %%
 # Perform validation/evaluation on the test split to assess performance
+
+v_results = l_estimator.validate(X_train, y_train)
+print("Training results acc = {}, ppl = {}, npmi = {}"
+      .format(v_results['accuracy'], v_results['ppl'], v_results['npmi']))
 v_results = l_estimator.validate(X_test, y_test)
 print("Validation results acc = {}, ppl = {}, npmi = {}"
       .format(v_results['accuracy'], v_results['ppl'], v_results['npmi']))
@@ -98,14 +103,14 @@ print("Validation results acc = {}, ppl = {}, npmi = {}"
 # Train a semi-supervised model using just the first 500 training points as
 # labeled data and using the UNLABELED test data (transducive learning).  
 l_estimator_semi_supervised = BowEstimator(vocabulary = tf_vectorizer.get_vocab(),
-                                           latent_distribution = HyperSphericalDistribution(40),
+                                           latent_distribution = latent_distribution,
                                            n_labels=num_label_values,
                                            gamma=10.0,
                                            log_method='print',
-                                           enc_dr=0.2,
+                                           enc_dr=0.1,
                                            classifier_dropout=0.1,
-                                           lr=0.0003, enc_hidden_dim=50,
-                                           epochs=20, batch_size=128)
+                                           lr=0.005, enc_hidden_dim=100,
+                                           epochs=24, batch_size=200)
 _ = l_estimator_semi_supervised.fit_with_validation(X_train[:500], y_train[:500], None, None, X_test)
 v_results_ss = l_estimator_semi_supervised.validate(X_test, y_test)
 print("Validation results with semi-supervised learning. acc = {}, ppl = {}, npmi = {}"
@@ -128,8 +133,8 @@ predicted_labels, encodings, posteriors = l_inferencer.predict_text(test_data.da
 # This can be helpful when plotting embeddings and/or interpeting topic probabilities/proportions.
 # Note that since the model was trained in a supervised manner, the embeddings show 
 
-embeddings = l_inferencer.get_umap_embeddings(X_test, use_probs=True, target_entropy=2.5)
-l_inferencer.plot_to(embeddings, y_test, None)
+#embeddings = l_inferencer.get_umap_embeddings(X_test, use_probs=True, target_entropy=2.5)
+#l_inferencer.plot_to(embeddings, y_test, None)
 
 
 

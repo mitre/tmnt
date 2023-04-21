@@ -6,9 +6,9 @@ Copyright (c) 2019-2021 The MITRE Corporation.
 import io
 import os
 import json
-import gluonnlp as nlp
+import torchtext
+from torchtext.vocab import vocab as build_vocab
 import glob
-from gluonnlp.data import Counter
 from multiprocessing import Pool, cpu_count
 from mantichora import mantichora
 from atpbar import atpbar
@@ -24,6 +24,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.datasets import dump_svmlight_file
 from tmnt.preprocess import BasicTokenizer
 from typing import List, Dict, Optional, Any, Tuple
+from collections import OrderedDict
 
 __all__ = ['TMNTVectorizer']
 
@@ -56,7 +57,7 @@ class TMNTVectorizer(object):
     def __init__(self, text_key: str = 'body', label_key: Optional[str] = None, min_doc_size: int = 1,
                  label_remap: Optional[Dict[str,str]] = None,
                  json_out_dir: Optional[str] = None, vocab_size: int = 2000, file_pat: str = '*.json',
-                 encoding: str = 'utf-8', initial_vocabulary: Optional[nlp.Vocab] = None,
+                 encoding: str = 'utf-8', initial_vocabulary: Optional[torchtext.vocab.Vocab] = None,
                  additional_feature_keys: List[str] = None, stop_word_file: str = None,
                  split_char: str = ',',
                  max_ws_tokens: int = -1,
@@ -78,7 +79,7 @@ class TMNTVectorizer(object):
         if not 'token_pattern' in self.cv_kwargs:
             self.cv_kwargs['token_pattern'] = r'\b[A-Za-z][A-Za-z]+\b'
         self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
-                                          vocabulary=(initial_vocabulary.token_to_idx if initial_vocabulary else None),
+                                          vocabulary=(initial_vocabulary.get_itos() if initial_vocabulary else None),
                                           **self.cv_kwargs)
         self.label_map = {}
 
@@ -101,8 +102,8 @@ class TMNTVectorizer(object):
             TMNTVectorizer
         """
         with io.open(vocab_file, 'r') as fp:
-            voc_js = fp.read()
-        return cls(initial_vocabulary=nlp.Vocab.from_json(voc_js))
+            voc_dict = json.loads(fp.read())
+        return cls(initial_vocabulary=build_vocab(voc_dict))
 
     def _get_stop_word_set(self, f: str) -> List[str]:
         wds = []
@@ -112,35 +113,31 @@ class TMNTVectorizer(object):
         return list(set(wds))
 
     
-    def get_vocab(self) -> nlp.Vocab:
-        """Returns the GluonNLP vocabulary associated with the vectorizer
+    def get_vocab(self) -> torchtext.vocab.Vocab:
+        """Returns the Torchtext vocabulary associated with the vectorizer
 
         Returns:
-            GluonNLP vocabulary
+            Torchtext vocabulary
         """
         if self.vocab is not None:
             return self.vocab
         else:
-            tok_to_idx = self.vectorizer.vocabulary_
-            cv_vocab = {v: 1 for v in tok_to_idx}
-            cur_idx = len(tok_to_idx)
+            tok_to_idx = list(self.vectorizer.vocabulary_.items())
+            tok_to_idx.sort(key = lambda x: x[1])
+            ordered_vocab = [ (k,1) for (k,_) in tok_to_idx ]
             if self.additional_feature_keys:
                 if isinstance(self.additional_feature_keys, list):
                     for f in self.additional_feature_keys:
-                        cv_vocab[f] = 1
-                        tok_to_idx[f] = cur_idx
-                        cur_idx += 1
+                        ordered_vocab.append((f,1))
                 else:
                     ## assume it's a dictionary
                     for k in self.additional_feature_keys:
                         for v in self.additional_feature_keys[k]:
-                            cv_vocab[k+':'+v] = 1
-                            tok_to_idx[k+':'+v] = cur_idx
-                            cur_idx += 1
-            vocab = nlp.Vocab(cv_vocab, token_to_idx=tok_to_idx,
-                              unknown_token=None, eos_token=None, bos_token=None, padding_token=None)
-            self.vocab = vocab
-        return vocab
+                            ordered_vocab.append((k+':'+v, 1))
+            cv_vocab = OrderedDict(ordered_vocab)                            
+            vb = build_vocab(cv_vocab)
+            self.vocab = vb
+        return vb
 
     def _add_features_json(self, json_file, num_instances):
         if isinstance(self.additional_feature_keys, list):
