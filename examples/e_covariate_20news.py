@@ -16,7 +16,7 @@ import os
 from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import BowVAEInferencer
-from tmnt.distribution import LogisticGaussianDistribution
+from tmnt.distribution import LogisticGaussianDistribution, HyperSphericalDistribution
 
 n_samples = 2000
 n_features = 1000
@@ -28,9 +28,12 @@ data_samples = data[:n_samples]
 tf_vectorizer = TMNTVectorizer(vocab_size=1000)
 X, _ = tf_vectorizer.fit_transform(data_samples)
 
-
+distribution = HyperSphericalDistribution(20)
 num_covar_values = int(np.max(y)) + 1 # get the number of possible labels
-m_estimator = CovariateBowEstimator(vocabulary=tf_vectorizer.get_vocab(), n_covars=num_covar_values)
+m_estimator = CovariateBowEstimator(vocabulary=tf_vectorizer.get_vocab(), n_covars=num_covar_values, log_method='print',
+                                    batch_size=100, embedding_source='random', embedding_size=100, validate_each_epoch=False, quiet=False,
+                                    epochs=20,
+                                    lr=0.05, latent_distribution=distribution)
                                     
 _ = m_estimator.fit(X, y) # fit a covariate model using y
 m_inferencer = BowVAEInferencer(m_estimator)

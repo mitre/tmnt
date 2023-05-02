@@ -602,7 +602,6 @@ class BaseBowEstimator(BaseEstimator):
                     elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data_batch)
                     elbo_mean = elbo_ls.mean()
                 total_ls.backward()
-
                 if aux_batch is not None:
                     aux_data, = aux_batch
                     aux_data, _ = aux_data # ignore (null) label
@@ -1046,11 +1045,12 @@ class CovariateBowEstimator(BaseBowEstimator):
         else:
             emb_size = self.embedding_size
         model = \
-            CovariateBowVAEModel(n_covars=self.n_covars,
-                                 vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, embedding_size=emb_size,
-                                 fixed_embedding=self.fixed_embedding, latent_distribution=self.latent_distribution,
+            CovariateBowVAEModel(enc_dim=self.enc_hidden_dim, embedding_size=emb_size, 
+                                 n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr, fixed_embedding=self.fixed_embedding,
+                                 n_covars=self.n_covars,
+                                 vocabulary=self.vocabulary, 
+                                 latent_distribution=self.latent_distribution,
                                  coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                                 batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
                                  ctx=self.ctx)
         return model
 
