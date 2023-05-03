@@ -1520,7 +1520,6 @@ class SeqBowEstimator(BaseEstimator):
                     elbo_ls_2, rec_ls_2, kl_ls_2, red_ls_2, total_ls_2 = self._get_unlabeled_losses(model, aux_batch)
                     total_ls_2.backward()
                 else:
-                    print("total_ls = {}".format(total_ls))
                     total_ls.backward()
                 update_loss_details(total_ls, elbo_ls, red_ls, label_ls)
                 if aux_batch is not None:
