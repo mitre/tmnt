@@ -10,6 +10,7 @@ the widely used 20 Newsgroups Dataset.
 # Start with various imports
 
 from tmnt.preprocess.vectorizer import TMNTVectorizer
+import torch
 
 # %%
 # Let's fetch the 20 newsgroups dataset
@@ -37,11 +38,14 @@ logging_config(folder='.', name='train_20news', level='info', console_level='inf
 from tmnt.estimator import BowEstimator
 from tmnt.distribution import LogisticGaussianDistribution, GaussianDistribution, VonMisesDistribution
 
-distribution = LogisticGaussianDistribution(100,20,dr=0.2,alpha=0.5)
+device = torch.device('cpu')
+#device = torch.device('cuda')
 
-estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=distribution,
+distribution = LogisticGaussianDistribution(100,20,dr=0.2,alpha=0.5, device=device)
+
+estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=distribution, device=device,
                          log_method='log', lr=0.0075, batch_size=400, embedding_source='random', embedding_size=200,
-                         epochs=96, enc_hidden_dim=100, validate_each_epoch=True, quiet=False)
+                         epochs=96, enc_hidden_dim=100, validate_each_epoch=False, quiet=False)
 
 #estimator = BowEstimator.from_config(config='../data/configs/train_model/model.config', vocabulary=tf_vectorizer.get_vocab())
 #tr_X, val_X = X[:1000], X[:1000] # in this case, use same data for training and validation

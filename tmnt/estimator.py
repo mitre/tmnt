@@ -772,6 +772,7 @@ class BowEstimator(BaseBowEstimator):
                             n_covars=0, device=self.device)
         if self.pretrained_param_file is not None:
             model = torch.load(self.pretrained_param_file)
+        model.to(self.device)
         return model
     
 
@@ -1075,7 +1076,7 @@ class CovariateBowEstimator(BaseBowEstimator):
         npmi_total = 0
         for covar in covars:
             mask = (y_train == covar).all(axis=1)
-            X_covar, y_covar = torch.Tensor(X_train[mask], dtype='float'), torch.Tensor(y_train[mask], dtype='float')
+            X_covar, y_covar = torch.tensor(X_train[mask], dtype='float'), torch.tensor(y_train[mask], dtype='float')
             sorted_ids = self.model.get_ordered_terms_with_covar_at_data(X_covar,k, y_covar)
             top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
             npmi_eval = EvaluateNPMI(top_k_words_per_topic)
@@ -1453,8 +1454,6 @@ class SeqBowEstimator(BaseEstimator):
         decay_parameters = get_parameter_names(model.llm, ALL_LAYERNORM_LAYERS)
         decay_parameters = [name for name in decay_parameters if "bias" not in name]
         non_llm_parameters = [name for name,_ in model.named_parameters() if not name.startswith("llm")]
-        print("non_llm_parameters = {}".format(non_llm_parameters))
-        print("decay_parameters = {}".format(decay_parameters))        
         optimizer_grouped_parameters = [
             {
                 "params": [

@@ -10,6 +10,7 @@ from torch import nn
 from torch.distributions.normal import Normal
 from torch.distributions.uniform import Uniform
 from torch.distributions import VonMises
+import torch
 from scipy import special as sp
 import torch
 
@@ -32,8 +33,9 @@ class BaseDistribution(nn.Module):
 
     ## this is required by most priors
     def _get_gaussian_sample(self, mu, lv, batch_size):
-        eps = Normal(torch.zeros(batch_size, self.n_latent), torch.ones(batch_size, self.n_latent)).sample()
-        return mu + torch.exp(0.5*lv) * eps
+        eps = Normal(torch.zeros(batch_size, self.n_latent), 
+                     torch.ones(batch_size, self.n_latent)).sample()
+        return mu + torch.exp(0.5*lv) * eps.to(self.device)
 
     ## this is required by most priors
     def _get_unit_var_gaussian_sample(self, mu, batch_size):
@@ -97,7 +99,7 @@ class GaussianUnitVarDistribution(BaseDistribution):
     """
     def __init__(self, n_latent, device='cpu', dr=0.2, var=1.0):
         super(GaussianUnitVarDistribution, self).__init__(n_latent,device)
-        self.variance = torch.Tensor([var], device=device)
+        self.variance = torch.tensor([var], device=device)
         self.log_variance = torch.log(self.variance)
         with self.name_scope():
             self.post_sample_dr_o = torch.nn.Dropout(dr)
@@ -129,8 +131,8 @@ class LogisticGaussianDistribution(BaseDistribution):
         self.alpha = alpha
 
         prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
-        self.prior_var = torch.Tensor([prior_var], device=device)
-        self.prior_logvar = torch.Tensor([math.log(prior_var)], device=device)
+        self.prior_var = torch.tensor([prior_var], device=device)
+        self.prior_logvar = torch.tensor([math.log(prior_var)], device=device)
 
         self.lv_encoder = nn.Linear(enc_size, n_latent)
         self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001)
@@ -164,7 +166,7 @@ class VonMisesDistribution(BaseDistribution):
         super(VonMisesDistribution, self).__init__(enc_size, n_latent, device)
         self.device = device
         self.kappa = kappa
-        self.kld_v = torch.Tensor(VonMisesDistribution._vmf_kld(self.kappa, self.n_latent))
+        self.kld_v = torch.tensor(VonMisesDistribution._vmf_kld(self.kappa, self.n_latent), device=device)
 
 
     @staticmethod

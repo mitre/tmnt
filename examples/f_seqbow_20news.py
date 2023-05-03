@@ -12,6 +12,7 @@ from tmnt.inference import SeqVEDInferencer
 from tmnt.distribution import LogisticGaussianDistribution
 from tmnt.utils.log_utils import logging_config
 from tmnt.data_loading import get_llm_dataloader
+import torch
 
 data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                               remove=('headers', 'footers', 'quotes'),
@@ -66,12 +67,14 @@ dev_loader = get_llm_dataloader(dev_ds, vectorizer, tf_llm_name, label_map, 16, 
 
 latent_distribution = LogisticGaussianDistribution(768,80,dr=0.1,alpha=2.0)
 
+device = torch.device('cuda')
+
 estimator = SeqBowEstimator(llm_model_name = tf_llm_name,
                             latent_distribution = latent_distribution,
                             n_labels = num_classes,
                             bow_vocab = vectorizer.get_vocab(),
                             optimizer='bertadam',
-                            batch_size=batch_size, device='cpu', log_interval=1,
+                            batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=100.0, 
                             lr=2e-5, decoder_lr=0.01, epochs=20)
 

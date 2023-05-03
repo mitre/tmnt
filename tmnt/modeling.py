@@ -42,7 +42,8 @@ class BaseVAE(nn.Module):
             freq_nd = wd_freqs + 1 # simple smoothing
             log_freq = np.log(freq_nd) - np.log(freq_nd.sum())
             with torch.no_grad():
-                self.decoder.bias = nn.Parameter(torch.Tensor(log_freq))
+                self.decoder.bias = nn.Parameter(torch.tensor(log_freq, dtype=torch.float32, device=self.device))
+                #self.decoder.bias = nn.Parameter(torch.tensor(log_freq))
                 self.decoder.bias.requires_grad_(False)
 
     def get_ordered_terms(self):
@@ -52,9 +53,10 @@ class BaseVAE(nn.Module):
         are those most associated with the topic.
         """
         z = torch.ones((self.n_latent,), device=self.device)
+        #z = torch.ones((self.n_latent,))
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
         sorted_j = jacobian.argsort(dim=0, descending=True)
-        return sorted_j.numpy()
+        return sorted_j.cpu().numpy()
     
 
     def get_topic_vectors(self):
@@ -62,8 +64,9 @@ class BaseVAE(nn.Module):
         Returns unnormalized topic vectors
         """
         z = torch.ones((1, self.n_latent), device=self.device)
+        #z = torch.ones((1, self.n_latent))
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
-        return jacobian.asnumpy()        
+        return jacobian.cpu().asnumpy()        
 
 
     def add_coherence_reg_penalty(self, cur_loss):
@@ -73,7 +76,7 @@ class BaseVAE(nn.Module):
             c, d = self.coherence_regularization(w, emb)
             return (cur_loss + c + d), c, d
         else:
-            return (cur_loss, torch.zeros_like(cur_loss), torch.zeros_like(cur_loss))
+            return (cur_loss, torch.zeros_like(cur_loss, device=self.device), torch.zeros_like(cur_loss, device=self.device))
 
     def get_loss_terms(self, data, y, KL, batch_size):
         rr = data * torch.log(y+1e-12)
@@ -163,7 +166,7 @@ class BowVAEModel(BaseVAE):
                 break
             samples += data.shape[0]
             x_data = x_data.to(device = self.device)
-            x_data = torch.minimum(x_data, torch.Tensor([1.0]))
+            x_data = torch.minimum(x_data, torch.tensor([1.0], device=self.device))
             jacobian = torch.autograd.functional.jacobian(partial_network, x_data)
             ss = jacobian.sum(dim=0).numpy()
             jacobians[i] += ss
@@ -185,7 +188,7 @@ class BowVAEModel(BaseVAE):
                 break
             samples += data.shape[0]
             x_data = x_data.to(device = self.device)
-            x_data = torch.minimum(x_data, torch.Tensor([1.0]))
+            x_data = torch.minimum(x_data, torch.Tensor([1.0], device=self.device))
             jacobian = torch.autograd.functional.jacobian(partial_network, x_data)
             ss = jacobian.numpy()
             jacobian_list[i] += list(ss)
@@ -232,7 +235,8 @@ class BowVAEModel(BaseVAE):
         #z, KL = self.run_encode(F, emb_out, batch_size)
         enc_out = self.encoder(emb_out)
         z, KL   = self.latent_distribution(enc_out, batch_size)
-        y = torch.nn.functional.softmax(self.decoder(z), dim=1)
+        xhat = self.decoder(z)
+        y = torch.nn.functional.softmax(xhat, dim=1)
         ii_loss, recon_loss, coherence_loss, redundancy_loss = \
             self.get_loss_terms(data, y, KL, batch_size)
         if self.has_classifier:
