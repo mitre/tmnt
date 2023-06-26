@@ -7,16 +7,13 @@ Model trainers that handle data prep, pre-trained vocabularies and enable model 
 import json
 import os
 import logging
-import mxnet as mx
 import numpy as np
 import gluonnlp as nlp
 import datetime
 import time
 import copy
 import statistics
-import autogluon.core as ag
 
-from autogluon.core.scheduler.reporter import FakeReporter
 from pathlib import Path
 from tmnt.utils import log_utils
 from tmnt.utils.random import seed_rng
@@ -25,7 +22,6 @@ from tmnt.data_loading import load_vocab, file_to_data
 from tmnt.bert_handling import get_bert_datasets, JsonlDataset
 from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator
 from tmnt.preprocess.vectorizer import TMNTVectorizer
-from mxnet.gluon.data import ArrayDataset
 
 
 class BaseTrainer(object):

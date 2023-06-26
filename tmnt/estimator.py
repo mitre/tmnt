@@ -883,22 +883,22 @@ class BowMetricEstimator(BowEstimator):
         emb1 = []
         for batch_id, data_batch in enumerate(dataloader):
             elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch)
-            label_mat = self.loss_function._compute_labels(mx.ndarray, label1, label2)
+            label_mat = self.loss_function._compute_labels(label1, label2)
             dists = self.loss_function._compute_distances(z_mu1, z_mu2)
-            probs = mx.nd.softmax(-dists, axis=1).asnumpy()
+            probs = torch.nn.functional.softmax(-dists, axis=1).detach().numpy()
             posteriors += list(probs)
-            label1 = np.array(label1.squeeze().asnumpy(), dtype='int')
+            label1 = np.array(label1.squeeze().detach().numpy(), dtype='int')
             ground_truth_idx += list(label1) ## index values for labels
-            gt = np.zeros((label1.shape[0], int(mx.nd.max(label2).asscalar())+1))
-            gt[np.arange(label1.shape[0]), label1] = 1
+            gt = np.zeros((label1.size()[0], int(max(label2).asscalar())+1))
+            gt[np.arange(label1.size()[0]), label1] = 1
             ground_truth += list(gt)
             if emb2 is None:
-                emb2 = z_mu2.asnumpy()
-            emb1 += list(z_mu1.asnumpy())
+                emb2 = z_mu2.detach().numpy()
+            emb1 += list(z_mu1.detach().numpy())
         posteriors = np.array(posteriors)
         ground_truth = np.array(ground_truth)
         ground_truth_idx = np.array(ground_truth_idx)
-        labels = np.arange(posteriors[0].shape[0])        
+        labels = np.arange(posteriors[0].size()[0])        
         try:
             auroc = roc_auc_score(ground_truth, posteriors, average='weighted', labels=labels)
         except:
@@ -1200,8 +1200,6 @@ class SeqBowEstimator(BaseEstimator):
             except:
                 logging.error("File {} does not appear to be a valid config instance".format(config))
                 raise Exception("Invalid Json Configuration File")
-        if isinstance(config, dict):
-            config = ag.space.Dict(**config)
         ldist_def = config['latent_distribution']
         kappa = 0.0
         alpha = 1.0
@@ -1336,7 +1334,10 @@ class SeqBowEstimator(BaseEstimator):
             #if not isinstance(metric_nm, list):
             #    metric_nm, metric_val = [metric_nm], [metric_val]
             metric_nm = "AUPRC"
-            metric_val = self.metric.compute()
+            try:
+                metric_val = self.metric.compute()
+            except:
+                metric_val = 0.0
             self._output_status("Epoch {} Batch {}/{} loss={}, (rec_loss = {}), (red_loss = {}), (class_loss = {}) lr={:.10f}, metrics[{}]: {}"
                                 .format(epoch_id+1, batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, red_loss/log_interval,
                                         class_loss/log_interval, learning_rate, metric_nm, metric_val))
@@ -1375,7 +1376,7 @@ class SeqBowEstimator(BaseEstimator):
         sums = torch.zeros(len(self.bow_vocab))
         for i, data in enumerate(dataloader):
             seqs, = data
-            bow_batch = seqs[3]
+            bow_batch = seqs[3].to_dense()
             sums += bow_batch.sum(axis=0)
         return sums
 
@@ -1505,6 +1506,7 @@ class SeqBowEstimator(BaseEstimator):
             
         for epoch_id in range(self.epochs):
             self.metric.reset()
+            model.train()
             #optimizer.zero_grad()
             #dec_optimizer.zero_grad()            
             
@@ -1525,7 +1527,8 @@ class SeqBowEstimator(BaseEstimator):
                     update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
 
                 if not accumulate or (batch_id + 1) % accumulate == 0:
-                    optimizer.step()
+                    #optimizer.step()
+                    lr_scheduler.step()
                     dec_optimizer.step()
                     model.zero_grad()
                     #optimizer.clip_master_grads(1.0) ## XXX - make this an argument
@@ -1533,7 +1536,7 @@ class SeqBowEstimator(BaseEstimator):
                 if (batch_id + 1) % (self.log_interval) == 0:
                     if batch_id > 0:
                         opt_state = dec_optimizer.state_dict()
-                        lr = 0.0
+                        lr = lr_scheduler.get_last_lr()[0] # get lr from first group
                         self.log_train(batch_id, num_train_steps / self.epochs, loss_details['step_loss'],
                                        loss_details['elbo_loss'], loss_details['red_loss'], loss_details['class_loss'], self.log_interval,
                                        epoch_id, lr)
@@ -1575,6 +1578,7 @@ class SeqBowEstimator(BaseEstimator):
     
 
     def _perform_validation(self, model, dev_data, epoch_id):
+        model.eval()
         v_res, metric_nm, metric_val = self.validate(model, dev_data)
         sc_obj = self._get_objective_from_validation_result(v_res)
         if 'accuracy' in v_res:
@@ -1647,11 +1651,11 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         
     def _get_model(self, bow_size=-1):
         bow_size = bow_size if bow_size > 1 else len(self.bow_vocab)
-        model = MetricSeqBowVED(self.bert_base, self.latent_distribution, n_latent=self.n_latent,
+        llm_base_model = get_llm_model(self.llm_model_name)
+        model = MetricSeqBowVED(llm_base_model, self.latent_distribution, n_latent=self.n_latent,
                                 bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
-        model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
-        model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
-        model.latent_dist.post_init(self.ctx)
+        # model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
+        # model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
@@ -1659,7 +1663,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def _get_model_bias_initialize(self, train_data):
         model = self._get_model()
         tr_bow_matrix = self._get_bow_matrix(train_data)
-        model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+        #model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
         return model
         
 
@@ -1667,31 +1671,27 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         bow_matrix = []
         for _, seqs in enumerate(dataloader):
             batch_1, batch_2 = seqs                
-            bow_matrix.extend(list(batch_2[3].squeeze(axis=1)))
-            bow_matrix.extend(list(batch_1[3].squeeze(axis=1)))
-        bow_matrix = mx.nd.stack(*bow_matrix)
+            bow_matrix.extend(list(batch_2[3].to_dense().squeeze(axis=1)))
+            bow_matrix.extend(list(batch_1[3].to_dense().squeeze(axis=1)))
+        bow_matrix = torch.vstack(bow_matrix)
         if cache:
             self._bow_matrix = bow_matrix
         return bow_matrix
 
     def _ff_batch(self, model, batch_data):
         batch1, batch2 = batch_data
-        in1, vl1, tt1, bow1, label1 = batch1
-        in2, vl2, tt2, bow2, label2 = batch2
+        label1, in1, mask1, bow1 = batch1
+        label2, in2, mask2, bow2 = batch2
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(
-            in1.to(self.device), tt1.to(self.device),
-            vl1.astype('float32').to(self.device), bow1.to(self.device),
-            in2.to(self.device), tt2.to(self.device),
-            vl2.astype('float32').to(self.device), bow2.to(self.device))
+            in1.to(self.device), mask1.to(self.device), bow1.to(self.device),
+            in2.to(self.device), mask2.to(self.device), bow2.to(self.device))
         return elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2
 
     def _get_losses(self, model, batch_data):
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, batch_data)
         ## convert back to label indices rather than 1-hot vecs
-        label1_ind = label1.argmax(axis=1)
-        label2_ind = label2.argmax(axis=1)
-        label1 = label1_ind.to(self.device)
-        label2 = label2_ind.to(self.device)
+        label1 = label1.to(self.device)
+        label2 = label2.to(self.device)
         label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
         label_ls = label_ls.mean()
         total_ls = (self.gamma * label_ls) + elbo_ls.mean()
@@ -1705,90 +1705,26 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         total_ls = elbo_ls / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
     
-    def classifier_validate(self, model, dataloader, epoch_id, include_predictions=True):
-        posteriors = []
-        ground_truth = []
-        ground_truth_idx = []
-        emb2 = None
-        emb1 = []
-        for batch_id, data_batch in enumerate(dataloader):
-            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2 = self._ff_batch(model, data_batch)
-            label1_ind = label1.argmax(axis=1)
-            label2_ind = label2.argmax(axis=1)
-            label1_ind = label1_ind.to(self.device)
-            label2_ind = label2_ind.to(self.device)
-            label_mat = self.loss_function._compute_labels(mx.ndarray, label1_ind, label2_ind)        
-            dists = self.loss_function._compute_distances(z_mu1, z_mu2)
-            probs = mx.nd.softmax(-dists, axis=1).asnumpy()
-            posteriors += list(probs)
-            ground_truth_idx += list(label1_ind.asnumpy()) ## index values for labels
-            ground_truth += list(label1.asnumpy())
-            if emb2 is None:
-                emb2 = z_mu2.asnumpy()
-            emb1 += list(z_mu1.asnumpy())
-        posteriors = np.array(posteriors)        
-        ground_truth = np.array(ground_truth)
-        ground_truth_idx = np.array(ground_truth_idx)
-        labels = np.arange(posteriors[0].shape[0])
-        if not np.any(np.isnan(posteriors)):
-            avg_prec = average_precision_score(ground_truth, posteriors, average='weighted')
-        else:
-            avg_prec = 0.0
-        try:
-            auroc = roc_auc_score(ground_truth, posteriors, average='weighted', labels=labels)
-        except:
-            auroc = 0.0
-            logging.error('ROC computation failed')
-        ndcg = ndcg_score(ground_truth, posteriors)
+    def validate(self, model, dataloader, epoch_id, include_predictions=True):
+        kl_ls_tot = 0.0
+        elbo_ls_tot = 0.0
+        for _, data_batch in enumerate(dataloader):
+            elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1_ind, label2_ind = self._ff_batch(model, data_batch)
+            elbo_ls_tot += float(elbo_ls.sum())
+            kl_ls_tot   += float(kl_ls.sum())
 
-        ## bit of hackery to only compute average precision for non-null/other categories
-        ## in many cases, we'd like to optimize over this score
-        if self.non_scoring_index >= 0:
-            wsum = 0.0
-            tot  = 0.0
-            for c in range(len(labels)):
-                y_vec = ground_truth[:,c]
-                pred_vec = posteriors[:,c]
-                ap_c = average_precision_score(y_vec, pred_vec) if not np.any(np.isnan(pred_vec)) else 0.0
-                if c != self.non_scoring_index:
-                    support = int(y_vec.sum())
-                    if support > 0:
-                        wsum += ap_c * support
-                        tot  += support
-            avg_prec = wsum / tot
-
-        top_acc_1 = top_k_accuracy_score(ground_truth_idx, posteriors, k=1, labels=labels)        
-        top_acc_2 = top_k_accuracy_score(ground_truth_idx, posteriors, k=2, labels=labels)
-        top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3, labels=labels)
-        top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4, labels=labels)
-        y = np.where(ground_truth > 0)[1]
-        if self.plot_dir:
-            ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
-            umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
-            embeddings = umap_model.fit_transform(np.array(emb1))
-            #mapper = umap_model.fit(np.array(emb1))
-            plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
-            #umap.plot.points(mapper, labels=y)
-            plt.savefig(ofile)
-            plt.close("all")
-        if include_predictions:
-            res_predictions = posteriors
-            res_ground_truth = ground_truth
-        else:
-            res_predictions, res_ground_truth = None, None
-        return {'avg_prec': avg_prec, 'top_1': top_acc_1, 'top_2': top_acc_2, 'top_3': top_acc_3, 'top_4': top_acc_4,
-                'au_roc': auroc, 'ndcg': ndcg, 'results_predictions': res_predictions, 'results_ground_truth': res_ground_truth}
+        return {'elbo_ls': elbo_ls_tot, 'kl_ls': kl_ls_tot}
+                
 
             
     def _perform_validation(self, model, dev_data, epoch_id):
-        v_res = self.classifier_validate(model, dev_data, epoch_id)
-        self._output_status("Epoch [{}]. Objective = {} ==> Avg. Precision = {}, AuROC = {}, NDCG = {} [acc@1= {}, acc@2={}, acc@3={}, acc@4={}]"
-                            .format(epoch_id, v_res['avg_prec'], v_res['avg_prec'], v_res['au_roc'], v_res['ndcg'],
-                                    v_res['top_1'], v_res['top_2'], v_res['top_3'], v_res['top_4']))
+        v_res = self.validate(model, dev_data, epoch_id)
+        self._output_status("Epoch [{}]. ==> elbo loss = {}; kldiv loss = {}"
+                            .format(epoch_id, v_res['elbo_ls'], v_res['kl_ls']))
         #session.report({"objective": sc_obj, "coherence": v_res['npmi'], "perplexity": v_res['ppl'],
         #                "redundancy": v_res['redundancy']})
         #if self.reporter:
         #    self.reporter(epoch=epoch_id+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0,
         #                  perplexity=0.0, redundancy=0.0)
-        return v_res['avg_prec'], v_res
+        return v_res['kl_ls'], v_res
 

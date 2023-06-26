@@ -580,23 +580,26 @@ class MetricSeqBowVED(BaseSeqBowVED):
         super(MetricSeqBowVED, self).__init__(*args, **kwargs)
 
     def _get_elbo(self, bow, enc):
-        bow = bow.squeeze(axis=1)
-        z, KL = self.latent_dist(enc, bow.shape[0])
+        #bow = bow.squeeze(axis=1)
+        z, KL = self.latent_dist(enc, bow.size()[0])
         KL_loss = (KL * self.kld_wt)
-        y = mx.nd.softmax(self.decoder(z), axis=1)
-        rec_loss = -mx.nd.sum( bow * mx.nd.log(y+1e-12), axis=1 )
+        y = torch.nn.functional.softmax(self.decoder(z), dim=1)
+        rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
         elbo = rec_loss + KL_loss
         return elbo, rec_loss, KL_loss
 
-    def unpaired_input_forward(self, in1, tt1, vl1, bow1):
-        _, enc1 = self.bert(in1, tt1, vl1)
-        elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, enc1)
+    def unpaired_input_forward(self, in1, mask1, bow1):
+        llm_output = self.llm(in1, mask1)
+        cls_vec = llm_output.last_hidden_state[:,0,:]
+        elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, cls_vec)
         redundancy_loss = self.get_redundancy_penalty()
         return elbo1, rec_loss1, KL_loss1, redundancy_loss
 
-    def forward(self, in1, tt1, vl1, bow1, in2, tt2, vl2, bow2):
-        _, enc1 = self.bert(in1, tt1, vl1)
-        _, enc2 = self.bert(in2, tt2, vl2)
+    def forward(self, in1, mask1, bow1, in2, mask2, bow2):
+        llm_out1 = self.llm(in1, mask1)
+        llm_out2 = self.llm(in2, mask2)
+        enc1 = llm_out1.last_hidden_state[:,0,:]
+        enc2 = llm_out2.last_hidden_state[:,0,:]
         elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, enc1)
         elbo2, rec_loss2, KL_loss2 = self._get_elbo(bow2, enc2)
         elbo = elbo1 + elbo2
@@ -651,18 +654,18 @@ class GeneralizedSDMLLoss(_Loss):
         """
 
         # extracting sizes expecting [batch_size, dim]
-        assert x1.shape == x2.shape
-        batch_size, dim = x1.shape
+        assert x1.size() == x2.size()
+        batch_size, dim = x1.size()
         # expanding both tensor form [batch_size, dim] to [batch_size, batch_size, dim]
-        x1_ = x1.expand_dims(1).broadcast_to([batch_size, batch_size, dim])
-        x2_ = x2.expand_dims(0).broadcast_to([batch_size, batch_size, dim])
+        x1_ = x1.unsqueeze(1).broadcast_to([batch_size, batch_size, dim])
+        x2_ = x2.unsqueeze(0).broadcast_to([batch_size, batch_size, dim])
         # pointwise squared differences
         squared_diffs = (x1_ - x2_)**2
         # sum of squared differences distance
         return squared_diffs.sum(axis=2)
 
 
-    def _compute_labels(self, l1, l2):
+    def _compute_labels(self, l1: torch.Tensor, l2: torch.Tensor):
         """
         Example:
         l1 = [1,2,2]
@@ -674,17 +677,15 @@ class GeneralizedSDMLLoss(_Loss):
         
         This is an outer product with the equality predicate.
         """
-        l1 = l1.squeeze()
-        l2 = l2.squeeze()
-        batch_size = l1.shape[0]
+        batch_size = l1.size()[0]
         l1_x = l1.unsqueeze(1).expand(batch_size, batch_size)
         l2_x = l2.unsqueeze(0).expand(batch_size, batch_size)
         #l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
         #l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
-        ll = torch.equal(l1_x, l2_x)
-        labels = ll * (1 - self.smoothing_parameter) + (1 - ll) * self.smoothing_parameter / (batch_size - 1)
+        ll = torch.eq(l1_x, l2_x)
+        labels = ll * (1 - self.smoothing_parameter) + (~ll) * self.smoothing_parameter / (batch_size - 1)
         ## now normalize rows to sum to 1.0
-        labels = labels / labels.sum(dim=1,keepdim=True).expand(batch_size, batch_size)
+        labels = labels / labels.sum(axis=1,keepdim=True).expand(batch_size, batch_size)
         if self.x2_downweight_idx >= 0:
             #down_wt = len(mx.np.where(l2.as_np_ndarray != self.x2_downweight_idx)[0]) / batch_size
             down_wt = len(np.where(l2 != self.x2_downweight_idx)[0]) / batch_size
@@ -693,17 +694,17 @@ class GeneralizedSDMLLoss(_Loss):
         return labels, down_wt
 
 
-    def _loss(self, x1, l1, x2, l2):
+    def _loss(self, x1: torch.Tensor, l1: torch.Tensor, x2: torch.Tensor, l2: torch.Tensor):
         """
         the function computes the kl divergence between the negative distances
         and the smoothed label matrix.
         """
-        batch_size = x1.shape[0]
+        batch_size = x1.size()[0]
         labels, wt = self._compute_labels(l1, l2)
         distances = self._compute_distances(x1, x2)
-        log_probabilities = torch.log_softmax(-distances, axis=1)
-        # multiply by the batch size to obtain the correct loss (gluon kl_loss averages instead of sum)
-        return self.kl_loss(log_probabilities, labels.as_in_context(distances.context)) * batch_size * wt
+        log_probabilities = torch.log_softmax(-distances, dim=1)
+        # multiply by the batch size to obtain the sum loss (kl_loss averages instead of sum)
+        return self.kl_loss(log_probabilities, labels.to(distances.device)) * batch_size * wt
 
 
     def forward(self, x1, l1, x2, l2):

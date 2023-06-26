@@ -7,10 +7,6 @@ import logging
 import warnings
 import multiprocessing
 import numpy as np
-import mxnet as mx
-from mxnet import gluon
-from mxnet.gluon import Block, nn
-from mxnet.gluon.data.sampler import Sampler, SequentialSampler
 import gluonnlp as nlp
 from gluonnlp.model import get_model
 from gluonnlp.data import BERTTokenizer
