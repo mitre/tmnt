@@ -14,9 +14,6 @@ import os
 import numpy as np
 import scipy.sparse as sp
 import json
-#import umap
-#import umap.plot
-#import matplotlib.pyplot as plt
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
 from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_llm_model
@@ -74,7 +71,6 @@ class BaseEstimator(object):
                  coherence_coefficient: float = 8.0,
                  device: Optional[str] = 'cpu',
                  latent_distribution: BaseDistribution = None,
-                 optimizer: str = "adam",
                  lr: float = 0.005, 
                  coherence_reg_penalty: float = 0.0,
                  redundancy_reg_penalty: float = 0.0,
@@ -90,7 +86,6 @@ class BaseEstimator(object):
         self.coherence_coefficient = coherence_coefficient
         self.device = device
         self.latent_distribution = latent_distribution
-        self.optimizer = optimizer
         self.lr = lr
         self.n_latent = self.latent_distribution.n_latent
         self.coherence_reg_penalty = coherence_reg_penalty
@@ -355,7 +350,6 @@ class BaseBowEstimator(BaseEstimator):
         config['lr']                 = self.lr
         config['enc_hidden_dim']     = self.enc_hidden_dim
         config['n_latent']           = self.n_latent
-        config['optimizer']          = self.optimizer
         config['epochs']             = self.epochs
         config['batch_size']         = self.batch_size
         config['num_enc_layers']     = self.n_encoding_layers
@@ -928,15 +922,6 @@ class BowMetricEstimator(BowEstimator):
         top_acc_3 = top_k_accuracy_score(ground_truth_idx, posteriors, k=3, labels=labels)
         top_acc_4 = top_k_accuracy_score(ground_truth_idx, posteriors, k=4, labels=labels)
         y = np.where(ground_truth > 0)[1]
-        if self.plot_dir:
-            ofile = self.plot_dir + '/' + 'plot_' + str(epoch_id) + '.png'
-            umap_model = umap.UMAP(n_neighbors=4, min_dist=0.5, metric='euclidean')
-            embeddings = umap_model.fit_transform(np.array(emb1))
-            #mapper = umap_model.fit(np.array(emb1))
-            plt.scatter(*embeddings.T, c=y, s=0.8, alpha=0.9, cmap='coolwarm')
-            #umap.plot.points(mapper, labels=y)
-            plt.savefig(ofile)
-            plt.close("all")
             
         if include_predictions:
             res_predictions = posteriors
@@ -1146,12 +1131,11 @@ class SeqBowEstimator(BaseEstimator):
                  multilabel=False,
                  decoder_lr = 0.01,
                  checkpoint_dir = None,
-                 optimizer = 'bertadam',
                  classifier_dropout = 0.0,
                  pure_classifier_objective = False,
                  validate_each_epoch = False,
                  **kwargs):
-        super(SeqBowEstimator, self).__init__(*args, optimizer=optimizer, **kwargs)
+        super(SeqBowEstimator, self).__init__(*args, **kwargs)
         self.pure_classifier_objective = pure_classifier_objective
         self.validate_each_epoch = validate_each_epoch
         self.minimum_lr = 1e-9
@@ -1286,7 +1270,6 @@ class SeqBowEstimator(BaseEstimator):
         config = {}
         config['lr'] = self.lr
         config['decoder_lr'] = self.decoder_lr
-        config['optimizer'] = self.optimizer
         config['n_latent'] = self.n_latent
         config['n_labels'] = self.n_labels
         config['batch_size'] = self.batch_size
@@ -1417,10 +1400,10 @@ class SeqBowEstimator(BaseEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
     def _get_unlabeled_losses(self, model, batch_data):
-        inputs, vl, tt, bow, _ = batch_data
+        seqs, = batch_data
+        _ , input_ids, mask, bow = seqs
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
-            inputs.to(self.device), tt.to(self.device),
-            vl.astype('float32').to(self.device), bow.to(self.device))
+            input_ids.to(self.device), mask.to(self.device), bow.to(self.device))
         total_ls = elbo_ls.mean() / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
         
@@ -1476,7 +1459,6 @@ class SeqBowEstimator(BaseEstimator):
                     "weight_decay": 0.00001,
                 },
             ]
-        print("lr = {}, decoder_lr = {}".format(self.lr, self.decoder_lr))
         optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr = self.lr, eps=1e-6, betas=(0.9, 0.999))
         step_size = self.batch_size * accumulate if accumulate else self.batch_size
         #num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
@@ -1507,8 +1489,6 @@ class SeqBowEstimator(BaseEstimator):
         for epoch_id in range(self.epochs):
             self.metric.reset()
             model.train()
-            #optimizer.zero_grad()
-            #dec_optimizer.zero_grad()            
             
             for (batch_id, (data, aux_batch)) in enumerate(joint_loader):
                 # data_batch is either a 2-tuple of: (labeled, unlabeled)
@@ -1527,7 +1507,6 @@ class SeqBowEstimator(BaseEstimator):
                     update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
 
                 if not accumulate or (batch_id + 1) % accumulate == 0:
-                    #optimizer.step()
                     lr_scheduler.step()
                     dec_optimizer.step()
                     model.zero_grad()
@@ -1535,7 +1514,6 @@ class SeqBowEstimator(BaseEstimator):
                     step_num += 1
                 if (batch_id + 1) % (self.log_interval) == 0:
                     if batch_id > 0:
-                        opt_state = dec_optimizer.state_dict()
                         lr = lr_scheduler.get_last_lr()[0] # get lr from first group
                         self.log_train(batch_id, num_train_steps / self.epochs, loss_details['step_loss'],
                                        loss_details['elbo_loss'], loss_details['red_loss'], loss_details['class_loss'], self.log_interval,
@@ -1698,11 +1676,11 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
     def _get_unlabeled_losses(self, model, batch_data):
-        in1, vl1, tt1, bow1, label1 = batch_data
+        batch1, = batch_data
+        _, input_ids1, mask1, bow1 = batch1
         elbo_ls, rec_ls, kl_ls, red_ls = model.unpaired_input_forward(
-            in1.to(self.device), tt1.to(self.device),
-            vl1.astype('float32').to(self.device), bow1.to(self.device))
-        total_ls = elbo_ls / self.gamma
+            input_ids1.to(self.device), mask1.to(self.device), bow1.to(self.device))
+        total_ls = elbo_ls.mean() / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
     
     def validate(self, model, dataloader, epoch_id, include_predictions=True):

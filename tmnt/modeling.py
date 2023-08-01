@@ -587,6 +587,11 @@ class MetricSeqBowVED(BaseSeqBowVED):
         rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
         elbo = rec_loss + KL_loss
         return elbo, rec_loss, KL_loss
+    
+    def unpaired_input_encode(self, input, mask):
+        llm_output = self.llm(input, mask)
+        cls_vec    = llm_output.last_hidden_state[:,0,:]
+        return self.latent_dist.get_mu_encoding(cls_vec).detach().numpy()
 
     def unpaired_input_forward(self, in1, mask1, bow1):
         llm_output = self.llm(in1, mask1)
