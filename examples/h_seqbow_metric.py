@@ -65,7 +65,7 @@ train_loader = get_llm_paired_dataloader(train_ds_a, train_ds_b, vectorizer, tf_
 dev_loader = get_llm_paired_dataloader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256, device=device)
 aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
 
-latent_distribution = LogisticGaussianDistribution(768,100,dr=0.05,alpha=1.0)
+latent_distribution = LogisticGaussianDistribution(768,100,dr=0.05,alpha=1.0,device=device)
 
 estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
                             latent_distribution = latent_distribution,
