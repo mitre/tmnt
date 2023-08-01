@@ -52,9 +52,7 @@ def get_llm_model(model_name):
     _, model_fn = llm_catalog[model_name]
     return model_fn(model_name)
 
-def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False):
-    #device = get_device()
-    device = 'cpu'
+def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
     label_pipeline = lambda x: label_map.get(x, 0)
     text_pipeline  = get_llm_tokenizer(llm_name)
     
@@ -77,14 +75,17 @@ def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batc
         return label_list.to(device), text_list.to(device), mask_list.to(device), bow_list.to(device)
     return DataLoader(data, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_batch)
 
-def get_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False):
-    return SingletonWrapperLoader(get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=shuffle))
+def get_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
+    return SingletonWrapperLoader(get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=shuffle, device=device))
 
 
 def get_llm_paired_dataloader(data_a, data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, max_len_b, 
-                              shuffle_both=False, shuffle_a_only=True):
-    loader_a = get_unwrapped_llm_dataloader(data_a, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, shuffle=(shuffle_both or shuffle_a_only))   
-    loader_b = get_unwrapped_llm_dataloader(data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_b, shuffle=shuffle_both)   
+                              shuffle_both=False, shuffle_a_only=True, device='cpu'):
+    loader_a = get_unwrapped_llm_dataloader(data_a, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, 
+                                            shuffle=(shuffle_both or shuffle_a_only),
+                                            device=device)   
+    loader_b = get_unwrapped_llm_dataloader(data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_b, shuffle=shuffle_both,
+                                            device=device) 
     return PairedDataLoader(loader_a, loader_b)
 
 
