@@ -26,21 +26,21 @@ class BaseDistribution(nn.Module):
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
-        self.mu_encoder = nn.Linear(enc_size, n_latent)
-        self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001)
-        self.softmax = nn.Softmax(dim=1)        
+        self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
+        self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
+        self.softmax = nn.Softmax(dim=1).to(device)        
         #self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     ## this is required by most priors
     def _get_gaussian_sample(self, mu, lv, batch_size):
         eps = Normal(torch.zeros(batch_size, self.n_latent), 
                      torch.ones(batch_size, self.n_latent)).sample()
-        return mu + torch.exp(0.5*lv) * eps.to(self.device)
+        return (mu + torch.exp(0.5*lv) * eps).to(self.device)
 
     ## this is required by most priors
     def _get_unit_var_gaussian_sample(self, mu, batch_size):
         eps = Normal(torch.zeros(batch_size, self.n_latent), torch.ones(batch_size, self.n_latent)).sample()
-        return mu + eps
+        return (mu + eps).to(self.device)
 
     def get_mu_encoding(self, data, include_bn=False):
         """Provide the distribution mean as the natural result of running the full encoder
@@ -67,13 +67,13 @@ class GaussianDistribution(BaseDistribution):
     """
     def __init__(self, enc_size, n_latent, device='cpu', dr=0.2):
         super(GaussianDistribution, self).__init__(enc_size, n_latent, device)
-        self.lv_encoder = nn.Linear(enc_size, n_latent)            
-        self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001)
+        self.lv_encoder = nn.Linear(enc_size, n_latent).to(device) 
+        self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
         self.post_sample_dr_o = nn.Dropout(p=dr)        
 
     def _get_kl_term(self, mu, lv):
         ww = self.lv_encoder.weight.data
-        return -0.5 * torch.sum(1 + lv - mu*mu - torch.exp(lv), 1)
+        return (-0.5 * torch.sum(1 + lv - mu*mu - torch.exp(lv), 1)).to(self.device)
 
     def forward(self, data, batch_size):
         """Generate a sample according to the Gaussian given the encoder outputs
@@ -82,7 +82,6 @@ class GaussianDistribution(BaseDistribution):
         mu_bn = self.mu_bn(mu)
         lv = self.lv_encoder(data)
         lv_bn = self.lv_bn(lv)
-        #print("mu_bn ss = {}   lv_bn ss = {}".format((mu_bn*mu_bn).sum(), (lv_bn*lv_bn).sum()))
         z = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
         KL = self._get_kl_term(mu_bn, lv_bn)
         z = self.post_sample_dr_o(z)
@@ -105,7 +104,7 @@ class GaussianUnitVarDistribution(BaseDistribution):
             self.post_sample_dr_o = torch.nn.Dropout(dr)
 
     def _get_kl_term(self, mu):
-        return -0.5 * torch.sum(1.0 + self.log_variance - mu*mu - self.variance, axis=1)
+        return (-0.5 * torch.sum(1.0 + self.log_variance - mu*mu - self.variance, axis=1)).to(self.device)
 
     def forward(self, data, batch_size):
         """Generate a sample according to the unit variance Gaussian given the encoder outputs
@@ -134,8 +133,8 @@ class LogisticGaussianDistribution(BaseDistribution):
         self.prior_var = torch.tensor([prior_var], device=device)
         self.prior_logvar = torch.tensor([math.log(prior_var)], device=device)
 
-        self.lv_encoder = nn.Linear(enc_size, n_latent)
-        self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001)
+        self.lv_encoder = nn.Linear(enc_size, n_latent).to(device)
+        self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
         self.post_sample_dr_o = nn.Dropout(dr)
         #self.lv_bn.collect_params().setattr('grad_req', 'null')        
 
@@ -145,7 +144,7 @@ class LogisticGaussianDistribution(BaseDistribution):
         dt = torch.div(delta * delta, self.prior_var)
         v_div = torch.div(posterior_var, self.prior_var)
         lv_div = self.prior_logvar - lv
-        return 0.5 * (torch.sum((v_div + dt + lv_div), 1) - self.n_latent)
+        return (0.5 * (torch.sum((v_div + dt + lv_div), 1) - self.n_latent)).to(self.device)
 
     def forward(self, data, batch_size):
         """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
