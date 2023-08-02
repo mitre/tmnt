@@ -34,8 +34,8 @@ class BaseDistribution(nn.Module):
     ## this is required by most priors
     def _get_gaussian_sample(self, mu, lv, batch_size):
         eps = Normal(torch.zeros(batch_size, self.n_latent), 
-                     torch.ones(batch_size, self.n_latent)).sample()
-        return (mu + torch.exp(0.5*lv) * eps).to(self.device)
+                     torch.ones(batch_size, self.n_latent)).sample().to(self.device)
+        return (mu + torch.exp(0.5*lv).to(self.device) * eps)
 
     ## this is required by most priors
     def _get_unit_var_gaussian_sample(self, mu, batch_size):
