@@ -34,7 +34,7 @@ class BaseVAE(nn.Module):
         self.embedding = None
 
         self.latent_distribution = latent_distribution
-        self.decoder = nn.Linear(self.n_latent, self.vocab_size)
+        self.decoder = nn.Linear(self.n_latent, self.vocab_size).to(device)
         #self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
 
     def initialize_bias_terms(self, wd_freqs: Optional[np.ndarray]):
