@@ -1630,7 +1630,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def _get_model(self, bow_size=-1):
         bow_size = bow_size if bow_size > 1 else len(self.bow_vocab)
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
-        model = MetricSeqBowVED(llm_base_model, self.latent_distribution, n_latent=self.n_latent,
+        model = MetricSeqBowVED(llm_base_model, self.latent_distribution, n_latent=self.n_latent, device=self.device,
                                 bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
         # model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         # model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)

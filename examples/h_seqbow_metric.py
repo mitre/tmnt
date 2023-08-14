@@ -59,13 +59,13 @@ dev_ds_b   = list(zip(dev_y_b_s, dev_data_b))
 aux_ds     = list(zip([0] * len(aux_data), aux_data))
 
 label_map = { l:i for i,l in enumerate(classes) }
-device = torch.device('cpu')
+device = torch.device('cuda')
 
 train_loader = get_llm_paired_dataloader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256 , device=device)
 dev_loader = get_llm_paired_dataloader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256, device=device)
 aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
 
-latent_distribution = LogisticGaussianDistribution(768,100,dr=0.05,alpha=1.0,device=device)
+latent_distribution = LogisticGaussianDistribution(768,120,dr=0.0,alpha=2.0,device=device)
 
 estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
                             latent_distribution = latent_distribution,
@@ -73,7 +73,7 @@ estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
                             bow_vocab = vectorizer.get_vocab(),
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=10000.0, 
-                            lr=1e-4, decoder_lr=0.01, epochs=50)
+                            lr=1e-4, decoder_lr=0.01, epochs=500)
 
 
 # this will take quite some time without a GPU!

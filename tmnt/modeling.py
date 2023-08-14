@@ -501,13 +501,14 @@ class BaseSeqBowVED(nn.Module):
         self.vocabulary = None ### XXX - add this as option to be passed in
         self.latent_dist = latent_dist
         self.embedding = None
-        self.decoder = nn.Linear(self.n_latent, bow_vocab_size, bias=True)
+        self.decoder = nn.Linear(self.n_latent, bow_vocab_size, bias=True).to(device)
         self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)
         self.device = device        
         if pre_trained_embedding is not None:
             self.embedding = nn.Linear(len(pre_trained_embedding.idx_to_vec),
                                            pre_trained_embedding.idx_to_vec[0].size, bias=False)
         self.apply(self._init_weights)
+        print("***INITIALIZATION with self.decoder.weight device = {}".format(self.decoder.weight.device))
             #if self.vocabulary:
             #    self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary),
             #                                    units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
@@ -583,7 +584,8 @@ class MetricSeqBowVED(BaseSeqBowVED):
         #bow = bow.squeeze(axis=1)
         z, KL = self.latent_dist(enc, bow.size()[0])
         KL_loss = (KL * self.kld_wt)
-        y = torch.nn.functional.softmax(self.decoder(z), dim=1)
+        dec = self.decoder(z)
+        y = torch.nn.functional.softmax(dec, dim=1)
         rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
         elbo = rec_loss + KL_loss
         return elbo, rec_loss, KL_loss
