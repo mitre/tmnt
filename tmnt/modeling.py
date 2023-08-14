@@ -505,7 +505,7 @@ class BaseSeqBowVED(BaseVAE):
         z = torch.ones((self.n_latent,), device=self.device)
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
         sorted_j = jacobian.argsort(dim=0, descending=True)
-        return sorted_j.numpy()
+        return sorted_j.cpu().numpy()
             
 
     def get_redundancy_penalty(self):
