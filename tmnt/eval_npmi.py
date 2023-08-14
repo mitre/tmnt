@@ -63,7 +63,7 @@ class EvaluateNPMI(object):
             if is_sparse:
                 mat = csr_mat.asscipy()
             else:
-                mat = csr_mat.to_dense().numpy()
+                mat = csr_mat.to_dense().cpu().numpy()
         n_docs = mat.shape[0]
         total_npmi = 0
         for i, words_per_topic in enumerate(self.top_k_words_per_topic):
