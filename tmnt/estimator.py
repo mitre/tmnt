@@ -1352,7 +1352,7 @@ class SeqBowEstimator(BaseEstimator):
         return bow_matrix
 
     def _get_bow_wd_counts(self, dataloader):
-        sums = torch.zeros(len(self.vocabulary))
+        sums = torch.zeros(len(self.vocabulary)).to(self.device)
         for i, data in enumerate(dataloader):
             seqs, = data
             bow_batch = seqs[3].to_dense()
