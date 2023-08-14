@@ -66,6 +66,7 @@ class BaseEstimator(object):
         warm_start: Subsequent calls to `fit` will use existing model weights rather than reinitializing
     """
     def __init__(self,
+                 vocabulary = None,
                  log_method: str = 'log',
                  quiet: bool = False,
                  coherence_coefficient: float = 8.0,
@@ -80,6 +81,7 @@ class BaseEstimator(object):
                  pretrained_param_file: Optional[str] = None,
                  warm_start: bool = False,
                  test_batch_size: int = 0):
+        self.vocabulary = vocabulary
         self.log_method = log_method
         self.quiet = quiet
         self.model = None
@@ -190,7 +192,6 @@ class BaseBowEstimator(BaseEstimator):
     Bag of words variational autoencoder algorithm
 
     Parameters:
-        vocabulary (:class:`torchtext.vocab.Vocab`): Torchtext Vocabulary object
         n_labels: Number of possible labels/classes when provided supervised data
         gamma: Coefficient that controls how supervised and unsupervised losses are weighted against each other
         enc_hidden_dim (int): Size of hidden encoder layers. optional (default=150)
@@ -206,7 +207,6 @@ class BaseBowEstimator(BaseEstimator):
         multilabel: Assume labels are vectors denoting label sets associated with each document
     """
     def __init__(self,
-                 vocabulary: torchtext.vocab.Vocab,
                  n_labels: int = 0,
                  gamma: float = 1.0,
                  multilabel: bool = False,
@@ -225,7 +225,6 @@ class BaseBowEstimator(BaseEstimator):
         self.n_encoding_layers = num_enc_layers
         self.enc_dr = enc_dr
         self.classifier_dropout = classifier_dropout
-        self.vocabulary = vocabulary 
         self.embedding_source = embedding_source
         self.embedding_size = embedding_size
         self.validate_each_epoch = validate_each_epoch
@@ -760,7 +759,6 @@ class BowEstimator(BaseBowEstimator):
                             n_labels = self.n_labels,
                             gamma = self.gamma,
                             multilabel = self.multilabel,
-                            vocabulary=self.vocabulary, 
                             latent_distribution=self.latent_distribution, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                             n_covars=0, device=self.device)
@@ -826,7 +824,6 @@ class BowMetricEstimator(BowEstimator):
                             n_labels = self.n_labels,
                             gamma = self.gamma,
                             multilabel = self.multilabel,
-                            vocabulary=self.vocabulary, 
                             latent_distribution=self.latent_distribution, 
                             coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                               n_covars=0, device=self.device)
@@ -989,7 +986,7 @@ class CovariateBowEstimator(BaseBowEstimator):
             emb_size = self.embedding_size
         model = \
             CovariateBowVAEModel(n_covars=self.n_covars,
-                                 vocabulary=self.vocabulary, enc_dim=self.enc_hidden_dim, embedding_size=emb_size,
+                                 enc_dim=self.enc_hidden_dim, embedding_size=emb_size,
                                  fixed_embedding=self.fixed_embedding, latent_distribution=self.latent_distribution,
                                  coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
                                  batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
@@ -1123,7 +1120,6 @@ class SeqBowEstimator(BaseEstimator):
 
     def __init__(self, *args,
                  llm_model_name = 'distilbert-base-uncased',
-                 bow_vocab = None,
                  n_labels = 0,
                  log_interval=5,
                  warmup_ratio=0.1,
@@ -1145,21 +1141,19 @@ class SeqBowEstimator(BaseEstimator):
         self.classifier_dropout = classifier_dropout
         self.multilabel = multilabel
         self.n_labels = n_labels
-        self.metric = MultilabelAUPRC(num_classes=n_labels) if multilabel else MulticlassAUPRC(num_classes=n_labels)
+        self.metric = None if n_labels == 0 else (MultilabelAUPRC(num_classes=n_labels) if multilabel else MulticlassAUPRC(num_classes=n_labels))
         self.warmup_ratio = warmup_ratio
         self.log_interval = log_interval
         self.loss_function = torch.nn.BCEWithLogitsLoss() if multilabel else torch.nn.CrossEntropyLoss()
         self.gamma = gamma
         self.decoder_lr = decoder_lr
         self._bow_matrix = None
-        self.bow_vocab = bow_vocab
 
 
     @classmethod
     def from_config(cls,
                     config: Union[str, dict],
                     llm_model_name: str,
-                    bow_vocab: torchtext.vocab.Vocab,
                     log_interval: int = 1,
                     pretrained_param_file: Optional[str] = None,
                     n_labels: Optional[int] = None,                    
@@ -1169,7 +1163,6 @@ class SeqBowEstimator(BaseEstimator):
 
         Parameters:
             config: String to configuration path (in json format) or an autogluon dictionary representing the config
-            bow_vocab: Bag-of-words vocabulary used for decoding reconstruction target
             log_interval: Logging frequency (default = 1)
             pretrained_param_file: Parameter file
             device: pytorch device
@@ -1197,8 +1190,7 @@ class SeqBowEstimator(BaseEstimator):
             latent_distribution = VonMisesDistribution(n_latent, ctx=ctx, kappa=kappa)
         else:
             latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
-        estimator = cls(llm_model_name = config.llm_model_name,
-                        bow_vocab       = bow_vocab, 
+        estimator = cls(llm_model_name = llm_model_name,
                         n_labels        = config.get('n_labels', n_labels),
                         latent_distribution = latent_distribution,
                         batch_size      = int(config.batch_size),
@@ -1256,14 +1248,14 @@ class SeqBowEstimator(BaseEstimator):
     def _get_model_bias_initialize(self, train_data):
         model = self._get_model()
         tr_bow_counts = self._get_bow_wd_counts(train_data)
-        #model.initialize_bias_terms(tr_bow_counts)
+        model.initialize_bias_terms(tr_bow_counts)
         return model
         
     
     def _get_model(self):
         llm_base_model = get_llm_model(self.llm_model_name)
-        model = SeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, n_latent=self.n_latent,
-                          bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
+        model = SeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, 
+                          vocab_size = len(self.vocabulary), dropout=self.classifier_dropout)
         return model
 
     def _get_config(self):
@@ -1330,16 +1322,20 @@ class SeqBowEstimator(BaseEstimator):
                                         class_loss/log_interval, learning_rate))
 
     def log_eval(self, batch_id, batch_num, step_loss, rec_loss, log_interval):
-        metric_val = self.metric.compute()
-        metric_nm = 'AuPRC'
-        if not isinstance(metric_nm, list):
-            metric_nm, metric_val = [metric_nm], [metric_val]
-        self._output_status("Batch {}/{} loss={} (rec_loss = {}), metrics: {:.10f}"
-              .format(batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, *metric_val))
+        if self.metric is not None:
+            metric_val = self.metric.compute()
+            metric_nm = 'AuPRC'
+            if not isinstance(metric_nm, list):
+                metric_nm, metric_val = [metric_nm], [metric_val]
+            self._output_status("Batch {}/{} loss={} (rec_loss = {}), metrics: {:.10f}"
+                .format(batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval, *metric_val))
+        else:
+            self._output_status("Batch {}/{} loss={} (rec_loss = {}), metrics: NA"
+              .format(batch_id+1, batch_num, step_loss/log_interval, rec_loss/log_interval))
 
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
-        max_rows = 2000000000 / len(self.bow_vocab)
+        max_rows = 2000000000 / len(self.vocabulary)
         logging.info("Maximum rows for BOW matrix = {}".format(max_rows))
         rows = 0
         for i, data in enumerate(dataloader):
@@ -1356,7 +1352,7 @@ class SeqBowEstimator(BaseEstimator):
         return bow_matrix
 
     def _get_bow_wd_counts(self, dataloader):
-        sums = torch.zeros(len(self.bow_vocab))
+        sums = torch.zeros(len(self.vocabulary))
         for i, data in enumerate(dataloader):
             seqs, = data
             bow_batch = seqs[3].to_dense()
@@ -1487,7 +1483,8 @@ class SeqBowEstimator(BaseEstimator):
                 loss_details['class_loss'] += float(class_ls.mean())
             
         for epoch_id in range(self.epochs):
-            self.metric.reset()
+            if self.metric is not None:
+                self.metric.reset()
             model.train()
             
             for (batch_id, (data, aux_batch)) in enumerate(joint_loader):
@@ -1548,10 +1545,6 @@ class SeqBowEstimator(BaseEstimator):
                 unique_term_ids.add(topic_ids[j])
         redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2.0
         logging.info("Test Coherence: {}".format(npmi))
-        #if log_terms:
-        #    top_k_tokens = [list(map(lambda x: self.vocabulary.idx_to_token[x], list(li))) for li in top_k_words_per_topic]
-        #    for i in range(num_topics):
-        #        logging.info("Topic {}: {}".format(i, top_k_tokens[i]))
         return npmi, redundancy
     
 
@@ -1577,9 +1570,10 @@ class SeqBowEstimator(BaseEstimator):
     
     def validate(self, model, dataloader):
         bow_matrix = self._bow_matrix if self._bow_matrix is not None else self._get_bow_matrix(dataloader, cache=True)
-        num_words = int(bow_matrix.sum())
+        num_words = torch.sparse.sum(bow_matrix)
         npmi, redundancy = self._compute_coherence(model, 10, bow_matrix, log_terms=True)
-        self.metric.reset()
+        if self.metric is not None:
+            self.metric.reset()
         step_loss = 0
         elbo_loss  = 0
         total_rec_loss = 0.0
@@ -1595,7 +1589,7 @@ class SeqBowEstimator(BaseEstimator):
                 self.log_eval(batch_id, len(dataloader), step_loss, elbo_loss, self.log_interval)
                 step_loss = 0
                 elbo_loss = 0
-        likelihood = (total_rec_loss + total_kl_loss) / num_words
+        likelihood = (total_rec_loss + total_kl_loss) / float(num_words)
         if likelihood < 709.0:
             perplexity = math.exp(likelihood)
         else:
@@ -1631,7 +1625,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         bow_size = bow_size if bow_size > 1 else len(self.bow_vocab)
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
         model = MetricSeqBowVED(llm_base_model, self.latent_distribution, n_latent=self.n_latent,
-                                bow_vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
+                                vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
         # model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         # model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
         if self.pretrained_param_file is not None:

@@ -19,12 +19,11 @@ from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 class BaseVAE(nn.Module):
 
-    def __init__(self, vocabulary=None, latent_distribution=LogisticGaussianDistribution(100, 20),
+    def __init__(self, vocab_size=2000, latent_distribution=LogisticGaussianDistribution(100, 20),
                  coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
                  n_covars=0, device='cpu', **kwargs):
         super(BaseVAE, self).__init__(**kwargs)        
-        self.vocabulary = vocabulary
-        self.vocab_size = len(vocabulary)        
+        self.vocab_size = vocab_size        
         self.n_latent   = latent_distribution.n_latent
         self.enc_size   = latent_distribution.enc_size
         self.coherence_reg_penalty = coherence_reg_penalty
@@ -43,7 +42,6 @@ class BaseVAE(nn.Module):
             log_freq = np.log(freq_nd) - np.log(freq_nd.sum())
             with torch.no_grad():
                 self.decoder.bias = nn.Parameter(torch.tensor(log_freq, dtype=torch.float32, device=self.device))
-                #self.decoder.bias = nn.Parameter(torch.tensor(log_freq))
                 self.decoder.bias.requires_grad_(False)
 
     def get_ordered_terms(self):
@@ -53,7 +51,6 @@ class BaseVAE(nn.Module):
         are those most associated with the topic.
         """
         z = torch.ones((self.n_latent,), device=self.device)
-        #z = torch.ones((self.n_latent,))
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
         sorted_j = jacobian.argsort(dim=0, descending=True)
         return sorted_j.cpu().numpy()
@@ -64,7 +61,6 @@ class BaseVAE(nn.Module):
         Returns unnormalized topic vectors
         """
         z = torch.ones((1, self.n_latent), device=self.device)
-        #z = torch.ones((1, self.n_latent))
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
         return jacobian.cpu().asnumpy()        
 
@@ -91,7 +87,6 @@ class BowVAEModel(BaseVAE):
     Defines the neural architecture for a bag-of-words topic model.
 
     Parameters:
-        vocabulary (:class:`torchtext.vocab.Vocab`): Torchtext Vocabulary
         enc_dim (int): Number of dimension of input encoder (first FC layer)
         embedding_size (int): Number of dimensions for embedding layer
         fixed_embedding (bool): Whether to fix embedding weights (default = False)
@@ -117,8 +112,6 @@ class BowVAEModel(BaseVAE):
         self.gamma    = gamma
         self.classifier_dropout=classifier_dropout
         self.has_classifier = self.n_labels > 1
-        #if self.vocabulary.embedding:
-        #    assert self.vocabulary.embedding.idx_to_vec[0].size == self.embedding_size
         self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
         self.embedding = torch.nn.Sequential()
         self.embedding.add_module("linear", torch.nn.Linear(self.vocab_size, self.embedding_size))
@@ -129,13 +122,6 @@ class BowVAEModel(BaseVAE):
             self.classifier = torch.nn.Linear(self.n_latent, self.n_labels, bias=True)
             
         self.apply(self._init_weights)
-        #if self.vocabulary.embedding:            
-        #    emb = self.vocabulary.embedding.idx_to_vec.transpose()
-        #    emb_norm_val = torch.norm(emb, keepdim=True, dim=0) + 1e-10
-        #    emb_norm = emb / emb_norm_val
-        #    self.embedding[0].weight.data = emb_norm
-        #    if fixed_embedding:
-        #        self.embedding.requires_grad_(False)
 
     def _init_weights(self, module):
         if isinstance(module, torch.nn.Linear):
@@ -191,7 +177,7 @@ class BowVAEModel(BaseVAE):
             x_data = torch.minimum(x_data, torch.Tensor([1.0], device=self.device))
             jacobian = torch.autograd.functional.jacobian(partial_network, x_data)
             ss = jacobian.numpy()
-            jacobian_list[i] += list(ss)
+            jacobian_list[bi] += list(ss)
         return jacobian_list
 
 
@@ -478,44 +464,32 @@ class CoherenceRegularizer(nn.Module):
         return C * self.coherence_pen , D * self.redundancy_pen
 
 
-class BaseSeqBowVED(nn.Module):
+class BaseSeqBowVED(BaseVAE):
     def __init__(self,
                  llm,
                  latent_dist,
                  num_classes=0,
                  dropout=0.0,
-                 bow_vocab_size=2000,
-                 n_latent=20, 
+                 vocab_size=2000,
                  kld=0.1,
                  device='cpu',
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None):
-        super(BaseSeqBowVED, self).__init__()
+        super(BaseSeqBowVED, self).__init__(device=device, vocab_size=vocab_size)
         self.n_latent = latent_dist.n_latent
         self.llm = llm
         self.kld_wt = kld
         self.has_classifier = num_classes >= 2
         self.num_classes = num_classes
         self.dropout = dropout
-        self.bow_vocab_size = bow_vocab_size
         self.redundancy_reg_penalty = redundancy_reg_penalty
-        self.vocabulary = None ### XXX - add this as option to be passed in
         self.latent_dist = latent_dist
         self.embedding = None
-        self.decoder = nn.Linear(self.n_latent, bow_vocab_size, bias=True)
+        self.decoder = nn.Linear(self.n_latent, vocab_size, bias=True)
         self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)
-        self.device = device        
         if pre_trained_embedding is not None:
             self.embedding = nn.Linear(len(pre_trained_embedding.idx_to_vec),
                                            pre_trained_embedding.idx_to_vec[0].size, bias=False)
         self.apply(self._init_weights)
-            #if self.vocabulary:
-            #    self.embedding = gluon.nn.Dense(in_units=len(self.vocabulary),
-            #                                    units = self.vocabulary.embedding.idx_to_vec[0].size, use_bias=False)
-            #    self.embedding.initialize(mx.init.Xavier(), ctx=self.model_ctx)
-            #    emb = self.vocabulary.embedding.idx_to_vec.transpose()
-            #    emb_norm_val = mx.nd.norm(emb, keepdims=True, axis=0) + 1e-10
-            #    emb_norm = emb / emb_norm_val
-            #    self.embedding.collect_params().setattr('grad_req', 'null')
 
     def _init_weights(self, module):
         if isinstance(module, torch.nn.Linear):
