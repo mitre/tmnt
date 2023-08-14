@@ -484,7 +484,7 @@ class BaseSeqBowVED(BaseVAE):
         self.redundancy_reg_penalty = redundancy_reg_penalty
         self.latent_dist = latent_dist
         self.embedding = None
-        self.decoder = nn.Linear(self.n_latent, bow_vocab_size, bias=True).to(device)
+        self.decoder = nn.Linear(self.n_latent, vocab_size, bias=True).to(device)
         self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)
         if pre_trained_embedding is not None:
             self.embedding = nn.Linear(len(pre_trained_embedding.idx_to_vec),
