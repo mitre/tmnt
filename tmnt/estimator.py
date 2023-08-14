@@ -1357,7 +1357,7 @@ class SeqBowEstimator(BaseEstimator):
             seqs, = data
             bow_batch = seqs[3].to_dense()
             sums += bow_batch.sum(axis=0)
-        return sums
+        return sums.cpu().numpy()
 
     def _get_objective_from_validation_result(self, val_result):
         npmi = val_result['npmi']
