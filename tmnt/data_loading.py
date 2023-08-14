@@ -14,22 +14,21 @@ import numpy as np
 import string
 import re
 import json
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 from sklearn.datasets import load_svmlight_file
 from sklearn.utils import shuffle as sk_shuffle
 from tmnt.preprocess.vectorizer import TMNTVectorizer
-
 
 from scipy import sparse as sp
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler, RandomSampler
 from torchtext.vocab import vocab as build_vocab
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, DistilBertTokenizer, BertModel, DistilBertModel, OpenAIGPTModel
-
+from sklearn.model_selection import StratifiedKFold
 
 #### Huggingface LLM-specific dataloading ####
 
@@ -87,6 +86,8 @@ def get_llm_paired_dataloader(data_a, data_b, bow_vectorizer, llm_name, label_ma
     loader_b = get_unwrapped_llm_dataloader(data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_b, shuffle=shuffle_both,
                                             device=device) 
     return PairedDataLoader(loader_a, loader_b)
+
+
 
 
 ##############################################
@@ -346,5 +347,65 @@ def file_to_data(sp_file, voc_size, batch_size=1000):
     return X, y, wd_freqs, total_words
 
 
+class StratifiedBatchSampler:
+    """Stratified batch sampling
+    Provides equal representation of target classes in each batch
+    """
+    def __init__(self, y, batch_size, num_batches, shuffle=True):
+        assert len(y.shape) == 1 # 'label array must be 1D'
+        self.y = y
+        self.shuffle = shuffle
+        self.batch_size = batch_size
+        self.num_batches = num_batches
+        counts = Counter(y)
+        self.class_weights = [ counts[i] / len(y) for i in range(len(counts)) ]
+        self.class_indices = [0] * (np.max(y) + 1)
+        for i in range(len(self.class_indices)):
+            self.class_indices[i] = list(np.where(y == i)[0])
 
-    
+
+    def __iter__(self):
+        samplers = [ iter(RandomSampler(self.class_indices[c], replacement=True, num_samples=self.num_batches)) for c in range(len(self.class_indices)) ]
+        for _ in range(self.num_batches):
+            classes = list(WeightedRandomSampler(self.class_weights, self.batch_size, replacement=False))
+            print(classes)
+            batch_indices = [ self.class_indices[c][next(samplers[c])] for c in classes]
+            yield batch_indices
+                
+    def __len__(self):
+        return len(self.num_batches)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

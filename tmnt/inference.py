@@ -290,16 +290,14 @@ class BowVAEInferencer(BaseInferencer):
 
 
 class SeqVEDInferencer(BaseInferencer):
-    """Inferencer for sequence variational encoder-decoder models using BERT
+    """Inferencer for sequence variational encoder-decoder models using a pretrained Transformer model
     """
     def __init__(self, estimator, max_length, pre_vectorizer=None, device='cpu'):
         super().__init__(estimator,
                          pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.bow_vocab),
                          device)
         self.model     = estimator.model 
-        self.bert_base = self.model.bert
-        self.tokenizer = BERTTokenizer(estimator.bert_vocab)
-        self.transform = BERTSentenceTransform(self.tokenizer, max_length, pair=False)
+        self.llm = self.model.llm
         self.bow_vocab = estimator.bow_vocab
 
 
@@ -363,15 +361,10 @@ class SeqVEDInferencer(BaseInferencer):
 
 
     def prep_text(self, txt):    # used for integrated gradients
-        tokens = self.tokenizer(txt)
-        ids, lens, segs = self.transform((txt,))
-        return ( tokens,
-                 mx.nd.array([ids], dtype='int32'),
-                 mx.nd.array([lens], dtype='float32'),
-                 mx.nd.array([segs], dtype='int32') )
-    
+        raise NotImplemented
 
     def encode_text(self, txt):                   
+        raise NotImplemented
         tokens, ids, lens, segs = self.prep_text(txt)
         _, enc = self.model.bert(ids.as_in_context(self.device),
                                               segs.as_in_context(self.device), lens.as_in_context(self.device))
