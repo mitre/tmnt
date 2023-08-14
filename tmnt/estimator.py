@@ -1254,7 +1254,7 @@ class SeqBowEstimator(BaseEstimator):
     
     def _get_model(self):
         llm_base_model = get_llm_model(self.llm_model_name)
-        model = SeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, 
+        model = SeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
                           vocab_size = len(self.vocabulary), dropout=self.classifier_dropout)
         return model
 
