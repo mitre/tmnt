@@ -315,49 +315,20 @@ class SeqVEDInferencer(BaseInferencer):
         return cls(estimator, max_length, pre_vectorizer=vectorizer, device=device)
 
 
-    def _embed_sequence(self, ids, segs):
-        embeddings = self.bert_base.word_embed(ids) + self.bert_base.token_type_embed(segs)
-        return embeddings.transpose((1,0,2))
-
-    def _encode_from_embedding(self, embeddings, lens):
-        outputs, _ = self.bert_base.encoder(embeddings, valid_length=lens)
-        outputs = outputs.transpose((1,0,2))
-        # outputs should be (batch, seq_len, C) shaped now
-        pooled_out = self.bert_base._apply_pooling(outputs)
-        topic_encoding = self.model.latent_dist.get_mu_encoding(pooled_out)
-        return topic_encoding
-
-
     def prep_text(self, txt): 
         tokenized_result = self.tokenizer(txt,return_tensors='pt', padding='max_length',
                                            max_length=self.txt_max_len, truncation=True)
         return tokenized_result
 
-    def encode_text(self, txt):                   
+    def encode_text(self, txt, as_numpy=False):                   
         token_result = self.prep_text(txt)
         topic_encoding = self.model.forward_encode(token_result['input_ids'].to(self.device), 
                                                    token_result['attention_mask'].to(self.device))
-        return topic_encoding
+        return topic_encoding.cpu().numpy() if as_numpy else topic_encoding
 
     def predict_text(self, txt):
-        encoding, _ = self.encode_text(txt)
+        encoding = self.encode_text(txt)
         return self.model.classifier(encoding)
-
-    def get_likelihood_stats(self, txt, n_samples=50):
-        tokens, ids, lens, segs = self.prep_text(txt)
-        bow_vector = mx.nd.array(self.vectorizer.vectorizer.transform([txt]), dtype='float32', device=self.device).unsqueeze(0)
-        elbos = []
-        _, enc = self.model.bert(ids.as_in_context(self.device),
-                                              segs.as_in_context(self.device), lens.as_in_context(self.device))
-        for s in range(n_samples):
-            elbo, _, _, _, _ = self.model.forward_with_cached_encoding(ids.as_in_context(self.device), enc, bow_vector)
-            elbos.append(list(elbo.asnumpy()))
-        wd_cnts = bow_vector.sum().asnumpy()
-        elbos_np = np.array(elbos) / (wd_cnts + 1)
-        elbos_means = list(elbos_np.mean(dim=0))
-        elbos_var   = list(elbos_np.var(dim=0))
-        return elbos_means, elbos_var
-        
 
     def encode_data(self, dataloader, use_probs=False, target_entropy=2.0):
         encodings = []
