@@ -1179,7 +1179,7 @@ class SeqBowEstimator(BaseEstimator):
                 raise Exception("Invalid Json Configuration File")
         ldist_def = config['latent_distribution']
         llm_model_name = config['llm_model_name']
-        model = torch.load(pretrained_param_file)
+        model = torch.load(pretrained_param_file, map_location=device)
 
         latent_distribution = model.latent_distribution
         estimator = cls(llm_model_name = llm_model_name,
@@ -1196,8 +1196,10 @@ class SeqBowEstimator(BaseEstimator):
                         decoder_lr = config['decoder_lr'],
                         pretrained_param_file = pretrained_param_file,
                         warm_start = (pretrained_param_file is not None),
-                        log_interval=log_interval)
-        estimator.initialize_with_pretrained(pretrained_param_file)
+                        log_interval=log_interval,
+                        device=device)
+        estimator.model = model
+        estimator.model.device = device
         return estimator
 
     @classmethod
@@ -1216,13 +1218,6 @@ class SeqBowEstimator(BaseEstimator):
                                log_interval = log_interval,
                                pretrained_param_file = param_file)
     
-
-    def initialize_with_pretrained(self, param_file):
-        self.model = torch.load(param_file)
-        #self.model = self._get_model()
-        #if self.pretrained_param_file is not None:
-        #    self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
-
 
     def _get_model_bias_initialize(self, train_data):
         model = self._get_model()
