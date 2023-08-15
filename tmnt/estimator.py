@@ -989,7 +989,6 @@ class CovariateBowEstimator(BaseBowEstimator):
                                  enc_dim=self.enc_hidden_dim, embedding_size=emb_size,
                                  fixed_embedding=self.fixed_embedding, latent_distribution=self.latent_distribution,
                                  coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                                 batch_size=self.batch_size, n_encoding_layers=self.n_encoding_layers, enc_dr=self.enc_dr,
                                  ctx=self.ctx)
         return model
 
