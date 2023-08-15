@@ -1178,8 +1178,6 @@ class SeqBowEstimator(BaseEstimator):
                 logging.error("File {} does not appear to be a valid config instance".format(config))
                 raise Exception("Invalid Json Configuration File")
         ldist_def = config['latent_distribution']
-        latent_distrib = ldist_def['dist_type']
-        n_latent = int(config['n_latent'])
         llm_model_name = config['llm_model_name']
         model = torch.load(pretrained_param_file)
 
@@ -1210,14 +1208,8 @@ class SeqBowEstimator(BaseEstimator):
             param_file = os.path.join(model_dir, 'model.params')
             vocab_file = os.path.join(model_dir, 'vocab.bin')
             config_file = os.path.join(model_dir, 'model.config')
-            serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
         with open(config_file) as f:
             config = json.loads(f.read())
-        if os.path.exists(serialized_vectorizer_file):
-            with open(serialized_vectorizer_file, 'rb') as fp:
-                vectorizer = pickle.load(fp)
-        else:
-            vectorizer = None
         vocab = torch.load(vocab_file)
         return cls.from_config(config,
                                vocabulary = vocab,

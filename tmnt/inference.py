@@ -304,41 +304,7 @@ class SeqVEDInferencer(BaseInferencer):
 
 
     @classmethod
-    def from_saved(cls, param_file=None, config_file=None, vocab_file=None, model_dir=None, max_length=128, device='cpu'):
-        # if model_dir is not None:
-        #     param_file = os.path.join(model_dir, 'model.params')
-        #     vocab_file = os.path.join(model_dir, 'vocab.json')
-        #     config_file = os.path.join(model_dir, 'model.config')
-        #     serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
-        # with open(config_file) as f:
-        #     config = json.loads(f.read())
-        # with open(vocab_file) as f:
-        #     voc_js = f.read()
-        # if os.path.exists(serialized_vectorizer_file):
-        #     with open(serialized_vectorizer_file, 'rb') as fp:
-        #         vectorizer = pickle.load(fp)
-        # else:
-        #     vectorizer = None
-        # bow_vocab = nlp.Vocab.from_json(voc_js)
-        # bert_base, vocab = nlp.model.get_model(config['bert_model_name'],  
-        #                                        dataset_name=config['bert_data_name'],
-        #                                        pretrained=True, ctx=ctx, use_pooler=True,
-        #                                        use_decoder=False, use_classifier=False)
-        # latent_dist_t = config['latent_distribution']['dist_type']       
-        # n_latent    = config['n_latent']
-        # num_classes = config['n_labels']
-        # classifier_dropout = config['classifier_dropout']
-        # pad_id      = vocab[vocab.padding_token]
-        # if latent_dist_t == 'vmf':
-        #     latent_dist = HyperSphericalDistribution(n_latent, kappa=config['latent_distribution']['kappa'], ctx=ctx)
-        # elif latent_dist_t == 'logistic_gaussian':
-        #     latent_dist = LogisticGaussianDistribution(n_latent, alpha=config['latent_distribution']['alpha'], ctx=ctx)
-        # else:
-        #     latent_dist = HyperSphericalDistribution(n_latent, kappa=20.0, ctx=ctx)
-        # model = SeqBowVED(bert_base, latent_dist=latent_dist, bow_vocab_size = len(bow_vocab), num_classes=num_classes,
-        #                   dropout=classifier_dropout)
-        # model.load_parameters(str(param_file), allow_missing=False, ignore_extra=True, ctx=ctx)
-        # model.latent_dist.post_init(ctx) # need to call this after loading parameters now
+    def from_saved(cls, model_dir=None, max_length=128, device='cpu'):
         estimator = SeqBowEstimator.from_saved(model_dir=model_dir)
         serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
         if os.path.exists(serialized_vectorizer_file):
