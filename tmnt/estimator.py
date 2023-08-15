@@ -1153,7 +1153,7 @@ class SeqBowEstimator(BaseEstimator):
     @classmethod
     def from_config(cls,
                     config: Union[str, dict],
-                    llm_model_name: str,
+                    vocabulary: torchtext.vocab.Vocab,
                     log_interval: int = 1,
                     pretrained_param_file: Optional[str] = None,
                     n_labels: Optional[int] = None,                    
@@ -1178,34 +1178,28 @@ class SeqBowEstimator(BaseEstimator):
                 logging.error("File {} does not appear to be a valid config instance".format(config))
                 raise Exception("Invalid Json Configuration File")
         ldist_def = config['latent_distribution']
-        kappa = 0.0
-        alpha = 1.0
-        latent_distrib = ldist_def.dist_type
-        n_latent = int(config.n_latent)
-        if latent_distrib == 'logistic_gaussian':
-            alpha = ldist_def.alpha
-            latent_distribution = LogisticGaussianDistribution(n_latent, ctx=ctx, alpha=alpha)
-        elif latent_distrib == 'vmf':
-            kappa = ldist_def.kappa
-            latent_distribution = VonMisesDistribution(n_latent, ctx=ctx, kappa=kappa)
-        else:
-            latent_distribution = GaussianDistribution(n_latent, ctx=ctx)
+        latent_distrib = ldist_def['dist_type']
+        n_latent = int(config['n_latent'])
+        llm_model_name = config['llm_model_name']
+        model = torch.load(pretrained_param_file)
+
+        latent_distribution = model.latent_distribution
         estimator = cls(llm_model_name = llm_model_name,
+                        vocabulary = vocabulary,
                         n_labels        = config.get('n_labels', n_labels),
                         latent_distribution = latent_distribution,
-                        batch_size      = int(config.batch_size),
+                        batch_size      = int(config['batch_size']),
                         redundancy_reg_penalty = 0.0,
-                        warmup_ratio = config.warmup_ratio,
-                        optimizer = config.optimizer,
-                        classifier_dropout = config.classifier_dropout,
-                        epochs = int(config.epochs),
-                        gamma = config.gamma,
-                        lr = config.lr,
-                        decoder_lr = config.decoder_lr,
+                        warmup_ratio = config['warmup_ratio'],
+                        classifier_dropout = config['classifier_dropout'],
+                        epochs = int(config['epochs']),
+                        gamma = config['gamma'],
+                        lr = config['lr'],
+                        decoder_lr = config['decoder_lr'],
                         pretrained_param_file = pretrained_param_file,
                         warm_start = (pretrained_param_file is not None),
                         log_interval=log_interval)
-        estimator.initialize_with_pretrained()
+        estimator.initialize_with_pretrained(pretrained_param_file)
         return estimator
 
     @classmethod
@@ -1214,35 +1208,28 @@ class SeqBowEstimator(BaseEstimator):
                    device: Optional[str] = 'cpu') -> 'SeqBowEstimator':
         if model_dir is not None:
             param_file = os.path.join(model_dir, 'model.params')
-            vocab_file = os.path.join(model_dir, 'vocab.json')
+            vocab_file = os.path.join(model_dir, 'vocab.bin')
             config_file = os.path.join(model_dir, 'model.config')
             serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
         with open(config_file) as f:
             config = json.loads(f.read())
-        with open(vocab_file) as f:
-            voc_js = f.read()
         if os.path.exists(serialized_vectorizer_file):
             with open(serialized_vectorizer_file, 'rb') as fp:
                 vectorizer = pickle.load(fp)
         else:
             vectorizer = None
-        bow_vocab = nlp.Vocab.from_json(voc_js)
-        bert_base, bert_vocab = nlp.model.get_model(config['bert_model_name'],  
-                                               dataset_name=config['bert_dataset'],
-                                               pretrained=True, use_pooler=True,
-                                               use_decoder=False, use_classifier=False)
+        vocab = torch.load(vocab_file)
         return cls.from_config(config,
-                               bert_base = bert_base,
-                               bert_vocab = bert_vocab,
-                               bow_vocab = bow_vocab,
+                               vocabulary = vocab,
                                log_interval = log_interval,
                                pretrained_param_file = param_file)
     
 
-    def initialize_with_pretrained(self):
-        self.model = self._get_model()
-        if self.pretrained_param_file is not None:
-            self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
+    def initialize_with_pretrained(self, param_file):
+        self.model = torch.load(param_file)
+        #self.model = self._get_model()
+        #if self.pretrained_param_file is not None:
+        #    self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
 
 
     def _get_model_bias_initialize(self, train_data):
@@ -1280,7 +1267,7 @@ class SeqBowEstimator(BaseEstimator):
         config['classifier_dropout'] = self.classifier_dropout
         return config
 
-    def write_model(self, model_dir: str, suffix: str ='') -> None:
+    def write_model(self, model_dir: str, suffix: str ='', vectorizer=None) -> None:
         """
         Writes the model within this estimator to disk.
 
@@ -1290,15 +1277,17 @@ class SeqBowEstimator(BaseEstimator):
         """
         pfile = os.path.join(model_dir, ('model.params' + suffix))
         conf_file = os.path.join(model_dir, ('model.config' + suffix))
-        vocab_file = os.path.join(model_dir, ('vocab.json' + suffix))
-        #self.model.save_parameters(pfile)
+        vocab_file = os.path.join(model_dir, ('vocab.bin' + suffix))
         torch.save(self.model, pfile)
         config = self._get_config()
         specs = json.dumps(config, sort_keys=True, indent=4)
-        with open(conf_file, 'w') as f:
-            f.write(specs)
-        with open(vocab_file, 'w') as f:
-            f.write(self.bow_vocab.to_json())
+        if vectorizer is not None:
+            vectorizer_file = os.path.join(model_dir, ('vectorizer.pkl' + suffix))
+            with open(vectorizer_file, 'wb') as f:
+                pickle.dump(vectorizer, f)
+            with open(conf_file, 'w') as f:
+                f.write(specs)
+        torch.save(self.vocabulary, vocab_file)
 
 
     def log_train(self, batch_id, batch_num, step_loss, rec_loss, red_loss, class_loss,

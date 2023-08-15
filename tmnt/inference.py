@@ -22,7 +22,7 @@ from tmnt.utils.recalibrate import recalibrate_scores
 from multiprocessing import Pool
 from sklearn.datasets import load_svmlight_file
 from functools import partial
-
+from tmnt.data_loading import get_llm_tokenizer
 
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
@@ -298,7 +298,9 @@ class SeqVEDInferencer(BaseInferencer):
                          device)
         self.model     = estimator.model 
         self.llm = self.model.llm
-        self.bow_vocab = estimator.bow_vocab
+        self.vocab = estimator.vocabulary
+        self.tokenizer = get_llm_tokenizer(estimator.llm_model_name)
+        self.txt_max_len = max_length
 
 
     @classmethod
@@ -360,16 +362,15 @@ class SeqVEDInferencer(BaseInferencer):
         return topic_encoding
 
 
-    def prep_text(self, txt):    # used for integrated gradients
-        raise NotImplemented
+    def prep_text(self, txt): 
+        tokenized_result = self.tokenizer(txt,return_tensors='pt', padding='max_length',
+                                           max_length=self.txt_max_len, truncation=True)
+        return tokenized_result
 
     def encode_text(self, txt):                   
-        raise NotImplemented
-        tokens, ids, lens, segs = self.prep_text(txt)
-        _, enc = self.model.bert(ids.as_in_context(self.device),
-                                              segs.as_in_context(self.device), lens.as_in_context(self.device))
-        topic_encoding = self.model.latent_dist.get_mu_encoding(enc)
-        return topic_encoding, tokens
+        token_result = self.prep_text(txt)
+        topic_encoding = self.model.forward_encode(token_result['input_ids'], token_result['attention_mask'])
+        return topic_encoding
 
     def predict_text(self, txt):
         encoding, _ = self.encode_text(txt)
@@ -430,11 +431,11 @@ class SeqVEDInferencer(BaseInferencer):
         
 
     def get_top_k_words_per_topic(self, k):
-        if self.bow_vocab:
-            sorted_ids = self.model.get_top_k_terms(k)
+        if self.vocab:
+            sorted_ids = self.model.get_ordered_terms()
             topic_terms = []
             for t in range(self.model.n_latent):
-                top_k = [ self.bow_vocab.idx_to_token[int(i)] for i in list(sorted_ids[:k, t]) ]
+                top_k = self.vocab.lookup_tokens(sorted_ids[:k, t]) 
                 topic_terms.append(top_k)
             return topic_terms
         else:

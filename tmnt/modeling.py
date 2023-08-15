@@ -155,7 +155,7 @@ class BowVAEModel(BaseVAE):
             x_data = torch.minimum(x_data, torch.tensor([1.0], device=self.device))
             jacobian = torch.autograd.functional.jacobian(partial_network, x_data)
             ss = jacobian.sum(dim=0).numpy()
-            jacobians[i] += ss
+            jacobian[bi] += ss
         sorted_j = (- jacobians).argsort(dim=1).transpose()
         return sorted_j
 
@@ -523,6 +523,11 @@ class SeqBowVED(BaseSeqBowVED):
             self.classifier = torch.nn.Sequential()
             self.classifier.add_module("dr", nn.Dropout(self.dropout))
             self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes))
+    
+    def forward_encode(self, input_ids, attention_mask):
+        llm_output = self.llm(input_ids, attention_mask)
+        cls_vec = llm_output.last_hidden_state[:,0,:]
+        return self.latent_dist.get_mu_encoding(cls_vec)
 
     def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
         llm_output = self.llm(input_ids, attention_mask)
