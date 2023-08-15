@@ -324,7 +324,7 @@ class SeqVEDInferencer(BaseInferencer):
         token_result = self.prep_text(txt)
         topic_encoding = self.model.forward_encode(token_result['input_ids'].to(self.device), 
                                                    token_result['attention_mask'].to(self.device))
-        return topic_encoding.cpu().numpy() if as_numpy else topic_encoding
+        return topic_encoding.cpu().detach().numpy() if as_numpy else topic_encoding
 
     def predict_text(self, txt):
         encoding = self.encode_text(txt)
