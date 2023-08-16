@@ -305,7 +305,7 @@ class SeqVEDInferencer(BaseInferencer):
 
     @classmethod
     def from_saved(cls, model_dir=None, max_length=128, device='cpu'):
-        estimator = SeqBowEstimator.from_saved(model_dir=model_dir)
+        estimator = SeqBowEstimator.from_saved(model_dir=model_dir, device=device)
         serialized_vectorizer_file = os.path.join(model_dir, 'vectorizer.pkl')
         if os.path.exists(serialized_vectorizer_file):
             with open(serialized_vectorizer_file, 'rb') as fp:

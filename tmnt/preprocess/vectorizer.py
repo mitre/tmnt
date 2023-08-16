@@ -61,7 +61,7 @@ class TMNTVectorizer(object):
                  additional_feature_keys: List[str] = None, stop_word_file: str = None,
                  split_char: str = ',',
                  max_ws_tokens: int = -1,
-                 count_vectorizer_kwargs: Dict[str, Any] = {'max_df':0.95, 'min_df':0, 'stop_words':'english'}):
+                 count_vectorizer_kwargs: Dict[str, Any] = {'max_df':0.95, 'min_df':0.0, 'stop_words':'english'}):
         self.encoding = encoding
         self.max_ws_tokens = max_ws_tokens
         self.text_key = text_key
