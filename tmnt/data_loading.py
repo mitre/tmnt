@@ -27,7 +27,7 @@ from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler, RandomS
 from torchtext.vocab import vocab as build_vocab
 from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
-from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, DistilBertTokenizer, BertModel, DistilBertModel, OpenAIGPTModel
+from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, AutoModel, DistilBertTokenizer, BertModel, DistilBertModel, OpenAIGPTModel
 from sklearn.model_selection import StratifiedKFold
 
 #### Huggingface LLM-specific dataloading ####
@@ -35,7 +35,8 @@ from sklearn.model_selection import StratifiedKFold
 llm_catalog = {
     'distilbert-base-uncased': (DistilBertTokenizer.from_pretrained, DistilBertModel.from_pretrained),
     'bert-base-uncased' : (AutoTokenizer.from_pretrained, BertModel.from_pretrained),
-    'openai-gpt' : (AutoTokenizer.from_pretrained, OpenAIGPTModel.from_pretrained)
+    'openai-gpt' : (AutoTokenizer.from_pretrained, OpenAIGPTModel.from_pretrained), 
+    'sentence-transformers/all-mpnet-base-v2' : (AutoTokenizer.from_pretrained, AutoModel.from_pretrained)
     ## add more model options here if desired
     }
 
