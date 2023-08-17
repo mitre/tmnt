@@ -1553,12 +1553,13 @@ class SeqBowEstimator(BaseEstimator):
         elbo_loss  = 0
         total_rec_loss = 0.0
         total_kl_loss  = 0.0
+        model.eval()
         for batch_id, seqs in enumerate(dataloader):
             elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls = self._get_losses(model, seqs)
-            total_rec_loss += float(rec_ls.sum())
-            total_kl_loss  += float(kl_ls.sum())
-            step_loss += float(total_ls.mean())
-            elbo_loss  += float(elbo_ls.mean())
+            total_rec_loss += float(rec_ls.sum().cpu().detach())
+            total_kl_loss  += float(kl_ls.sum().cpu().detach())
+            step_loss += float(total_ls.mean().cpu().detach())
+            elbo_loss  += float(elbo_ls.mean().cpu().detach())
             if (batch_id + 1) % (self.log_interval) == 0:
                 logging.debug('All loss terms: {}, {}, {}, {}, {}, {}'.format(elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls))
                 self.log_eval(batch_id, len(dataloader), step_loss, elbo_loss, self.log_interval)
