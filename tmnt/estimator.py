@@ -1396,8 +1396,6 @@ class SeqBowEstimator(BaseEstimator):
 
         model = self.model
 
-        has_aux_data = aux_data is not None
-        
         accumulate = False
         v_res      = None
 
@@ -1431,9 +1429,6 @@ class SeqBowEstimator(BaseEstimator):
                 },
             ]
         optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr = self.lr, eps=1e-6, betas=(0.9, 0.999))
-        step_size = self.batch_size * accumulate if accumulate else self.batch_size
-        #num_train_steps = int((num_effective_samples / step_size) * self.epochs) + 1
-        num_train_steps = int(num_train_steps * self.epochs) + 1
         num_warmup_steps = int(num_train_steps * self.warmup_ratio)
         lr_scheduler = get_scheduler("linear", optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_train_steps)
 
@@ -1482,12 +1477,13 @@ class SeqBowEstimator(BaseEstimator):
                     lr_scheduler.step()
                     dec_optimizer.step()
                     model.zero_grad()
-                    #optimizer.clip_master_grads(1.0) ## XXX - make this an argument
+                    # clip gradients for the underlying LLM Transformer-based encoder
+                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 10.0)
                     step_num += 1
+                print("batch id = {}".format(batch_id))
                 if (batch_id + 1) % (self.log_interval) == 0:
-                    if batch_id > 0:
-                        lr = lr_scheduler.get_last_lr()[0] # get lr from first group
-                        self.log_train(batch_id, num_train_steps / self.epochs, loss_details['step_loss'],
+                    lr = lr_scheduler.get_last_lr()[0] # get lr from first group
+                    self.log_train(batch_id, num_train_steps // self.epochs, loss_details['step_loss'],
                                        loss_details['elbo_loss'], loss_details['red_loss'], loss_details['class_loss'], self.log_interval,
                                        epoch_id, lr)
                     ## reset loss details
