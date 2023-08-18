@@ -1480,7 +1480,6 @@ class SeqBowEstimator(BaseEstimator):
                     # clip gradients for the underlying LLM Transformer-based encoder
                     torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 10.0)
                     step_num += 1
-                print("batch id = {}".format(batch_id))
                 if (batch_id + 1) % (self.log_interval) == 0:
                     lr = lr_scheduler.get_last_lr()[0] # get lr from first group
                     self.log_train(batch_id, num_train_steps // self.epochs, loss_details['step_loss'],
