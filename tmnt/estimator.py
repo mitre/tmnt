@@ -1215,7 +1215,8 @@ class SeqBowEstimator(BaseEstimator):
         return cls.from_config(config,
                                vocabulary = vocab,
                                log_interval = log_interval,
-                               pretrained_param_file = param_file)
+                               pretrained_param_file = param_file,
+                               device = device)
     
 
     def _get_model_bias_initialize(self, train_data):
