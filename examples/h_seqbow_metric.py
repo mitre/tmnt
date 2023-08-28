@@ -7,9 +7,9 @@ import numpy as np
 from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import SeqVEDInferencer
-from tmnt.distribution import LogisticGaussianDistribution
+from tmnt.distribution import LogisticGaussianDistribution, Projection
 from tmnt.utils.log_utils import logging_config
-from tmnt.data_loading import get_llm_paired_dataloader, get_llm_dataloader
+from tmnt.data_loading import get_llm_paired_dataloader, get_llm_dataloader, StratifiedPairedLLMLoader
 import torch
 
 data, y = fetch_20newsgroups(shuffle=True, random_state=1,
@@ -26,7 +26,7 @@ dev_data_b   = data[-(tr_size*2):-tr_size]
 train_y_b    = y[tr_size:(tr_size * 2)]
 dev_y_b      = y[-(tr_size*2):-tr_size]
 aux_data     = data[(tr_size *2): (tr_size * 4)]
-batch_size = 10
+batch_size = 20 
 seq_len = 128
 pad = True
 
@@ -51,6 +51,7 @@ train_y_b_s = ['class_'+str(y) for y in train_y_b]
 dev_y_b_s = ['class_'+str(y) for y in dev_y_b]
 
 tf_llm_name = 'distilbert-base-uncased'
+#tf_llm_name = 'sentence-transformers/all-mpnet-base-v2'
 
 train_ds_a = list(zip(train_y_a_s, train_data_a))
 dev_ds_a   = list(zip(dev_y_a_s, dev_data_a))
@@ -61,20 +62,23 @@ aux_ds     = list(zip([0] * len(aux_data), aux_data))
 label_map = { l:i for i,l in enumerate(classes) }
 device = torch.device('cpu')
 
-train_loader = get_llm_paired_dataloader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256 , device=device)
-dev_loader = get_llm_paired_dataloader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256, device=device)
-aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
+#train_loader = get_llm_paired_dataloader(train_ds_a[:100], train_ds_a[:100], vectorizer, tf_llm_name, label_map, 20, 256, 256 , shuffle_both=True, device=device)
+train_loader = StratifiedPairedLLMLoader(train_ds_a[:40], train_ds_a[:40], vectorizer, tf_llm_name, label_map, 10, 256, 256, device=device)
+#dev_loader = get_llm_paired_dataloader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256, device=device)
+dev_loader = StratifiedPairedLLMLoader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 10, 256, 256, device=device)
+#aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
 
-latent_distribution = LogisticGaussianDistribution(768,100,dr=0.05,alpha=1.0,device=device)
+latent_distribution = LogisticGaussianDistribution(768,40,dr=0.05,alpha=1.0,device=device)
+#latent_distribution = Projection(768,40,device=device)
 
 
 estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
+                                  vocabulary = vectorizer.get_vocab(),
                             latent_distribution = latent_distribution,
-                            n_labels = num_classes,
-                            bow_vocab = vectorizer.get_vocab(),
+                                  sdml_smoothing_factor=0.05,
                             batch_size=batch_size, device=device, log_interval=1,
-                            log_method=log_method, gamma=10000.0, 
-                            lr=1e-4, decoder_lr=0.01, epochs=50)
+                            log_method=log_method, gamma=1000.0, 
+                            lr=1e-5, decoder_lr=0.001, epochs=50)
 
 
 # this will take quite some time without a GPU!

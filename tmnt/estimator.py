@@ -1592,23 +1592,28 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def from_config(cls, *args, **kwargs):
         est = super().from_config(*args, **kwargs)
         return est
-        
-    def _get_model(self, bow_size=-1):
-        bow_size = bow_size if bow_size > 1 else len(self.bow_vocab)
-        llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
-        model = MetricSeqBowVED(llm_base_model, self.latent_distribution, n_latent=self.n_latent,
-                                vocab_size = len(self.bow_vocab), dropout=self.classifier_dropout)
-        # model.decoder.initialize(init=mx.init.Xavier(), ctx=self.ctx)
-        # model.latent_dist.initialize(init=mx.init.Xavier(), ctx=self.ctx)
-        if self.pretrained_param_file is not None:
-            model.load_parameters(self.pretrained_param_file, allow_missing=False)
-        return model
+    
 
-    def _get_model_bias_initialize(self, train_data):
-        model = self._get_model()
-        tr_bow_matrix = self._get_bow_matrix(train_data)
-        #model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+    def _get_model(self):
+        llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
+        model = MetricSeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
+                          vocab_size = len(self.vocabulary), dropout=self.classifier_dropout)
         return model
+        
+    def _get_bow_wd_counts(self, dataloader):
+        sums = torch.zeros(len(self.vocabulary)).to(self.device)
+        for i, (data_a, data_b) in enumerate(dataloader):
+            seqs_a = data_a
+            bow_batch_a = seqs_a[3].to_dense()
+            seqs_b = data_b
+            bow_batch_b = seqs_b[3].to_dense()
+            sums += bow_batch_a.sum(axis=0)
+            sums += bow_batch_b.sum(axis=0)
+        return sums.cpu().numpy()                               #def _get_model_bias_initialize(self, train_data):
+    #    model = self._get_model()
+    #    tr_bow_matrix = self._get_bow_matrix(train_data)
+        #model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+    #    return model
         
 
     def _get_bow_matrix(self, dataloader, cache=False):

@@ -182,6 +182,20 @@ class VonMisesDistribution(BaseDistribution):
         kld = self.kld_v.expand(batch_size)
         #return self.softmax(z_p), kld
         return z_p, kld
+    
+
+class Projection(BaseDistribution):
+
+    def __init__(self, enc_size, n_latent, device='cpu'):
+        super(Projection, self).__init__(enc_size, n_latent, device)
+        
+
+    def forward(self, data, batch_size):
+        mu = self.mu_encoder(data)
+        mu_bn = self.mu_bn(mu)
+        kld = torch.zeros(batch_size)
+        return mu_bn, kld
+
         
     
 

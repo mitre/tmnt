@@ -18,6 +18,7 @@ from collections import OrderedDict, Counter
 from sklearn.datasets import load_svmlight_file
 from sklearn.utils import shuffle as sk_shuffle
 from tmnt.preprocess.vectorizer import TMNTVectorizer
+import random
 
 from scipy import sparse as sp
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
@@ -89,7 +90,65 @@ def get_llm_paired_dataloader(data_a, data_b, bow_vectorizer, llm_name, label_ma
     return PairedDataLoader(loader_a, loader_b)
 
 
+class StratifiedPairedLLMLoader():
 
+    def __init__(self, data_a, data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, max_len_b, device='cpu'):
+        self.data_a = data_a
+        self.data_b = data_b
+        self.bow_vectorizer = bow_vectorizer
+        self.llm_name = llm_name
+        self.label_map = label_map
+        self.batch_size = batch_size
+        self.max_len_a = max_len_a
+        self.max_len_b = max_len_b
+        self.device = device
+        self.num_batches = max(len(data_a), len(data_b)) // batch_size
+        self.stratified_sampler = StratifiedDualBatchSampler(np.array([label_map[l] for (l,_) in data_a]), 
+                                                             np.array([label_map[l] for (l,_) in data_b]),
+                                                             batch_size,
+                                                             self.num_batches)
+        self.iterator = None
+        self.label_pipeline = lambda x: label_map.get(x, 0)
+        self.text_pipeline  = get_llm_tokenizer(llm_name)          
+    
+    def __iter__(self):
+        self.iterator = iter(self.stratified_sampler)
+        return self
+    
+    def __len__(self):
+        return self.num_batches
+    
+    def __next__(self):
+        indices_a, indices_b = next(self.iterator)
+        batch_a = self._collate_batch([self.data_a[i_a] for i_a in indices_a], self.max_len_a)
+        batch_b = self._collate_batch([self.data_b[i_b] for i_b in indices_b], self.max_len_b)
+        return batch_a, batch_b 
+    
+    def _collate_batch(self, batch, max_len):
+        label_list, text_list, mask_list, bow_list = [], [], [], []
+        for (_label, _text) in batch:
+            label_list.append(self.label_pipeline(_label))
+            tokenized_result = self.text_pipeline(_text, return_tensors='pt', padding='max_length',
+                                           max_length=max_len, truncation=True)
+            bag_of_words,_ = self.bow_vectorizer.transform([_text])
+            processed_text = tokenized_result['input_ids']
+            mask = tokenized_result['attention_mask']
+            mask_list.append(mask)
+            text_list.append(processed_text)
+            bow_list.append(bag_of_words)
+        label_list = torch.tensor(label_list, dtype=torch.int64)
+        text_list  = torch.vstack(text_list)
+        mask_list  = torch.vstack(mask_list)
+        bow_list   = torch.vstack([ sparse_coo_to_tensor(bow_vec.tocoo()) for bow_vec in bow_list ])
+        return label_list.to(self.device), text_list.to(self.device), mask_list.to(self.device), bow_list.to(self.device)
+
+
+
+
+
+
+#def get_llm_paired_stratified_dataloader(data_a, data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, max_len_b, device='cpu'):
+#    return 
 
 ##############################################
 
@@ -348,30 +407,60 @@ def file_to_data(sp_file, voc_size, batch_size=1000):
     return X, y, wd_freqs, total_words
 
 
-class StratifiedBatchSampler:
+class StratifiedDualBatchSampler:
     """Stratified batch sampling
     Provides equal representation of target classes in each batch
     """
-    def __init__(self, y, batch_size, num_batches, shuffle=True):
-        assert len(y.shape) == 1 # 'label array must be 1D'
-        self.y = y
+    def __init__(self, y_a, y_b, batch_size, num_batches, shuffle=True):
+        assert len(y_a.shape) == 1 # 'label array must be 1D'
+        assert len(y_b.shape) == 1 
+        self.y_a = y_a
+        self.y_b = y_b
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.num_batches = num_batches
-        counts = Counter(y)
-        self.class_weights = [ counts[i] / len(y) for i in range(len(counts)) ]
-        self.class_indices = [0] * (np.max(y) + 1)
-        for i in range(len(self.class_indices)):
-            self.class_indices[i] = list(np.where(y == i)[0])
-
+        counts_a = Counter(y_a) 
+        counts_b = Counter(y_b)
+        self.class_weights_a = [0] * (max(np.max(y_a), np.max(y_b)) + 1)
+        self.class_weights_b = [0] * (max(np.max(y_a), np.max(y_b)) + 1)
+        for k in counts_a:
+            self.class_weights_a[k] = counts_a[k] / len(y_a)
+        for k in counts_b:
+            self.class_weights_b[k] = counts_b[k] / len(y_b)
+        self.class_indices_a = [0] * (max(np.max(y_a), np.max(y_b)) + 1)
+        self.class_indices_b = [0] * (max(np.max(y_b), np.max(y_a)) + 1)
+        for i in range(len(self.class_indices_a)):
+            self.class_indices_a[i] = list(np.where(y_a == i)[0])
+        for i in range(len(self.class_indices_b)):
+            self.class_indices_b[i] = list(np.where(y_b == i)[0])
+        self.a_only = counts_a.keys() - counts_b.keys()
+        self.b_only = counts_b.keys() - counts_a.keys()
+        
+    def _pop_leave_last(self, li):
+        if len(li) == 1:
+            return li[0]
+        else:
+            return li.pop()
 
     def __iter__(self):
-        samplers = [ iter(RandomSampler(self.class_indices[c], replacement=True, num_samples=self.num_batches)) for c in range(len(self.class_indices)) ]
-        for _ in range(self.num_batches):
-            classes = list(WeightedRandomSampler(self.class_weights, self.batch_size, replacement=False))
-            print(classes)
-            batch_indices = [ self.class_indices[c][next(samplers[c])] for c in classes]
-            yield batch_indices
+        samplers_a = [ iter(RandomSampler(self.class_indices_a[c], replacement=True, num_samples=self.num_batches)) for c in range(len(self.class_indices_a)) ]
+        samplers_b = [ iter(RandomSampler(self.class_indices_b[c], replacement=True, num_samples=self.num_batches)) for c in range(len(self.class_indices_b)) ]
+        for i in range(self.num_batches):
+            if i % 2 == 0:
+                classes_a = list(WeightedRandomSampler(self.class_weights_a, self.batch_size, replacement=False))
+                b_list = list(self.b_only)
+                random.shuffle(b_list)
+                classes_b = [ self._pop_leave_last(b_list) if a in self.a_only else a for a in classes_a]
+                batch_indices_a = [ self.class_indices_a[c][next(samplers_a[c])] for c in classes_a]                                 
+                batch_indices_b = [ self.class_indices_b[c][next(samplers_b[c])] for c in classes_b]
+            else:
+                classes_b = list(WeightedRandomSampler(self.class_weights_b, self.batch_size, replacement=False))
+                a_list = list(self.a_only)
+                random.shuffle(a_list)
+                classes_a = [ self._pop_leave_last(a_list) if b in self.b_only else b for b in classes_b]
+                batch_indices_a = [ self.class_indices_a[c][next(samplers_a[c])] for c in classes_a]
+                batch_indices_b = [ self.class_indices_b[c][next(samplers_b[c])] for c in classes_b]                                 
+            yield (batch_indices_a, batch_indices_b) 
                 
     def __len__(self):
         return len(self.num_batches)

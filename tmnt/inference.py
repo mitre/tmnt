@@ -294,7 +294,7 @@ class SeqVEDInferencer(BaseInferencer):
     """
     def __init__(self, estimator, max_length, pre_vectorizer=None, device='cpu'):
         super().__init__(estimator,
-                         pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.bow_vocab),
+                         pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.vocabulary),
                          device)
         self.model     = estimator.model 
         self.llm = self.model.llm

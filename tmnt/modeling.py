@@ -513,6 +513,12 @@ class BaseSeqBowVED(BaseVAE):
         emb = self.embedding.weight.data if self.embedding is not None else w.transpose(0,1)
         _, redundancy_loss = self.coherence_regularization(w, emb)
         return redundancy_loss
+    
+    def forward_encode(self, input_ids, attention_mask):
+        llm_output = self.llm(input_ids, attention_mask)    
+        cls_vec = llm_output.last_hidden_state[:,0,:]
+        return self.latent_dist.get_mu_encoding(cls_vec)
+    
 
 
 
@@ -568,11 +574,6 @@ class MetricSeqBowVED(BaseSeqBowVED):
         elbo = rec_loss + KL_loss
         return elbo, rec_loss, KL_loss
     
-    def unpaired_input_encode(self, input, mask):
-        llm_output = self.llm(input, mask)
-        cls_vec    = llm_output.last_hidden_state[:,0,:]
-        return self.latent_dist.get_mu_encoding(cls_vec).detach().numpy()
-
     def unpaired_input_forward(self, in1, mask1, bow1):
         llm_output = self.llm(in1, mask1)
         cls_vec = llm_output.last_hidden_state[:,0,:]
@@ -628,7 +629,7 @@ class GeneralizedSDMLLoss(_Loss):
 
     def __init__(self, smoothing_parameter=0.3, weight=1., batch_axis=0, x2_downweight_idx=-1, **kwargs):
         super(GeneralizedSDMLLoss, self).__init__(weight, batch_axis, **kwargs)
-        self.kl_loss = nn.KLDivLoss()
+        self.kl_loss = nn.KLDivLoss(size_average=False)
         self.smoothing_parameter = smoothing_parameter # Smoothing probability mass
         self.x2_downweight_idx = x2_downweight_idx
 
@@ -689,7 +690,7 @@ class GeneralizedSDMLLoss(_Loss):
         distances = self._compute_distances(x1, x2)
         log_probabilities = torch.log_softmax(-distances, dim=1)
         # multiply by the batch size to obtain the sum loss (kl_loss averages instead of sum)
-        return self.kl_loss(log_probabilities, labels.to(distances.device)) * batch_size * wt
+        return self.kl_loss(log_probabilities, labels.to(distances.device)) * wt
 
 
     def forward(self, x1, l1, x2, l2):
