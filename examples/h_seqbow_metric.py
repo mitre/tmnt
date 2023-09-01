@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.datasets import fetch_20newsgroups
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.inference import SeqVEDInferencer
-from tmnt.distribution import LogisticGaussianDistribution, Projection
+from tmnt.distribution import LogisticGaussianDistribution, Projection, VonMisesDistribution
 from tmnt.utils.log_utils import logging_config
 from tmnt.data_loading import get_llm_paired_dataloader, get_llm_dataloader, StratifiedPairedLLMLoader
 import torch
@@ -66,14 +66,15 @@ train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_
 dev_loader = StratifiedPairedLLMLoader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 20, 256, 256, device=device)
 #aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
 
-latent_distribution = LogisticGaussianDistribution(768,40,dr=0.05,alpha=1.0,device=device)
-#latent_distribution = Projection(768,40,device=device)
+#latent_distribution = LogisticGaussianDistribution(768,10,dr=0.05,alpha=1.0,device=device)
+latent_distribution = VonMisesDistribution(768,10,dr=0.05,device=device)
+#latent_distribution = Projection(768,200,device=device)
 
 
 estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
                                   vocabulary = vectorizer.get_vocab(),
                             latent_distribution = latent_distribution,
-                                  sdml_smoothing_factor=0.05,
+                                  sdml_smoothing_factor=0.0,
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=1000.0, 
                             lr=1e-5, decoder_lr=0.001, epochs=50)

@@ -10,6 +10,7 @@ from torch import nn
 from torch.distributions.normal import Normal
 from torch.distributions.uniform import Uniform
 from torch.distributions import VonMises
+from torch.nn import Sequential
 import torch
 from scipy import special as sp
 import torch
@@ -26,7 +27,8 @@ class BaseDistribution(nn.Module):
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
-        self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
+        self.mu_proj = nn.Linear(enc_size, n_latent).to(device)
+        self.mu_encoder = Sequential(self.mu_proj, nn.Softplus().to(device))
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
         self.softmax = nn.Softmax(dim=1).to(device)        
         #self.mu_bn.collect_params().setattr('grad_req', 'null')

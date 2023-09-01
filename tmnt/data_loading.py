@@ -463,8 +463,6 @@ class StratifiedDualBatchSampler:
                 classes_a = [ self._pop_leave_last(a_list) if b in self.b_only else b for b in classes_b]
                 batch_indices_a = [ self.class_indices_a[c][next(samplers_a[c])] for c in classes_a]
                 batch_indices_b = [ self.class_indices_b[c][next(samplers_b[c])] for c in classes_b]                                 
-            print("classes a = {}".format(classes_a))
-            print("classes b = {}".format(classes_b))
             yield (batch_indices_a, batch_indices_b) 
                 
     def __len__(self):

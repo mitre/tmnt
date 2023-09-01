@@ -1414,7 +1414,7 @@ class SeqBowEstimator(BaseEstimator):
                 "params": [
                     p for n, p in model.llm.named_parameters() if (n in decay_parameters and p.requires_grad)
                 ],
-                "weight_decay": 1e-6,
+                "weight_decay": 1e-5,
             },
             { "params": [
                 p for n, p in model.llm.named_parameters() if (n not in decay_parameters and p.requires_grad)
@@ -1480,7 +1480,7 @@ class SeqBowEstimator(BaseEstimator):
                     dec_optimizer.step()
                     model.zero_grad()
                     # clip gradients for the underlying LLM Transformer-based encoder
-                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 100.0)
+                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 1.0)
                     step_num += 1
                 if (batch_id + 1) % (self.log_interval) == 0:
                     lr = lr_scheduler.get_last_lr()[0] # get lr from first group
@@ -1644,8 +1644,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         label1 = label1.to(self.device)
         label2 = label2.to(self.device)
         label_ls = self.loss_function(z_mu1, label1, z_mu2, label2)
-        label_ls = label_ls.mean()
-        total_ls = (self.gamma * label_ls) + elbo_ls.mean()
+        total_ls = (label_ls) + (elbo_ls.sum() / self.gamma)   # .mean()
         return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
 
     def _get_unlabeled_losses(self, model, batch_data):

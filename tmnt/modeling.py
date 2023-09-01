@@ -637,7 +637,7 @@ class GeneralizedSDMLLoss(_Loss):
 
     def __init__(self, smoothing_parameter=0.3, weight=1., batch_axis=0, x2_downweight_idx=-1, **kwargs):
         super(GeneralizedSDMLLoss, self).__init__(weight, batch_axis, **kwargs)
-        self.kl_loss = nn.KLDivLoss(size_average=False)
+        self.kl_loss = nn.KLDivLoss(size_average=False, reduction='batchmean')
         self.smoothing_parameter = smoothing_parameter # Smoothing probability mass
         self.x2_downweight_idx = x2_downweight_idx
 
@@ -697,7 +697,8 @@ class GeneralizedSDMLLoss(_Loss):
         distances = self._compute_distances(x1, x2)
         log_probabilities = torch.log_softmax(-distances, dim=1)
         # multiply by the batch size to obtain the sum loss (kl_loss averages instead of sum)
-        return self.kl_loss(log_probabilities, labels.to(distances.device)) * wt
+        kl = self.kl_loss(log_probabilities, labels.to(distances.device)) * wt
+        return kl 
 
 
     def forward(self, x1, l1, x2, l2):
