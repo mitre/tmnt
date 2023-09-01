@@ -435,6 +435,7 @@ class StratifiedDualBatchSampler:
             self.class_indices_b[i] = list(np.where(y_b == i)[0])
         self.a_only = counts_a.keys() - counts_b.keys()
         self.b_only = counts_b.keys() - counts_a.keys()
+        self.use_with_replacement = (self.batch_size > len(self.class_weights_a))
         
     def _pop_leave_last(self, li):
         if len(li) == 1:
@@ -443,23 +444,27 @@ class StratifiedDualBatchSampler:
             return li.pop()
 
     def __iter__(self):
-        samplers_a = [ iter(RandomSampler(self.class_indices_a[c], replacement=True, num_samples=self.num_batches)) for c in range(len(self.class_indices_a)) ]
-        samplers_b = [ iter(RandomSampler(self.class_indices_b[c], replacement=True, num_samples=self.num_batches)) for c in range(len(self.class_indices_b)) ]
+        samplers_a = [ iter(RandomSampler(self.class_indices_a[c], replacement=True, num_samples=(self.num_batches * self.batch_size))) 
+                      for c in range(len(self.class_indices_a)) ]
+        samplers_b = [ iter(RandomSampler(self.class_indices_b[c], replacement=True, num_samples=(self.num_batches * self.batch_size))) 
+                      for c in range(len(self.class_indices_b)) ]
         for i in range(self.num_batches):
             if i % 2 == 0:
-                classes_a = list(WeightedRandomSampler(self.class_weights_a, self.batch_size, replacement=False))
+                classes_a = list(WeightedRandomSampler(self.class_weights_a, self.batch_size, replacement=self.use_with_replacement))
                 b_list = list(self.b_only)
                 random.shuffle(b_list)
                 classes_b = [ self._pop_leave_last(b_list) if a in self.a_only else a for a in classes_a]
                 batch_indices_a = [ self.class_indices_a[c][next(samplers_a[c])] for c in classes_a]                                 
                 batch_indices_b = [ self.class_indices_b[c][next(samplers_b[c])] for c in classes_b]
             else:
-                classes_b = list(WeightedRandomSampler(self.class_weights_b, self.batch_size, replacement=False))
+                classes_b = list(WeightedRandomSampler(self.class_weights_b, self.batch_size, replacement=self.use_with_replacement))
                 a_list = list(self.a_only)
                 random.shuffle(a_list)
                 classes_a = [ self._pop_leave_last(a_list) if b in self.b_only else b for b in classes_b]
                 batch_indices_a = [ self.class_indices_a[c][next(samplers_a[c])] for c in classes_a]
                 batch_indices_b = [ self.class_indices_b[c][next(samplers_b[c])] for c in classes_b]                                 
+            print("classes a = {}".format(classes_a))
+            print("classes b = {}".format(classes_b))
             yield (batch_indices_a, batch_indices_b) 
                 
     def __len__(self):

@@ -473,6 +473,7 @@ class BaseSeqBowVED(BaseVAE):
                  vocab_size=2000,
                  kld=0.1,
                  device='cpu',
+                 use_pooling=False,
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None):
         super(BaseSeqBowVED, self).__init__(device=device, vocab_size=vocab_size)
         self.n_latent = latent_dist.n_latent
@@ -486,6 +487,7 @@ class BaseSeqBowVED(BaseVAE):
         self.embedding = None
         self.decoder = nn.Linear(self.n_latent, vocab_size, bias=True).to(device)
         self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)
+        self.use_pooling = use_pooling
         if pre_trained_embedding is not None:
             self.embedding = nn.Linear(len(pre_trained_embedding.idx_to_vec),
                                            pre_trained_embedding.idx_to_vec[0].size, bias=False)
@@ -495,6 +497,13 @@ class BaseSeqBowVED(BaseVAE):
         if isinstance(module, torch.nn.Linear):
             torch.nn.init.xavier_uniform_(module.weight.data)
 
+    def _get_embedding(self, model_output, attention_mask):
+        if self.use_pooling:
+            token_embeddings = model_output.last_hidden_state #First element of model_output contains all token embeddings
+            input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+        else:
+            model_output.last_hidden_state[:,0,:]
 
     def get_ordered_terms(self):
         """
@@ -516,11 +525,9 @@ class BaseSeqBowVED(BaseVAE):
     
     def forward_encode(self, input_ids, attention_mask):
         llm_output = self.llm(input_ids, attention_mask)    
-        cls_vec = llm_output.last_hidden_state[:,0,:]
+        cls_vec = self._get_embedding(llm_output, attention_mask)
         return self.latent_dist.get_mu_encoding(cls_vec)
     
-
-
 
 class SeqBowVED(BaseSeqBowVED):
     def __init__(self, *args, **kwargs):
@@ -529,15 +536,16 @@ class SeqBowVED(BaseSeqBowVED):
             self.classifier = torch.nn.Sequential()
             self.classifier.add_module("dr", nn.Dropout(self.dropout))
             self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes))
-    
+        
+
     def forward_encode(self, input_ids, attention_mask):
         llm_output = self.llm(input_ids, attention_mask)
-        cls_vec = llm_output.last_hidden_state[:,0,:]
+        cls_vec = self._get_embedding(llm_output, attention_mask)
         return self.latent_dist.get_mu_encoding(cls_vec)
 
     def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
         llm_output = self.llm(input_ids, attention_mask)
-        cls_vec = llm_output.last_hidden_state[:,0,:]
+        cls_vec = self._get_embedding(llm_output, attention_mask)
         return self.forward_with_cached_encoding(cls_vec, bow)
 
     def forward_with_cached_encoding(self, enc, bow):
@@ -576,7 +584,7 @@ class MetricSeqBowVED(BaseSeqBowVED):
     
     def unpaired_input_forward(self, in1, mask1, bow1):
         llm_output = self.llm(in1, mask1)
-        cls_vec = llm_output.last_hidden_state[:,0,:]
+        cls_vec = self._get_embedding(llm_output, mask1)
         elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, cls_vec)
         redundancy_loss = self.get_redundancy_penalty()
         return elbo1, rec_loss1, KL_loss1, redundancy_loss
@@ -584,8 +592,8 @@ class MetricSeqBowVED(BaseSeqBowVED):
     def forward(self, in1, mask1, bow1, in2, mask2, bow2):
         llm_out1 = self.llm(in1, mask1)
         llm_out2 = self.llm(in2, mask2)
-        enc1 = llm_out1.last_hidden_state[:,0,:]
-        enc2 = llm_out2.last_hidden_state[:,0,:]
+        enc1 = self._get_embedding(llm_out1, mask1)
+        enc2 = self._get_embedding(llm_out2, mask2)
         elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, enc1)
         elbo2, rec_loss2, KL_loss2 = self._get_elbo(bow2, enc2)
         elbo = elbo1 + elbo2
@@ -685,7 +693,6 @@ class GeneralizedSDMLLoss(_Loss):
         the function computes the kl divergence between the negative distances
         and the smoothed label matrix.
         """
-        batch_size = x1.size()[0]
         labels, wt = self._compute_labels(l1, l2)
         distances = self._compute_distances(x1, x2)
         log_probabilities = torch.log_softmax(-distances, dim=1)

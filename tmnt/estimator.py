@@ -1229,7 +1229,8 @@ class SeqBowEstimator(BaseEstimator):
     def _get_model(self):
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
         model = SeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
-                          vocab_size = len(self.vocabulary), dropout=self.classifier_dropout)
+                          vocab_size = len(self.vocabulary), use_pooling = (self.llm_model_name.startswith("sentence-transformers")),
+                          dropout=self.classifier_dropout)
         return model
 
     def _get_config(self):
@@ -1479,7 +1480,7 @@ class SeqBowEstimator(BaseEstimator):
                     dec_optimizer.step()
                     model.zero_grad()
                     # clip gradients for the underlying LLM Transformer-based encoder
-                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 10.0)
+                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 100.0)
                     step_num += 1
                 if (batch_id + 1) % (self.log_interval) == 0:
                     lr = lr_scheduler.get_last_lr()[0] # get lr from first group
@@ -1597,7 +1598,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def _get_model(self):
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
         model = MetricSeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
-                          vocab_size = len(self.vocabulary), dropout=self.classifier_dropout)
+                                vocab_size = len(self.vocabulary), use_pooling=(self.llm_model_name.startswith("sentence-transformers")),
+                                dropout=self.classifier_dropout)
         return model
         
     def _get_bow_wd_counts(self, dataloader):
