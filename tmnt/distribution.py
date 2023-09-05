@@ -195,7 +195,7 @@ class Projection(BaseDistribution):
     def forward(self, data, batch_size):
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
-        kld = torch.zeros(batch_size)
+        kld = torch.zeros(batch_size).to(self.device)
         return mu_bn, kld
 
         
