@@ -77,7 +77,7 @@ estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
                                   sdml_smoothing_factor=0.0,
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=10000.0, 
-                            lr=1e-5, decoder_lr=0.001, epochs=250)
+                            lr=1e-5, decoder_lr=0.001, epochs=50)
 
 
 # this will take quite some time without a GPU!

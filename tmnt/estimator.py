@@ -18,7 +18,7 @@ import json
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
 from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_llm_model
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
-from tmnt.modeling import GeneralizedSDMLLoss, MetricSeqBowVED, MetricBowVAEModel
+from tmnt.modeling import GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import LogisticGaussianDistribution, BaseDistribution, GaussianDistribution, VonMisesDistribution
 
@@ -1584,7 +1584,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, non_scoring_index=-1, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
-        self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor, x2_downweight_idx=non_scoring_index)
+        #self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor, x2_downweight_idx=non_scoring_index)
+        self.loss_function = MultiNegativeCrossEntropyLoss(smoothing_parameter=sdml_smoothing_factor)
         self.plot_dir = plot_dir
         self.non_scoring_index = non_scoring_index ## if >=0 this will avoid considering this label index in evaluation
 

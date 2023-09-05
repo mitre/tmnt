@@ -705,3 +705,76 @@ class GeneralizedSDMLLoss(_Loss):
         return self._loss(x1, l1, x2, l2)    
 
 
+
+class MultiNegativeCrossEntropyLoss(_Loss):
+    """
+    Inputs:
+        - **x1**: Minibatch of data points with shape (batch_size, vector_dim)
+        - **x2**: Minibatch of data points with shape (batch_size, vector_dim)
+          Each item in x1 is a positive sample for the items with the same label in x2
+          That is, x1[0] and x2[0] form a positive pair iff label(x1[0]) = label(x2[0])
+          All data points in different rows should be decorrelated
+
+    Outputs:
+        - **loss**: loss tensor with shape (batch_size,).
+    """
+
+    def __init__(self, smoothing_parameter=0.1, scale=20.0, batch_axis=0, **kwargs):
+        super(MultiNegativeCrossEntropyLoss, self).__init__(batch_axis, **kwargs)
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.smoothing_parameter = smoothing_parameter # Smoothing probability mass
+        self.scale = scale
+
+    def _compute_distances(self, x1, x2):
+        """
+        This function computes the cosine distance between every vector
+        in the two batches in input.
+        """
+
+        # extracting sizes expecting [batch_size, dim]
+        assert x1.size() == x2.size()
+        # expanding both tensor form [batch_size, dim] to [batch_size, batch_size, dim]
+        x1_norm = torch.nn.functional.normalize(x1, p=2, dim=1)
+        x2_norm = torch.nn.functional.normalize(x2, p=2, dim=1)
+        return torch.mm(x1_norm, x2_norm.transpose(0, 1)) 
+
+
+    def _compute_labels(self, l1: torch.Tensor, l2: torch.Tensor):
+        """
+        Example:
+        l1 = [1,2,2]
+        l2 = [1,2,1]
+        ===> 
+        [ [ 1, 0, 1],
+          [ 0, 1, 0],
+          [ 0, 1, 0] ]
+        
+        This is an outer product with the equality predicate.
+        """
+        batch_size = l1.size()[0]
+        l1_x = l1.unsqueeze(1).expand(batch_size, batch_size)
+        l2_x = l2.unsqueeze(0).expand(batch_size, batch_size)
+        #l1_x = F.broadcast_to(F.expand_dims(l1, 1), (batch_size, batch_size))
+        #l2_x = F.broadcast_to(F.expand_dims(l2, 0), (batch_size, batch_size))
+        ll = torch.eq(l1_x, l2_x)
+        labels = ll * (1 - self.smoothing_parameter) + (~ll) * self.smoothing_parameter / (batch_size - 1)
+        ## now normalize rows to sum to 1.0
+        labels = labels / labels.sum(axis=1,keepdim=True).expand(batch_size, batch_size)
+        return labels
+
+
+    def _loss(self, x1: torch.Tensor, l1: torch.Tensor, x2: torch.Tensor, l2: torch.Tensor):
+        """
+        the function computes the kl divergence between the negative distances
+        and the smoothed label matrix.
+        """
+        labels = self._compute_labels(l1, l2)
+        distances = self._compute_distances(x1, x2) * self.scale
+        # multiply by the batch size to obtain the sum loss (kl_loss averages instead of sum)
+        return self.cross_entropy_loss(distances, labels.to(distances.device))
+
+
+    def forward(self, x1, l1, x2, l2):
+        return self._loss(x1, l1, x2, l2)    
+
+
