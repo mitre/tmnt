@@ -14,6 +14,7 @@ from tmnt.distribution import BaseDistribution
 from torch import nn
 from torch.nn.modules.loss import _Loss
 import torch
+from torch.distributions.categorical import Categorical
 
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
@@ -474,6 +475,7 @@ class BaseSeqBowVED(BaseVAE):
                  kld=0.1,
                  device='cpu',
                  use_pooling=False,
+                 entropy_loss_coef=1000.0,
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None):
         super(BaseSeqBowVED, self).__init__(device=device, vocab_size=vocab_size)
         self.n_latent = latent_dist.n_latent
@@ -483,11 +485,12 @@ class BaseSeqBowVED(BaseVAE):
         self.num_classes = num_classes
         self.dropout = dropout
         self.redundancy_reg_penalty = redundancy_reg_penalty
-        self.latent_dist = latent_dist
+        self.latent_distribution = latent_dist
         self.embedding = None
         self.decoder = nn.Linear(self.n_latent, vocab_size, bias=True).to(device)
         self.coherence_regularization = CoherenceRegularizer(0.0, self.redundancy_reg_penalty)
         self.use_pooling = use_pooling
+        self.entropy_loss_coef = entropy_loss_coef
         if pre_trained_embedding is not None:
             self.embedding = nn.Linear(len(pre_trained_embedding.idx_to_vec),
                                            pre_trained_embedding.idx_to_vec[0].size, bias=False)
@@ -523,10 +526,24 @@ class BaseSeqBowVED(BaseVAE):
         _, redundancy_loss = self.coherence_regularization(w, emb)
         return redundancy_loss
     
+    def _get_latent_sparsity_term(self, encoding):
+        as_distribution = Categorical(probs=encoding) if self.latent_distribution.on_simplex else Categorical(logits=encoding)
+        return as_distribution.entropy()
+    
+    def _get_elbo(self, bow, enc):
+        z, KL = self.latent_distribution(enc, bow.size()[0])
+        KL_loss = (KL * self.kld_wt)
+        dec = self.decoder(z)
+        y = torch.nn.functional.softmax(dec, dim=1)
+        rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
+        entropy_loss = self._get_latent_sparsity_term(z)
+        elbo = rec_loss + KL_loss + entropy_loss * 1000.0 
+        return elbo, rec_loss, KL_loss, entropy_loss
+
     def forward_encode(self, input_ids, attention_mask):
         llm_output = self.llm(input_ids, attention_mask)    
         cls_vec = self._get_embedding(llm_output, attention_mask)
-        return self.latent_dist.get_mu_encoding(cls_vec)
+        return self.latent_distribution.get_mu_encoding(cls_vec)
     
 
 class SeqBowVED(BaseSeqBowVED):
@@ -537,12 +554,6 @@ class SeqBowVED(BaseSeqBowVED):
             self.classifier.add_module("dr", nn.Dropout(self.dropout))
             self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes))
         
-
-    def forward_encode(self, input_ids, attention_mask):
-        llm_output = self.llm(input_ids, attention_mask)
-        cls_vec = self._get_embedding(llm_output, attention_mask)
-        return self.latent_dist.get_mu_encoding(cls_vec)
-
     def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
         llm_output = self.llm(input_ids, attention_mask)
         cls_vec = self._get_embedding(llm_output, attention_mask)
@@ -551,19 +562,13 @@ class SeqBowVED(BaseSeqBowVED):
     def forward_with_cached_encoding(self, enc, bow):
         elbo, rec_loss, KL_loss = 0.0, 0.0, 0.0
         if bow is not None:
-            #bow = bow.squeeze(axis=1)
-            z, KL = self.latent_dist(enc, enc.size()[0])
-            KL_loss = (KL * self.kld_wt)
-            y = torch.nn.functional.softmax(self.decoder(z), dim=1)
-            rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
-            elbo = KL_loss + rec_loss
+            elbo, rec_loss, KL_loss, entropy_loss = self._get_elbo(bow, enc)
         if self.has_classifier:
-            z_mu = self.latent_dist.get_mu_encoding(enc)            
+            z_mu = self.latent_distribution.get_mu_encoding(enc)            
             classifier_outputs = self.classifier(z_mu)
         else:
             classifier_outputs = None
-        #redundancy_loss = self.get_redundancy_penalty()
-        redundancy_loss = 0.0
+        redundancy_loss = entropy_loss  #self.get_redundancy_penalty()
         elbo = elbo + redundancy_loss
         return elbo, rec_loss, KL_loss, redundancy_loss, classifier_outputs
 
@@ -572,21 +577,11 @@ class MetricSeqBowVED(BaseSeqBowVED):
     def __init__(self, *args, **kwargs):
         super(MetricSeqBowVED, self).__init__(*args, **kwargs)
 
-    def _get_elbo(self, bow, enc):
-        #bow = bow.squeeze(axis=1)
-        z, KL = self.latent_dist(enc, bow.size()[0])
-        KL_loss = (KL * self.kld_wt)
-        dec = self.decoder(z)
-        y = torch.nn.functional.softmax(dec, dim=1)
-        rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
-        elbo = rec_loss + KL_loss
-        return elbo, rec_loss, KL_loss
-    
     def unpaired_input_forward(self, in1, mask1, bow1):
         llm_output = self.llm(in1, mask1)
         cls_vec = self._get_embedding(llm_output, mask1)
-        elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, cls_vec)
-        redundancy_loss = self.get_redundancy_penalty()
+        elbo1, rec_loss1, KL_loss1, entropy_loss = self._get_elbo(bow1, cls_vec)
+        redundancy_loss = entropy_loss # self.get_redundancy_penalty()
         return elbo1, rec_loss1, KL_loss1, redundancy_loss
 
     def forward(self, in1, mask1, bow1, in2, mask2, bow2):
@@ -594,14 +589,14 @@ class MetricSeqBowVED(BaseSeqBowVED):
         llm_out2 = self.llm(in2, mask2)
         enc1 = self._get_embedding(llm_out1, mask1)
         enc2 = self._get_embedding(llm_out2, mask2)
-        elbo1, rec_loss1, KL_loss1 = self._get_elbo(bow1, enc1)
-        elbo2, rec_loss2, KL_loss2 = self._get_elbo(bow2, enc2)
+        elbo1, rec_loss1, KL_loss1, entropy_loss1 = self._get_elbo(bow1, enc1)
+        elbo2, rec_loss2, KL_loss2, entropy_loss2 = self._get_elbo(bow2, enc2)
         elbo = elbo1 + elbo2
         rec_loss = rec_loss1 + rec_loss2
         KL_loss = KL_loss1 + KL_loss2
-        z_mu1 = self.latent_dist.get_mu_encoding(enc1)
-        z_mu2 = self.latent_dist.get_mu_encoding(enc2)
-        redundancy_loss = self.get_redundancy_penalty()
+        z_mu1 = self.latent_distribution.get_mu_encoding(enc1)
+        z_mu2 = self.latent_distribution.get_mu_encoding(enc2)
+        redundancy_loss = entropy_loss1 + entropy_loss2 #self.get_redundancy_penalty()
         return elbo, rec_loss, KL_loss, redundancy_loss, z_mu1, z_mu2
 
 

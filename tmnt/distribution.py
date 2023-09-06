@@ -22,15 +22,17 @@ __all__ = ['BaseDistribution', 'GaussianDistribution', 'GaussianUnitVarDistribut
 
 class BaseDistribution(nn.Module):
     
-    def __init__(self, enc_size, n_latent, device):
+    def __init__(self, enc_size, n_latent, device, on_simplex=False):
         super(BaseDistribution, self).__init__()
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
-        self.mu_proj = nn.Linear(enc_size, n_latent).to(device)
-        self.mu_encoder = Sequential(self.mu_proj, nn.Softplus().to(device))
+        self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
+        #self.mu_encoder = Sequential(self.mu_proj, nn.Softplus().to(device))
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
-        self.softmax = nn.Softmax(dim=1).to(device)        
+        self.softmax = nn.Softmax(dim=1).to(device)
+        self.softplus = nn.Softplus().to(device)      
+        self.on_simplex = on_simplex
         #self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     ## this is required by most priors
@@ -54,9 +56,9 @@ class BaseDistribution(nn.Module):
         """
         enc = self.mu_encoder(data)
         if include_bn:
-            return self.mu_bn(enc)
-        else:
-            return enc
+            enc = self.mu_bn(enc)
+        return self.softplus(enc)
+        
 
 
 class GaussianDistribution(BaseDistribution):
@@ -82,6 +84,7 @@ class GaussianDistribution(BaseDistribution):
         """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
+        mu_bn = self.softplus(mu_bn)
         lv = self.lv_encoder(data)
         lv_bn = self.lv_bn(lv)
         z = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
@@ -113,6 +116,7 @@ class GaussianUnitVarDistribution(BaseDistribution):
         """
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
+        mu_bn = self.softplus(mu_bn)
         z = self._get_gaussian_sample(mu_bn, self.log_variance, batch_size)
         KL = self._get_kl_term(mu_bn)
         return self.post_sample_dr_o(z), KL
@@ -128,7 +132,7 @@ class LogisticGaussianDistribution(BaseDistribution):
         alpha (float): Value the determines prior variance as 1/alpha - (2/n_latent) + 1/(n_latent^2)
     """
     def __init__(self, enc_size, n_latent, device='cpu', dr=0.1, alpha=1.0):
-        super(LogisticGaussianDistribution, self).__init__(enc_size, n_latent, device)
+        super(LogisticGaussianDistribution, self).__init__(enc_size, n_latent, device, on_simplex=True)
         self.alpha = alpha
 
         prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
@@ -180,9 +184,9 @@ class VonMisesDistribution(BaseDistribution):
     def forward(self, data, batch_size):
         mu = self.mu_encoder(data)
         mu_bn = self.mu_bn(mu)
+        mu_bn = self.softplus(mu_bn)
         z_p = VonMises(mu_bn, self.kappa).sample()
         kld = self.kld_v.expand(batch_size)
-        #return self.softmax(z_p), kld
         return z_p, kld
     
 

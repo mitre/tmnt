@@ -76,7 +76,7 @@ estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
                             latent_distribution = latent_distribution,
                                   sdml_smoothing_factor=0.0,
                             batch_size=batch_size, device=device, log_interval=1,
-                            log_method=log_method, gamma=10000.0, 
+                            log_method=log_method, gamma=10000.0, entropy_loss_coef=1000.0, 
                             lr=1e-5, decoder_lr=0.001, epochs=50)
 
 

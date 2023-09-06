@@ -794,10 +794,9 @@ class BowEstimator(BaseBowEstimator):
 
 class BowMetricEstimator(BowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, non_scoring_index=-1, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, non_scoring_index=-1, **kwargs):
         super(BowMetricEstimator, self).__init__(*args, **kwargs)
         self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor)
-        self.plot_dir = plot_dir
         self.non_scoring_index = non_scoring_index
 
 
@@ -1129,6 +1128,7 @@ class SeqBowEstimator(BaseEstimator):
                  classifier_dropout = 0.0,
                  pure_classifier_objective = False,
                  validate_each_epoch = False,
+                 entropy_loss_coef = 1000.0,
                  **kwargs):
         super(SeqBowEstimator, self).__init__(*args, **kwargs)
         self.pure_classifier_objective = pure_classifier_objective
@@ -1147,6 +1147,7 @@ class SeqBowEstimator(BaseEstimator):
         self.gamma = gamma
         self.decoder_lr = decoder_lr
         self._bow_matrix = None
+        self.entropy_loss_coef = entropy_loss_coef
 
 
     @classmethod
@@ -1370,7 +1371,7 @@ class SeqBowEstimator(BaseEstimator):
         else:
             total_ls = elbo_ls.mean()
             label_ls = torch.zeros(total_ls.size())        
-        return elbo_ls, rec_ls, kl_ls, red_ls, label_ls, total_ls
+        return elbo_ls, rec_ls, kl_ls, red_ls.mean(), label_ls, total_ls
 
     def _get_unlabeled_losses(self, model, batch_data):
         seqs, = batch_data
@@ -1378,7 +1379,7 @@ class SeqBowEstimator(BaseEstimator):
         elbo_ls, rec_ls, kl_ls, red_ls, out = model(
             input_ids.to(self.device), mask.to(self.device), bow.to(self.device))
         total_ls = elbo_ls.mean() / self.gamma
-        return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
+        return elbo_ls, rec_ls, kl_ls, red_ls.mean(), total_ls
         
 
     def fit_with_validation(self,
@@ -1450,7 +1451,7 @@ class SeqBowEstimator(BaseEstimator):
         def update_loss_details(total_ls, elbo_ls, red_ls, class_ls):
             loss_details['step_loss'] += float(total_ls.mean())
             loss_details['elbo_loss'] += float(elbo_ls.mean())
-            loss_details['red_loss'] += red_ls
+            loss_details['red_loss'] += float(red_ls.mean())
             if class_ls is not None:
                 loss_details['class_loss'] += float(class_ls.mean())
             
@@ -1582,11 +1583,10 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, plot_dir=None, non_scoring_index=-1, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, non_scoring_index=-1, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         #self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor, x2_downweight_idx=non_scoring_index)
         self.loss_function = MultiNegativeCrossEntropyLoss(smoothing_parameter=sdml_smoothing_factor)
-        self.plot_dir = plot_dir
         self.non_scoring_index = non_scoring_index ## if >=0 this will avoid considering this label index in evaluation
 
 
@@ -1600,7 +1600,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
         model = MetricSeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
                                 vocab_size = len(self.vocabulary), use_pooling=(self.llm_model_name.startswith("sentence-transformers")),
-                                dropout=self.classifier_dropout)
+                                dropout=self.classifier_dropout, entropy_loss_coef=self.entropy_loss_coef)
         return model
         
     def _get_bow_wd_counts(self, dataloader):
