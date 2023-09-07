@@ -537,7 +537,7 @@ class BaseSeqBowVED(BaseVAE):
         y = torch.nn.functional.softmax(dec, dim=1)
         rec_loss = -torch.sum( bow.to_dense() * torch.log(y+1e-12), dim=1 )
         entropy_loss = self._get_latent_sparsity_term(z)
-        elbo = rec_loss + KL_loss + entropy_loss * 1000.0 
+        elbo = rec_loss + KL_loss + (entropy_loss * self.entropy_loss_coef)
         return elbo, rec_loss, KL_loss, entropy_loss
 
     def forward_encode(self, input_ids, attention_mask):
