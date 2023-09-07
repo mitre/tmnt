@@ -61,9 +61,9 @@ label_map = { l:i for i,l in enumerate(classes) }
 device = torch.device('cuda')
 
 #train_loader = get_llm_paired_dataloader(train_ds_a[:100], train_ds_a[:100], vectorizer, tf_llm_name, label_map, 20, 256, 256 , shuffle_both=True, device=device)
-train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 256, 256, device=device)
+train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 512, 512, device=device)
 #dev_loader = get_llm_paired_dataloader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256, device=device)
-dev_loader = StratifiedPairedLLMLoader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 20, 256, 256, device=device)
+dev_loader = StratifiedPairedLLMLoader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 20, 512, 512, device=device)
 #aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
 
 #latent_distribution = LogisticGaussianDistribution(768,10,dr=0.05,alpha=1.0,device=device)

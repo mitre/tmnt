@@ -714,11 +714,11 @@ class MultiNegativeCrossEntropyLoss(_Loss):
         - **loss**: loss tensor with shape (batch_size,).
     """
 
-    def __init__(self, smoothing_parameter=0.1, scale=20.0, batch_axis=0, **kwargs):
+    def __init__(self, smoothing_parameter=0.1, metric_loss_temp=0.1, batch_axis=0, **kwargs):
         super(MultiNegativeCrossEntropyLoss, self).__init__(batch_axis, **kwargs)
         self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.smoothing_parameter = smoothing_parameter # Smoothing probability mass
-        self.scale = scale
+        self.metric_loss_temp = metric_loss_temp
 
     def _compute_distances(self, x1, x2):
         """
@@ -764,7 +764,7 @@ class MultiNegativeCrossEntropyLoss(_Loss):
         and the smoothed label matrix.
         """
         labels = self._compute_labels(l1, l2)
-        distances = self._compute_distances(x1, x2) * self.scale
+        distances = self._compute_distances(x1, x2) / self.metric_loss_temp
         # multiply by the batch size to obtain the sum loss (kl_loss averages instead of sum)
         return self.cross_entropy_loss(distances, labels.to(distances.device))
 
