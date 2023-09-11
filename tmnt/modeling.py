@@ -551,8 +551,8 @@ class SeqBowVED(BaseSeqBowVED):
         super(SeqBowVED, self).__init__(*args, **kwargs)
         if self.has_classifier:
             self.classifier = torch.nn.Sequential()
-            self.classifier.add_module("dr", nn.Dropout(self.dropout))
-            self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes))
+            self.classifier.add_module("dr", nn.Dropout(self.dropout).to(self.device))
+            self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes).to(self.device))
         
     def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
         llm_output = self.llm(input_ids, attention_mask)
