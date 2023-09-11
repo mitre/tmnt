@@ -1231,6 +1231,7 @@ class SeqBowEstimator(BaseEstimator):
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
         model = SeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
                           vocab_size = len(self.vocabulary), use_pooling = (self.llm_model_name.startswith("sentence-transformers")),
+                          entropy_loss_coef=self.entropy_loss_coef,
                           dropout=self.classifier_dropout)
         return model
 
