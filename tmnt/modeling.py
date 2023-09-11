@@ -506,7 +506,7 @@ class BaseSeqBowVED(BaseVAE):
             input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
             return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
         else:
-            model_output.last_hidden_state[:,0,:]
+            return model_output.last_hidden_state[:,0,:]
 
     def get_ordered_terms(self):
         """

@@ -29,7 +29,7 @@ aux_data     = data[(tr_size *2): (tr_size * 4)]
 batch_size = 20 
 
 vectorizer = TMNTVectorizer(vocab_size=2000)
-vectorizer.fit_transform(train_data_a + train_data_b + aux_data)
+vectorizer.fit_transform(train_data_a + train_data_b)
 
 use_logging = True
 
@@ -58,10 +58,11 @@ dev_ds_b   = list(zip(dev_y_b_s, dev_data_b))
 aux_ds     = list(zip([0] * len(aux_data), aux_data))
 
 label_map = { l:i for i,l in enumerate(classes) }
-device = torch.device('cuda')
+device = torch.device('cpu')
 
 #train_loader = get_llm_paired_dataloader(train_ds_a[:100], train_ds_a[:100], vectorizer, tf_llm_name, label_map, 20, 256, 256 , shuffle_both=True, device=device)
-train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 512, 512, device=device)
+#train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 512, 512, device=device)
+train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 128, 128, device=device)
 #dev_loader = get_llm_paired_dataloader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256, device=device)
 dev_loader = StratifiedPairedLLMLoader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 20, 512, 512, device=device)
 #aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
@@ -77,7 +78,7 @@ estimator = SeqBowMetricEstimator(llm_model_name = tf_llm_name,
                                   sdml_smoothing_factor=0.0,
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=10000.0, entropy_loss_coef=1000.0, 
-                            lr=1e-5, decoder_lr=0.001, epochs=50)
+                            lr=1e-5, decoder_lr=0.001, epochs=1)
 
 
 # this will take quite some time without a GPU!

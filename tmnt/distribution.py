@@ -168,7 +168,7 @@ class LogisticGaussianDistribution(BaseDistribution):
 class VonMisesDistribution(BaseDistribution):
     
     def __init__(self, enc_size, n_latent, kappa=100.0, dr=0.1, device='cpu'):
-        super(VonMisesDistribution, self).__init__(enc_size, n_latent, device)
+        super(VonMisesDistribution, self).__init__(enc_size, n_latent, device, on_simplex=False)
         self.device = device
         self.kappa = kappa
         self.kld_v = torch.tensor(VonMisesDistribution._vmf_kld(self.kappa, self.n_latent), device=device)

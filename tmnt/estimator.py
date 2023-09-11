@@ -1583,10 +1583,10 @@ class SeqBowEstimator(BaseEstimator):
 
 class SeqBowMetricEstimator(SeqBowEstimator):
 
-    def __init__(self, *args, sdml_smoothing_factor=0.3, non_scoring_index=-1, **kwargs):
+    def __init__(self, *args, sdml_smoothing_factor=0.3, metric_loss_temp=0.1, non_scoring_index=-1, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         #self.loss_function = GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor, x2_downweight_idx=non_scoring_index)
-        self.loss_function = MultiNegativeCrossEntropyLoss(smoothing_parameter=sdml_smoothing_factor)
+        self.loss_function = MultiNegativeCrossEntropyLoss(smoothing_parameter=sdml_smoothing_factor, metric_loss_temp=metric_loss_temp)
         self.non_scoring_index = non_scoring_index ## if >=0 this will avoid considering this label index in evaluation
 
 

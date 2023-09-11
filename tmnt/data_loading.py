@@ -92,7 +92,7 @@ def get_llm_paired_dataloader(data_a, data_b, bow_vectorizer, llm_name, label_ma
 
 class StratifiedPairedLLMLoader():
 
-    def __init__(self, data_a, data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, max_len_b, device='cpu'):
+    def __init__(self, data_a, data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, max_len_b, num_batches=0, device='cpu'):
         self.data_a = data_a
         self.data_b = data_b
         self.bow_vectorizer = bow_vectorizer
@@ -102,7 +102,7 @@ class StratifiedPairedLLMLoader():
         self.max_len_a = max_len_a
         self.max_len_b = max_len_b
         self.device = device
-        self.num_batches = max(len(data_a), len(data_b)) // batch_size
+        self.num_batches = num_batches or max(len(data_a), len(data_b)) // batch_size
         self.stratified_sampler = StratifiedDualBatchSampler(np.array([label_map[l] for (l,_) in data_a]), 
                                                              np.array([label_map[l] for (l,_) in data_b]),
                                                              batch_size,
@@ -419,22 +419,22 @@ class StratifiedDualBatchSampler:
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.num_batches = num_batches
-        counts_a = Counter(y_a) 
-        counts_b = Counter(y_b)
+        self.counts_a = Counter(y_a) 
+        self.counts_b = Counter(y_b)
         self.class_weights_a = [0] * (max(np.max(y_a), np.max(y_b)) + 1)
         self.class_weights_b = [0] * (max(np.max(y_a), np.max(y_b)) + 1)
-        for k in counts_a:
-            self.class_weights_a[k] = counts_a[k] / len(y_a)
-        for k in counts_b:
-            self.class_weights_b[k] = counts_b[k] / len(y_b)
+        for k in self.counts_a:
+            self.class_weights_a[k] = self.counts_a[k] / len(y_a)
+        for k in self.counts_b:
+            self.class_weights_b[k] = self.counts_b[k] / len(y_b)
         self.class_indices_a = [0] * (max(np.max(y_a), np.max(y_b)) + 1)
         self.class_indices_b = [0] * (max(np.max(y_b), np.max(y_a)) + 1)
         for i in range(len(self.class_indices_a)):
             self.class_indices_a[i] = list(np.where(y_a == i)[0])
         for i in range(len(self.class_indices_b)):
             self.class_indices_b[i] = list(np.where(y_b == i)[0])
-        self.a_only = counts_a.keys() - counts_b.keys()
-        self.b_only = counts_b.keys() - counts_a.keys()
+        self.a_only = self.counts_a.keys() - self.counts_b.keys()
+        self.b_only = self.counts_b.keys() - self.counts_a.keys()
         self.use_with_replacement = (self.batch_size > len(self.class_weights_a))
         
     def _pop_leave_last(self, li):
@@ -451,14 +451,14 @@ class StratifiedDualBatchSampler:
         for i in range(self.num_batches):
             if i % 2 == 0:
                 classes_a = list(WeightedRandomSampler(self.class_weights_a, self.batch_size, replacement=self.use_with_replacement))
-                b_list = list(self.b_only)
+                b_list = list(self.counts_b)
                 random.shuffle(b_list)
                 classes_b = [ self._pop_leave_last(b_list) if a in self.a_only else a for a in classes_a]
                 batch_indices_a = [ self.class_indices_a[c][next(samplers_a[c])] for c in classes_a]                                 
                 batch_indices_b = [ self.class_indices_b[c][next(samplers_b[c])] for c in classes_b]
             else:
                 classes_b = list(WeightedRandomSampler(self.class_weights_b, self.batch_size, replacement=self.use_with_replacement))
-                a_list = list(self.a_only)
+                a_list = list(self.counts_a)
                 random.shuffle(a_list)
                 classes_a = [ self._pop_leave_last(a_list) if b in self.b_only else b for b in classes_b]
                 batch_indices_a = [ self.class_indices_a[c][next(samplers_a[c])] for c in classes_a]
