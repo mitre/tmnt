@@ -61,6 +61,18 @@ class BaseInferencer(object):
 
     def get_top_k_words_per_topic_per_covariate(self, k):
         raise NotImplementedError
+    
+    def get_pyldavis_details(self, sp_vec_file_or_X, y=None):
+        w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file_or_X, y=y)
+        d1 = w_pr.numpy().tolist()
+        print("dt_matrix type = {}".format(type(dt_matrix)))
+        d2 = list(map(lambda x: x.tolist(), dt_matrix))
+        doc_lengths = np.array(doc_lengths)
+        d3 = list(doc_lengths.squeeze())
+        d5 = term_cnts.squeeze().tolist()
+        d4 = list(map(lambda i: self.vocab.lookup_token(i), range(len(self.vocab))))
+        d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
+        return d
 
 
 class BowVAEInferencer(BaseInferencer):
@@ -121,19 +133,6 @@ class BowVAEInferencer(BaseInferencer):
         ## 5) frequency of each word w_i \in W over the test corpus
         term_cnts = np.array(data_csr.sum(axis=0))
         return w_pr, dt_matrix, doc_lengths, term_cnts
-
-
-    def get_pyldavis_details(self, sp_vec_file_or_X, y=None):
-        w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file_or_X, y=y)
-        d1 = w_pr.numpy().tolist()
-        print("dt_matrix type = {}".format(type(dt_matrix)))
-        d2 = list(map(lambda x: x.tolist(), dt_matrix))
-        doc_lengths = np.array(doc_lengths)
-        d3 = list(doc_lengths.squeeze())
-        d5 = term_cnts.squeeze().tolist()
-        d4 = list(map(lambda i: self.vocab.lookup_token(i), range(len(self.vocab))))
-        d = {'topic_term_dists': d1, 'doc_topic_dists': d2, 'doc_lengths': d3, 'vocab': d4, 'term_frequency': d5 }
-        return d
 
     def get_umap_embeddings(self, data, umap_metric='euclidean', use_probs=False, target_entropy=1.0):
         encs = self.encode_data(data, None, use_probs=use_probs, target_entropy=target_entropy)
@@ -336,38 +335,32 @@ class SeqVEDInferencer(BaseInferencer):
         bow_matrix = []
         for _, data_batch in enumerate(dataloader):
             seqs, = data_batch
-            ids, lens, segs, bow, _ = seqs
-            _, encs = self.model.bert(ids.as_in_context(self.device),
-                                      segs.as_in_context(self.device), lens.astype('float32').as_in_context(self.device))
-            encs = self.model.latent_dist.get_mu_encoding(encs)
-            bow_matrix.append(bow.as_np_ndarray().squeeze())
+            _, input_ids, mask, bow = seqs
+            encs = self.model.forward_encode(input_ids.to(self.device), mask.to(self.device))
             if use_probs:
-                e1 = (encs - mx.nd.min(encs, dim=1).unsqueeze(1)).astype('float64')
-                encs = list(mx.nd.softmax(e1).asnumpy())
-                topic_encodings = list(map(partial(recalibrate_scores, target_entropy=target_entropy), encs))
+                e1 = (encs - encs.min(dim=1)[0].unsqueeze(1))
+                encs = list(torch.nn.functional.softmax(e1, dim=-1).cpu().detach().numpy())
+                encs = list(map(partial(recalibrate_scores, target_entropy=target_entropy), encs))
             else:
-                topic_encodings = list(encs.astype('float64').asnumpy())
-            encodings.extend(topic_encodings)
-        return np.vstack(encodings), mx.np.vstack(bow_matrix)
+                encs = encs.cpu().detach().numpy()
+            bow_matrix.append(bow.to_dense().cpu().detach().numpy().squeeze())
+            encodings.extend(encs)
+        return np.vstack(encodings), np.vstack(bow_matrix)
 
-    def get_pyldavis_details(self, dataloader):
+    def get_model_details(self, dataloader, y=None):
+        #data_csr = mx.nd.sparse.csr_matrix(data_csr, dtype='float32')
         ## 1) K x W matrix of P(term|topic) probabilities
-        w = self.model.decoder.collect_params().get('weight').data().transpose() ## (K x W)
+        w = self.model.decoder.weight.data.t() ## (K x W)
         w_pr = torch.softmax(w, dim=1)
         ## 2) D x K matrix over the test data of topic probabilities
-        dt_matrix, bow_matrix = self.encode_data(dataloader, use_probs=True)
+        #dt_matrix, _ = self.encode_data(data_csr, covars, use_probs=True, target_entropy=2.0)
+        dt_matrix, bow_matrix = self.encode_data(dataloader, use_probs=True, target_entropy=2.5)
         ## 3) D-length vector of document sizes
-        doc_lengths = bow_matrix.sum(dim=1)
+        doc_lengths = bow_matrix.sum(axis=1)
         ## 4) vocab (in same order as W columns)
         ## 5) frequency of each word w_i \in W over the test corpus
-        term_cnts = bow_matrix.sum(dim=0)
-        d = {'topic_term_dists': w_pr.asnumpy().tolist(),
-             'doc_topic_dists': list(map(lambda x: x.tolist(), dt_matrix)),
-             'doc_lengths': doc_lengths.asnumpy().tolist(),
-             'vocab': list(map(lambda i: self.bow_vocab.idx_to_token[i], range(len(self.bow_vocab.idx_to_token)))),
-             'term_frequency': term_cnts.asnumpy().tolist() }
-        return d
-        
+        term_cnts = np.array(bow_matrix.sum(axis=0))
+        return w_pr, dt_matrix, doc_lengths, term_cnts
 
     def get_top_k_words_per_topic(self, k):
         if self.vocab:
