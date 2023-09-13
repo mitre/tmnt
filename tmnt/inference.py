@@ -64,7 +64,7 @@ class BaseInferencer(object):
     
     def get_pyldavis_details(self, sp_vec_file_or_X, y=None):
         w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file_or_X, y=y)
-        d1 = w_pr.numpy().tolist()
+        d1 = w_pr.cpu().detach().numpy().tolist()
         print("dt_matrix type = {}".format(type(dt_matrix)))
         d2 = list(map(lambda x: x.tolist(), dt_matrix))
         doc_lengths = np.array(doc_lengths)
