@@ -3,7 +3,8 @@ from os import environ
 from setuptools import setup, find_packages
 from setuptools.command.install import install
 
-version = 0.7.03
+version = '0.7.03'
+
 try:
     if not os.getenv('RELEASE'):
         from datetime import date
