@@ -1275,8 +1275,8 @@ class SeqBowEstimator(BaseEstimator):
             vectorizer_file = os.path.join(model_dir, ('vectorizer.pkl' + suffix))
             with open(vectorizer_file, 'wb') as f:
                 pickle.dump(vectorizer, f)
-            with open(conf_file, 'w') as f:
-                f.write(specs)
+        with open(conf_file, 'w') as f:
+            f.write(specs)
         torch.save(self.vocabulary, vocab_file)
 
 

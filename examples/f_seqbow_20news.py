@@ -18,13 +18,16 @@ data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                               remove=('headers', 'footers', 'quotes'),
                               return_X_y=True)
 
+# %%
+# For the purposes of this example, only a very small training set is used
+# along with small maximum sequence lengths to allow for the example to complete
+# in short order without a GPU
+# Larger sequence sizes and training sets should be used in practice
 tr_size = 100
 train_data = data[:tr_size]
 dev_data   = data[-tr_size:]
 train_y    = y[:tr_size]
 dev_y      = y[-tr_size:]
-#model_name = 'bert_12_768_12'
-#dataset = 'book_corpus_wiki_en_uncased'
 batch_size = 32
 seq_len = 64
 pad = True
@@ -35,6 +38,8 @@ vectorizer.fit_transform(train_data)
 supervised  = True
 use_logging = True
 
+# %%
+# Classes is None if unsupervised, otherwise a list of possible label/string values
 if supervised:
     num_classes = int(np.max(y) + 1)
     classes = ['class_'+str(i) for i in range(num_classes)]
@@ -48,14 +53,14 @@ if use_logging:
 else:
     log_method = 'print'
 
+# %%
+# 20newsgroups has integers for labels; but we map these to string values here
+# to showcase the common use in practice where a string describes each label in a labeled dataset
 train_y_s = ['class_'+str(y) for y in train_y]
 dev_y_s = ['class_'+str(y) for y in dev_y]
 
-#tr_ds = ArrayDataset(train_data, train_y_s)
-#dev_ds = ArrayDataset(dev_data, dev_y_s)
-
-print("Classes = {}".format(classes))
-
+# %%
+# We'll use distilbert here as it's more compute efficient than BERT
 tf_llm_name = 'distilbert-base-uncased'
 
 train_ds = list(zip(train_y_s, train_data))
@@ -72,8 +77,7 @@ device = torch.device('cpu')
 estimator = SeqBowEstimator(llm_model_name = tf_llm_name,
                             latent_distribution = latent_distribution,
                             n_labels = num_classes,
-                            bow_vocab = vectorizer.get_vocab(),
-                            optimizer='bertadam',
+                            vocabulary = vectorizer.get_vocab(),
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=100.0, 
                             lr=2e-5, decoder_lr=0.01, epochs=20)

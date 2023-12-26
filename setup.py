@@ -41,22 +41,7 @@ if __name__ == '__main__':
         'torchtext>=0.13.0'
     ]
 
-    class GPUCommand(install):
-        user_options = install.user_options + [
-            ('gpu', None, 'GPU install option'),
-        ]
-
-        def initialize_options(self):
-            install.initialize_options(self)
-            self.gpu = None
-
-        def finalize_options(self):
-            install.finalize_options(self)
-
-        def run(self):
-            install.run(self)
-
-    setup(name=("tmnt-cu101" if environ.get('USE_CUDA') == '1' else "tmnt"),
+    setup(name=("tmnt"),
           version=version,
           author="The MITRE Corporation",
           author_email="wellner@mitre.org",
@@ -68,7 +53,7 @@ if __name__ == '__main__':
               "License :: OSI Approved :: Apache Software License",
               "Operating System :: OS Independent"
           ],
-          python_requires='>=3.7',
+          python_requires='>=3.8',
           setup_requires=setup_requires,
           install_requires=install_requires,
           packages=find_packages())
