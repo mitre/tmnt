@@ -8,10 +8,15 @@ on:
     types: [created]
 
 jobs:
-  deploy:
+  pypi-publish:
 
+    name: upload release to PyPI
     runs-on: ubuntu-latest
-
+    environment: release
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
+      
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python
