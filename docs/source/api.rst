@@ -25,7 +25,6 @@ Modeling
    tmnt.distribution
    tmnt.estimator   
    tmnt.trainer
-   tmnt.selector
 
 Inference
 *********

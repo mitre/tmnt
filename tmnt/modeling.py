@@ -90,14 +90,13 @@ class BowVAEModel(BaseVAE):
     Parameters:
         enc_dim (int): Number of dimension of input encoder (first FC layer)
         embedding_size (int): Number of dimensions for embedding layer
-        fixed_embedding (bool): Whether to fix embedding weights (default = False)
         n_encoding_layers (int): Number of layers used for the encoder. (default = 1)
         enc_dr (float): Dropout after each encoder layer. (default = 0.1)
         n_covars (int): Number of values for categorical co-variate (0 for non-CovariateData BOW model)
         device (str): context device 
     """
     def __init__(self,
-                 enc_dim, embedding_size, n_encoding_layers, enc_dr, fixed_embedding,
+                 enc_dim, embedding_size, n_encoding_layers, enc_dr, 
                  n_labels=0,
                  gamma=1.0,
                  multilabel=False,

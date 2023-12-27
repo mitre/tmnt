@@ -300,7 +300,6 @@ class BaseBowEstimator(BaseEstimator):
         multilabel = config.get('multilabel', False)
         lr = config['lr']
         latent_distrib = config['latent_distribution']
-        optimizer = config['optimizer']
         n_latent = int(config['n_latent'])
         enc_hidden_dim = int(config['enc_hidden_dim'])
         coherence_reg_penalty = float(config['coherence_loss_wt'])
@@ -326,13 +325,13 @@ class BaseBowEstimator(BaseEstimator):
             latent_distribution = GaussianDistribution(enc_hidden_dim, n_latent, device=device)
         n_labels = config.get('n_labels', n_labels)
         model = \
-                cls(vocabulary,
+                cls(vocabulary=vocabulary,
                     n_labels=n_labels,
                     gamma = gamma,
                     multilabel = multilabel,
                     validate_each_epoch=validate_each_epoch,
                     coherence_coefficient=coherence_coefficient,
-                    device=device, lr=lr, latent_distribution=latent_distribution, optimizer=optimizer,
+                    device=device, lr=lr, latent_distribution=latent_distribution, 
                     enc_hidden_dim=enc_hidden_dim,
                     coherence_reg_penalty=coherence_reg_penalty,
                     redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
@@ -386,7 +385,7 @@ class BaseBowEstimator(BaseEstimator):
         with io.open(sp_file, 'w') as fp:
             fp.write(specs)
         with io.open(vocab_file, 'w') as fp:
-            json.dump(self.model.vocabulary.get_stoi(), fp)
+            json.dump(self.vocabulary.get_stoi(), fp)
 
 
     def _get_wd_freqs(self, X, max_sample_size=1000000):
@@ -738,23 +737,11 @@ class BowEstimator(BaseBowEstimator):
             (:class:`BowVAEModel`) initialized using provided hyperparameters
         """
         #vocab, emb_size = self._initialize_embedding_layer(self.embedding_source, self.embedding_size)
-        if self.embedding_source != 'random':
-            pt_embedding = pretrained_aliases('glove.6B.100d')
-            pretrained = pt_embedding.get_vecs_by_tokens(self.vocabulary)
-            emb_size = 100
-
-            #e_type, e_name = tuple(self.embedding_source.split(':'))
-            #pt_embedding = nlp.embedding.create(e_type, source=e_name)
-            #self.vocabulary.set_embedding(pt_embedding)
-            #emb_size = len(self.vocabulary.embedding.idx_to_vec[0])
-            #for word in self.vocabulary.embedding._idx_to_token:
-            #    if (self.vocabulary.embedding[word] == torch.zeros(emb_size)).sum() == emb_size:
-            #        self.vocabulary.embedding[word] = torch.random.normal(0, 0.1, emb_size)
-        else:
-            emb_size = self.embedding_size
+        emb_size = self.embedding_size
         model = \
                 BowVAEModel(self.enc_hidden_dim, emb_size, n_encoding_layers=self.n_encoding_layers,
-                            enc_dr=self.enc_dr, fixed_embedding=self.fixed_embedding,
+                            vocab_size=len(self.vocabulary),
+                            enc_dr=self.enc_dr, 
                             classifier_dropout=self.classifier_dropout,
                             n_labels = self.n_labels,
                             gamma = self.gamma,

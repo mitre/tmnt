@@ -30,8 +30,6 @@ Table of Contents
    :maxdepth: 3
 
    getting_started/quickstart
-   model_selection/model_selection
-   options/command_options
    inference/evaluation.rst
    inference/inference.rst
 
@@ -49,7 +47,6 @@ Table of Contents
    :maxdepth: 3
 	      
    user_guide/modeling_covariates
-   embeddings/embeddings
    
 
 .. toctree::

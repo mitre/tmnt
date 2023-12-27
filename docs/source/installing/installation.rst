@@ -15,27 +15,24 @@ https://docs.conda.io/en/latest/miniconda.html
 
 Once Conda is installed, setup a new environment for TMNT as follows::
 
-  conda create --name TMNT python=3.7 --no-default-packages
+  conda create --name TMNT python=3.10 
 
 Activate the environment::
 
   conda activate TMNT
 
-If planning to use a GPU, ensure cudatoolkit and cudnn packages are installed::
-
-  conda install cudatoolkit=10.1 cudnn=7.6.5
-  
 
 Pip Installation
 ++++++++++++++++
 
-Install TMNT via pip for CPU-only::
+To install the most recent stable version of TMNT::
+  
+  pip install tmnt
+
+Install (latest; nightly) TMNT via pip::
 
   pip install tmnt --pre
 
-Or with GPU (with Cuda 10.1)::
-
-  pip install tmnt-cu101 --pre
 
 Source Installation
 +++++++++++++++++++
@@ -53,10 +50,6 @@ Installation proceeds with a local pip install::
 
   cd tmnt
   pip install -e . 
-
-If using a GPU, replace the last line above with ::
-  
-  USE_CUDA=1 pip install -e .
 
   
 Testing the Installation

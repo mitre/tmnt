@@ -85,7 +85,7 @@ pyLDAvis.save_html(vis_data, 'm1.html')
 # %%
 # As we've already preprocessed the entire training set, we can use the method :py:meth:`tmnt.inference.BowVAEInferencer.encode_data`
 # to derive encodings from the already pre-processed sparse matrix ``X``:
-enc_list = reloaded_inferencer.encode_data(X)
+enc_list, _ = reloaded_inferencer.encode_data(X)
 encodings = np.array(enc_list)
 
 top_k_topics = inferencer.get_top_k_words_per_topic(10)

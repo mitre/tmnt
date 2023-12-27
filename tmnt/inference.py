@@ -82,8 +82,8 @@ class BowVAEInferencer(BaseInferencer):
                          pre_vectorizer or TMNTVectorizer(initial_vocabulary=estimator.model.vocabulary),
                          estimator.model.device)
         self.max_batch_size = 16
-        self.vocab = estimator.model.vocabulary
-        self.n_latent = estimator.model.n_latent
+        self.vocab = estimator.vocabulary
+        self.n_latent = estimator.n_latent
         self.model = estimator.model
         if isinstance(estimator.model, CovariateBowVAEModel):
             self.covar_model = True
