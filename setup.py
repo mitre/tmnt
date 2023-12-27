@@ -2,6 +2,7 @@ import os
 from os import environ
 from setuptools import setup, find_packages
 from setuptools.command.install import install
+from pathlib import Path
 
 version = '0.7.03'
 
@@ -14,8 +15,10 @@ try:
 except Exception:
     pass
 
-with open('README.rst') as f:
-    readme = f.read()
+
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
+
 
 if __name__ == '__main__':
     setup_requires = [
@@ -48,7 +51,8 @@ if __name__ == '__main__':
           author="The MITRE Corporation",
           author_email="wellner@mitre.org",
           description="Topic modeling neural toolkit",
-          long_description=readme,
+          long_description=long_description,
+          long_description_content_type='text/markdown',
           url="https://github.com/mitre/tmnt.git",
           license='Apache',
           classifiers = [
