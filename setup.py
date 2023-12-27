@@ -14,6 +14,9 @@ try:
 except Exception:
     pass
 
+with open('README.rst') as f:
+    readme = f.read()
+
 if __name__ == '__main__':
     setup_requires = [
         'numpy>=1.5.0'
@@ -45,6 +48,7 @@ if __name__ == '__main__':
           author="The MITRE Corporation",
           author_email="wellner@mitre.org",
           description="Topic modeling neural toolkit",
+          long_description=readme,
           url="https://github.com/mitre/tmnt.git",
           license='Apache',
           classifiers = [
