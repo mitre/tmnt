@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 from setuptools.command.install import install
 from pathlib import Path
 
-version = '0.7.41'
+version = '0.7.42'
 
 try:
     if not os.getenv('RELEASE'):
