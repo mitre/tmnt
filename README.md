@@ -1,7 +1,7 @@
 The Topic Modeling Neural Toolkit (TMNT) is a software library that enables training
 topic models as neural network-based variational auto-encoders.
 
-Current stable version is: 0.7.03
+Current stable version is: 0.7.04
 
 Documentation can be found here: https://tmnt.readthedocs.io/en/stable/
 
