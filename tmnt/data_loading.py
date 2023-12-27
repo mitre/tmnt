@@ -394,19 +394,6 @@ def load_vocab(vocab_file, encoding='utf-8'):
     return build_vocab(w_dict)
 
 
-def file_to_data(sp_file, voc_size, batch_size=1000):
-    with open(sp_file) as f:
-        for i, l in enumerate(f):
-            pass
-    data_size = i+1
-    num_batches = data_size // batch_size
-    last_batch_size = data_size % batch_size
-    X, y = load_svmlight_file(sp_file, n_features=voc_size, dtype='int32', zero_based=True)
-    wd_freqs = mx.nd.array(np.array(X.sum(axis=0)).squeeze())
-    total_words = X.sum()
-    return X, y, wd_freqs, total_words
-
-
 class StratifiedDualBatchSampler:
     """Stratified batch sampling
     Provides equal representation of target classes in each batch

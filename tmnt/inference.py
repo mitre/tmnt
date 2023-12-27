@@ -8,18 +8,13 @@ import json
 import numpy as np
 import io
 import os
-import scipy
 import torch
-#import umap
-import logging
 import pickle
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
 from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator, SeqBowMetricEstimator
-from tmnt.data_loading import file_to_data, SparseDataLoader
+from tmnt.data_loading import SparseDataLoader
 from tmnt.preprocess.vectorizer import TMNTVectorizer
-from tmnt.distribution import LogisticGaussianDistribution
 from tmnt.utils.recalibrate import recalibrate_scores
-from multiprocessing import Pool
 from sklearn.datasets import load_svmlight_file
 from functools import partial
 from tmnt.data_loading import get_llm_tokenizer

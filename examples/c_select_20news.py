@@ -13,7 +13,6 @@ from tmnt.estimator import BowEstimator
 from tmnt.distribution import LogisticGaussianDistribution, GaussianDistribution, VonMisesDistribution
 from tmnt.inference import BowVAEInferencer
 import optuna
-import logging
 from tmnt.utils.log_utils import logging_config
 import pyLDAvis
 import funcy

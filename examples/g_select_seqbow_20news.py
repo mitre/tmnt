@@ -1,6 +1,6 @@
 """
-Training a seq2bow encoder-decoder model
-========================================
+Training a Transformer VED model with model selection
+=====================================================
 """
 from tmnt.estimator import SeqBowEstimator
 import numpy as np
@@ -93,11 +93,12 @@ def get_estimator(n_topics, alpha, lr, decoder_lr, entropy_loss_coef):
                             lr=lr, decoder_lr=decoder_lr, epochs=epochs)
     return estimator
 
+
 # %%
-# Function that will execute a single trial. This includes:
-#   a single model fit with specific hyperparameter values)
-#   and evaluation against the development data that returns the
-#   overall value/utility of the model (e.g. topic quality or accuracy or AuPRC or .. )
+# Define a function that will execute a single trial. This includes:
+# a single model fit with specific hyperparameter values), 
+# and evaluation against the development data that returns the
+# overall value/utility of the model (e.g. topic quality or accuracy or AuPRC or .. )
 def train_topic_model(trial):
     n_topics = trial.suggest_int("n_topics", 10, 40, 5)
     lr       = trial.suggest_float("lr", 1e-4, 1e-2)

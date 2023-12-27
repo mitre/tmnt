@@ -1,6 +1,6 @@
 """
-Training a seq2bow encoder-decoder model
-========================================
+Training a Transformer VED model with metric learning
+=====================================================
 """
 from tmnt.estimator import SeqBowMetricEstimator
 import numpy as np
