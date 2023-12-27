@@ -26,6 +26,7 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          RELEASE: 1
         run: |
           python -m pip install --upgrade build twine setuptools wheel
           python setup.py sdist bdist_wheel
