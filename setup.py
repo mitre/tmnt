@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 from setuptools.command.install import install
 from pathlib import Path
 
-version = '0.7.42'
+version = '0.7.44'
 
 try:
     if not os.getenv('RELEASE'):
@@ -42,7 +42,7 @@ if __name__ == '__main__':
         'sentence-splitter==1.4',
         'umap-learn==0.4.6',
         'tabulate>=0.8.7',
-        'torch>=1.13.0',
+        'torch>=2.1.2',
         'torchtext>=0.13.0'
     ]
 
