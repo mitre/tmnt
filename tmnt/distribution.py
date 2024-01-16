@@ -45,20 +45,11 @@ class BaseDistribution(nn.Module):
     def _get_unit_var_gaussian_sample(self, mu, batch_size):
         eps = Normal(torch.zeros(batch_size, self.n_latent), torch.ones(batch_size, self.n_latent)).sample()
         return (mu + eps).to(self.device)
+    
+    def get_mu_encoding(self, data, include_bn):
+        raise NotImplemented 
 
-    def get_mu_encoding(self, data, include_bn=False):
-        """Provide the distribution mean as the natural result of running the full encoder
-        
-        Parameters:
-            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
-        Returns:
-            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
-        """
-        enc = self.mu_encoder(data)
-        if include_bn:
-            enc = self.mu_bn(enc)
-        return self.softplus(enc)
-        
+
 
 
 class GaussianDistribution(BaseDistribution):
@@ -91,6 +82,20 @@ class GaussianDistribution(BaseDistribution):
         KL = self._get_kl_term(mu_bn, lv_bn)
         z = self.post_sample_dr_o(z)
         return z, KL
+    
+    def get_mu_encoding(self, data, include_bn=False):
+        """Provide the distribution mean as the natural result of running the full encoder
+        
+        Parameters:
+            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
+        Returns:
+            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
+        """
+        enc = self.mu_encoder(data)
+        if include_bn:
+            enc = self.mu_bn(enc)
+        return self.softplus(enc)
+        
 
 
 class GaussianUnitVarDistribution(BaseDistribution):
@@ -120,7 +125,20 @@ class GaussianUnitVarDistribution(BaseDistribution):
         z = self._get_gaussian_sample(mu_bn, self.log_variance, batch_size)
         KL = self._get_kl_term(mu_bn)
         return self.post_sample_dr_o(z), KL
-
+    
+    def get_mu_encoding(self, data, include_bn=False):
+        """Provide the distribution mean as the natural result of running the full encoder
+        
+        Parameters:
+            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
+        Returns:
+            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
+        """
+        enc = self.mu_encoder(data)
+        if include_bn:
+            enc = self.mu_bn(enc)
+        return self.softplus(enc)
+        
 
 class LogisticGaussianDistribution(BaseDistribution):
     """Logistic normal/Gaussian latent distribution with specified prior
@@ -164,6 +182,19 @@ class LogisticGaussianDistribution(BaseDistribution):
         z = self.post_sample_dr_o(z_p)
         return self.softmax(z), KL
 
+    def get_mu_encoding(self, data, include_bn=False):
+        """Provide the distribution mean as the natural result of running the full encoder
+        
+        Parameters:
+            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
+        Returns:
+            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
+        """
+        enc = self.mu_encoder(data)
+        if include_bn:
+            enc = self.mu_bn(enc)
+        return self.softmax(enc)
+        
     
 class VonMisesDistribution(BaseDistribution):
     
@@ -188,6 +219,20 @@ class VonMisesDistribution(BaseDistribution):
         z_p = VonMises(mu_bn, self.kappa).sample()
         kld = self.kld_v.expand(batch_size)
         return z_p, kld
+
+    def get_mu_encoding(self, data, include_bn=False):
+        """Provide the distribution mean as the natural result of running the full encoder
+        
+        Parameters:
+            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
+        Returns:
+            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
+        """
+        enc = self.mu_encoder(data)
+        if include_bn:
+            enc = self.mu_bn(enc)
+        return self.softplus(enc)
+        
     
 
 class Projection(BaseDistribution):
@@ -202,6 +247,19 @@ class Projection(BaseDistribution):
         kld = torch.zeros(batch_size).to(self.device)
         return mu_bn, kld
 
+    def get_mu_encoding(self, data, include_bn=False):
+        """Provide the distribution mean as the natural result of running the full encoder
+        
+        Parameters:
+            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
+        Returns:
+            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
+        """
+        enc = self.mu_encoder(data)
+        if include_bn:
+            enc = self.mu_bn(enc)
+        return enc
+        
         
     
 

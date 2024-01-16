@@ -16,7 +16,7 @@ data, y = fetch_20newsgroups(shuffle=True, random_state=1,
                               remove=('headers', 'footers', 'quotes'),
                               return_X_y=True)
 
-tr_size = 1000
+tr_size = 200
 train_data_a = data[:tr_size]
 dev_data_a   = data[-tr_size:]
 train_y_a    = y[:tr_size]
@@ -62,9 +62,9 @@ device = torch.device('cpu')
 
 #train_loader = get_llm_paired_dataloader(train_ds_a[:100], train_ds_a[:100], vectorizer, tf_llm_name, label_map, 20, 256, 256 , shuffle_both=True, device=device)
 #train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 512, 512, device=device)
-train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 128, 128, device=device)
+train_loader = StratifiedPairedLLMLoader(train_ds_a, train_ds_b, vectorizer, tf_llm_name, label_map, 20, 64, 64, device=device)
 #dev_loader = get_llm_paired_dataloader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 50, 256, 256, device=device)
-dev_loader = StratifiedPairedLLMLoader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 20, 512, 512, device=device)
+dev_loader = StratifiedPairedLLMLoader(dev_ds_a, dev_ds_b, vectorizer, tf_llm_name, label_map, 20, 64, 64, device=device)
 #aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, label_map, 10, 128, shuffle=True, device=device) 
 
 #latent_distribution = LogisticGaussianDistribution(768,10,dr=0.05,alpha=1.0,device=device)
