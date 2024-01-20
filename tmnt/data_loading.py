@@ -37,7 +37,8 @@ llm_catalog = {
     'distilbert-base-uncased': (DistilBertTokenizer.from_pretrained, DistilBertModel.from_pretrained),
     'bert-base-uncased' : (AutoTokenizer.from_pretrained, BertModel.from_pretrained),
     'openai-gpt' : (AutoTokenizer.from_pretrained, OpenAIGPTModel.from_pretrained), 
-    'sentence-transformers/all-mpnet-base-v2' : (AutoTokenizer.from_pretrained, AutoModel.from_pretrained)
+    'sentence-transformers/all-mpnet-base-v2' : (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
+    'allenai/scibert_scivocab_uncased': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained)
     ## add more model options here if desired
     }
 
