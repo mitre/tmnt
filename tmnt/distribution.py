@@ -83,7 +83,7 @@ class GaussianDistribution(BaseDistribution):
         z = self.post_sample_dr_o(z)
         return z, KL
     
-    def get_mu_encoding(self, data, include_bn=False):
+    def get_mu_encoding(self, data, include_bn=True, normalize=False):
         """Provide the distribution mean as the natural result of running the full encoder
         
         Parameters:
@@ -94,7 +94,8 @@ class GaussianDistribution(BaseDistribution):
         enc = self.mu_encoder(data)
         if include_bn:
             enc = self.mu_bn(enc)
-        return self.softplus(enc)
+        mu = self.softplus(enc) if normalize else enc
+        return mu
         
 
 
@@ -126,7 +127,7 @@ class GaussianUnitVarDistribution(BaseDistribution):
         KL = self._get_kl_term(mu_bn)
         return self.post_sample_dr_o(z), KL
     
-    def get_mu_encoding(self, data, include_bn=False):
+    def get_mu_encoding(self, data, include_bn=True, normalize=False):
         """Provide the distribution mean as the natural result of running the full encoder
         
         Parameters:
@@ -137,7 +138,8 @@ class GaussianUnitVarDistribution(BaseDistribution):
         enc = self.mu_encoder(data)
         if include_bn:
             enc = self.mu_bn(enc)
-        return self.softplus(enc)
+        mu = self.softplus(enc) if normalize else enc 
+        return mu
         
 
 class LogisticGaussianDistribution(BaseDistribution):
@@ -182,7 +184,7 @@ class LogisticGaussianDistribution(BaseDistribution):
         z = self.post_sample_dr_o(z_p)
         return self.softmax(z), KL
 
-    def get_mu_encoding(self, data, include_bn=False):
+    def get_mu_encoding(self, data, include_bn=True, normalize=False):
         """Provide the distribution mean as the natural result of running the full encoder
         
         Parameters:
@@ -193,7 +195,8 @@ class LogisticGaussianDistribution(BaseDistribution):
         enc = self.mu_encoder(data)
         if include_bn:
             enc = self.mu_bn(enc)
-        return self.softmax(enc)
+        mu = self.softmax(enc) if normalize else enc
+        return mu
         
     
 class VonMisesDistribution(BaseDistribution):
@@ -220,7 +223,7 @@ class VonMisesDistribution(BaseDistribution):
         kld = self.kld_v.expand(batch_size)
         return z_p, kld
 
-    def get_mu_encoding(self, data, include_bn=False):
+    def get_mu_encoding(self, data, include_bn=True, normalize=False):
         """Provide the distribution mean as the natural result of running the full encoder
         
         Parameters:
@@ -231,7 +234,8 @@ class VonMisesDistribution(BaseDistribution):
         enc = self.mu_encoder(data)
         if include_bn:
             enc = self.mu_bn(enc)
-        return self.softplus(enc)
+        mu = self.softplus(enc) if normalize else enc
+        return mu
         
     
 
@@ -247,7 +251,7 @@ class Projection(BaseDistribution):
         kld = torch.zeros(batch_size).to(self.device)
         return mu_bn, kld
 
-    def get_mu_encoding(self, data, include_bn=False):
+    def get_mu_encoding(self, data, include_bn=True, normalize=False):
         """Provide the distribution mean as the natural result of running the full encoder
         
         Parameters:
