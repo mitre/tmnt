@@ -40,6 +40,7 @@ if __name__ == '__main__':
         'PySocks==1.6.8',
         'sacremoses>=0.0.38',
         'sentence-splitter==1.4',
+        'sentence-transformers>=2.2.2',
         'umap-learn==0.4.6',
         'tabulate>=0.8.7',
         'torch>=2.1.2',

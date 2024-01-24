@@ -19,6 +19,7 @@ from sklearn.datasets import load_svmlight_file
 from sklearn.utils import shuffle as sk_shuffle
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 import random
+from torch import Tensor, device
 
 from scipy import sparse as sp
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
@@ -30,6 +31,7 @@ from torchtext.data.utils import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, AutoModel, DistilBertTokenizer, BertModel, DistilBertModel, OpenAIGPTModel
 from sklearn.model_selection import StratifiedKFold
+from sentence_transformers import SentenceTransformer
 
 #### Huggingface LLM-specific dataloading ####
 
@@ -43,39 +45,38 @@ llm_catalog = {
     ## add more model options here if desired
     }
 
-def get_llm(model_name):
-    tok_fn, model_fn = llm_catalog[model_name]
-    return tok_fn(model_name), model_fn(model_name)
+def get_sentence_transformer_model(model_name):
+    return SentenceTransformer(model_name)
 
-def get_llm_tokenizer(model_name):
-    tok_fn, _ = llm_catalog[model_name]
-    return tok_fn(model_name)
+def get_sentence_transformer_tokenizer(model_name):
+    sent_transformer = get_sentence_transformer_model(model_name)
+    return sent_transformer.tokenizer
 
-def get_llm_model(model_name):
-    _, model_fn = llm_catalog[model_name]
-    return model_fn(model_name)
+def batch_to_device(batch, target_device: device):
+    """
+    send a pytorch batch to a device (CPU/GPU)
+    """
+    for key in batch:
+        if isinstance(batch[key], Tensor):
+            batch[key] = batch[key].to(target_device)
+    return batch
 
 def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
     label_pipeline = lambda x: label_map.get(x, 0)
-    text_pipeline  = get_llm_tokenizer(llm_name)
+    text_pipeline  = get_sentence_transformer_tokenizer(llm_name)
     
     def collate_batch(batch):
-        label_list, text_list, mask_list, bow_list = [], [], [], []
+        label_list, input_features_list, bow_list = [], [], []
         for (_label, _text) in batch:
             label_list.append(label_pipeline(_label))
-            tokenized_result = text_pipeline(_text, return_tensors='pt', padding='max_length',
-                                           max_length=max_len, truncation=True)
+            input_features = text_pipeline(_text)
             bag_of_words,_ = bow_vectorizer.transform([_text])
-            processed_text = tokenized_result['input_ids']
-            mask = tokenized_result['attention_mask']
-            mask_list.append(mask)
-            text_list.append(processed_text)
+            input_features_list.append(input_features)
             bow_list.append(bag_of_words)
         label_list = torch.tensor(label_list, dtype=torch.int64)
-        text_list  = torch.vstack(text_list)
-        mask_list  = torch.vstack(mask_list)
         bow_list   = torch.vstack([ sparse_coo_to_tensor(bow_vec.tocoo()) for bow_vec in bow_list ])
-        return label_list.to(device), text_list.to(device), mask_list.to(device), bow_list.to(device)
+        input_features_list = list(map(lambda batch: batch_to_device(batch, device), input_features_list))
+        return label_list.to(device), batch_to_device(input_features_list, device), bow_list.to(device)
     return DataLoader(data, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_batch)
 
 def get_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
@@ -111,7 +112,7 @@ class StratifiedPairedLLMLoader():
                                                              self.num_batches)
         self.iterator = None
         self.label_pipeline = lambda x: label_map.get(x, 0)
-        self.text_pipeline  = get_llm_tokenizer(llm_name)          
+        self.text_pipeline  = get_sentence_transformer_tokenizer(llm_name)          
     
     def __iter__(self):
         self.iterator = iter(self.stratified_sampler)
@@ -127,26 +128,17 @@ class StratifiedPairedLLMLoader():
         return batch_a, batch_b 
     
     def _collate_batch(self, batch, max_len):
-        label_list, text_list, mask_list, bow_list = [], [], [], []
+        label_list, input_features_list, bow_list = [], [], []
         for (_label, _text) in batch:
             label_list.append(self.label_pipeline(_label))
-            tokenized_result = self.text_pipeline(_text, return_tensors='pt', padding='max_length',
-                                           max_length=max_len, truncation=True)
+            input_features = self.text_pipeline(_text)
             bag_of_words,_ = self.bow_vectorizer.transform([_text])
-            processed_text = tokenized_result['input_ids']
-            mask = tokenized_result['attention_mask']
-            mask_list.append(mask)
-            text_list.append(processed_text)
+            input_features_list.append(input_features)
             bow_list.append(bag_of_words)
         label_list = torch.tensor(label_list, dtype=torch.int64)
-        text_list  = torch.vstack(text_list)
-        mask_list  = torch.vstack(mask_list)
         bow_list   = torch.vstack([ sparse_coo_to_tensor(bow_vec.tocoo()) for bow_vec in bow_list ])
-        return label_list.to(self.device), text_list.to(self.device), mask_list.to(self.device), bow_list.to(self.device)
-
-
-
-
+        input_features_list = list(map(lambda batch: batch_to_device(batch, device), input_features_list))
+        return label_list.to(self.device), input_features_list, bow_list.to(self.device)
 
 
 #def get_llm_paired_stratified_dataloader(data_a, data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, max_len_b, device='cpu'):

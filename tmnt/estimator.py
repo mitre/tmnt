@@ -16,7 +16,7 @@ import scipy.sparse as sp
 import json
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
-from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_llm_model
+from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_sentence_transformer_model, batch_to_device
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
 from tmnt.modeling import GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
@@ -1344,8 +1344,9 @@ class SeqBowEstimator(BaseEstimator):
     def _get_losses(self, model, batch_data):
         ## batch_data should be a singleton tuple: (seqs,)
         seqs, = batch_data
-        label, input_ids, mask, bow = seqs
-        elbo_ls, rec_ls, kl_ls, red_ls, out = model(input_ids.to(self.device), mask.to(self.device), bow.to(self.device))
+        label, input_features, bow = seqs
+        input_features = list(map(lambda batch: batch_to_device(batch, self.device), input_features))
+        elbo_ls, rec_ls, kl_ls, red_ls, out = model(input_features, bow.to(self.device))
         if self.has_classifier:
             label = label.to(self.device)
             label_ls = self.loss_function(out, label)
@@ -1365,9 +1366,9 @@ class SeqBowEstimator(BaseEstimator):
 
     def _get_unlabeled_losses(self, model, batch_data):
         seqs, = batch_data
-        _ , input_ids, mask, bow = seqs
-        elbo_ls, rec_ls, kl_ls, red_ls, out = model(
-            input_ids.to(self.device), mask.to(self.device), bow.to(self.device))
+        _ , input_features, bow = seqs
+        input_features = list(map(lambda batch: batch_to_device(batch, self.device), input_features))
+        elbo_ls, rec_ls, kl_ls, red_ls, out = model(input_features, bow.to(self.device))
         total_ls = elbo_ls.mean() / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls.mean(), total_ls
         
@@ -1626,11 +1627,13 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def _ff_batch(self, model, batch_data):
         batch1, batch2 = batch_data
-        label1, in1, mask1, bow1 = batch1
-        label2, in2, mask2, bow2 = batch2
+        label1, input_features1, bow1 = batch1
+        label2, input_features2, bow2 = batch2
+        input_features1 = list(map(lambda batch: batch_to_device(batch, self.device), input_features1))
+        input_features2 = list(map(lambda batch: batch_to_device(batch, self.device), input_features2))
         elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2 = model(
-            in1.to(self.device), mask1.to(self.device), bow1.to(self.device),
-            in2.to(self.device), mask2.to(self.device), bow2.to(self.device))
+            input_features1, bow1.to(self.device),
+            input_features2, bow2.to(self.device))
         return elbo_ls, rec_ls, kl_ls, red_ls, z_mu1, z_mu2, label1, label2
 
     def _get_losses(self, model, batch_data):
@@ -1644,9 +1647,10 @@ class SeqBowMetricEstimator(SeqBowEstimator):
 
     def _get_unlabeled_losses(self, model, batch_data):
         batch1, = batch_data
-        _, input_ids1, mask1, bow1 = batch1
+        _, input_features1, bow1 = batch1
+        input_features1 = list(map(lambda batch: batch_to_device(batch, self.device), input_features1))
         elbo_ls, rec_ls, kl_ls, red_ls = model.unpaired_input_forward(
-            input_ids1.to(self.device), mask1.to(self.device), bow1.to(self.device))
+            input_features1, bow1.to(self.device))
         total_ls = elbo_ls.mean() / self.gamma
         return elbo_ls, rec_ls, kl_ls, red_ls, total_ls
     
