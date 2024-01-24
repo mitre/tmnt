@@ -1116,6 +1116,7 @@ class SeqBowEstimator(BaseEstimator):
                  pure_classifier_objective = False,
                  validate_each_epoch = False,
                  entropy_loss_coef = 1000.0,
+                 pool_encoder = True,
                  **kwargs):
         super(SeqBowEstimator, self).__init__(*args, **kwargs)
         self.pure_classifier_objective = pure_classifier_objective
@@ -1135,6 +1136,7 @@ class SeqBowEstimator(BaseEstimator):
         self.decoder_lr = decoder_lr
         self._bow_matrix = None
         self.entropy_loss_coef = entropy_loss_coef
+        self.pool_encoder = pool_encoder
 
 
     @classmethod
@@ -1217,7 +1219,7 @@ class SeqBowEstimator(BaseEstimator):
     def _get_model(self):
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
         model = SeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
-                          vocab_size = len(self.vocabulary), use_pooling = (self.llm_model_name.startswith("sentence-transformers")),
+                          vocab_size = len(self.vocabulary), use_pooling = self.pool_encoder,
                           entropy_loss_coef=self.entropy_loss_coef,
                           dropout=self.classifier_dropout)
         return model
@@ -1443,6 +1445,9 @@ class SeqBowEstimator(BaseEstimator):
             if class_ls is not None:
                 loss_details['class_loss'] += float(class_ls.mean())
             
+        sc_obj = None
+        v_res  = None
+        
         for epoch_id in range(self.epochs):
             if self.metric is not None:
                 self.metric.reset()

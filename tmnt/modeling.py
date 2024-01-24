@@ -473,7 +473,7 @@ class BaseSeqBowVED(BaseVAE):
                  vocab_size=2000,
                  kld=0.1,
                  device='cpu',
-                 use_pooling=False,
+                 use_pooling=True,
                  entropy_loss_coef=1000.0,
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None):
         super(BaseSeqBowVED, self).__init__(device=device, vocab_size=vocab_size)
