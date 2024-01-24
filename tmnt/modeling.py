@@ -466,7 +466,7 @@ class CoherenceRegularizer(nn.Module):
 
 class BaseSeqBowVED(BaseVAE):
     def __init__(self,
-                 llm,
+                 sentence_transformer,
                  latent_dist,
                  num_classes=0,
                  dropout=0.0,
@@ -478,7 +478,7 @@ class BaseSeqBowVED(BaseVAE):
                  redundancy_reg_penalty=0.0, pre_trained_embedding = None):
         super(BaseSeqBowVED, self).__init__(device=device, vocab_size=vocab_size)
         self.n_latent = latent_dist.n_latent
-        self.llm = llm
+        self.sentence_transformer = sentence_transformer
         self.kld_wt = kld
         self.has_classifier = num_classes >= 2
         self.num_classes = num_classes
@@ -539,9 +539,9 @@ class BaseSeqBowVED(BaseVAE):
         elbo = rec_loss + KL_loss + (entropy_loss * self.entropy_loss_coef)
         return elbo, rec_loss, KL_loss, entropy_loss
 
-    def forward_encode(self, input_ids, attention_mask):
-        llm_output = self.llm(input_ids, attention_mask)    
-        cls_vec = self._get_embedding(llm_output, attention_mask)
+    def forward_encode(self, input_features):
+        llm_output = self.sentence_transformer(input_features)    
+        cls_vec = llm_output["sentence_embedding"]
         return self.latent_distribution.get_mu_encoding(cls_vec)
     
 
@@ -553,9 +553,9 @@ class SeqBowVED(BaseSeqBowVED):
             self.classifier.add_module("dr", nn.Dropout(self.dropout).to(self.device))
             self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes).to(self.device))
         
-    def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
-        llm_output = self.llm(input_ids, attention_mask)
-        cls_vec = self._get_embedding(llm_output, attention_mask)
+    def forward(self, input_features, bow=None):  # pylint: disable=arguments-differ
+        llm_output = self.sentence_transformer(input_features)
+        cls_vec = llm_output["sentence_embedding"]
         return self.forward_with_cached_encoding(cls_vec, bow)
 
     def forward_with_cached_encoding(self, enc, bow):
@@ -576,18 +576,18 @@ class MetricSeqBowVED(BaseSeqBowVED):
     def __init__(self, *args, **kwargs):
         super(MetricSeqBowVED, self).__init__(*args, **kwargs)
 
-    def unpaired_input_forward(self, in1, mask1, bow1):
-        llm_output = self.llm(in1, mask1)
-        cls_vec = self._get_embedding(llm_output, mask1)
+    def unpaired_input_forward(self, input_features, bow1):
+        llm_output = self.sentence_transformer(input_features)
+        cls_vec = llm_output["sentence_embedding"]
         elbo1, rec_loss1, KL_loss1, entropy_loss = self._get_elbo(bow1, cls_vec)
         redundancy_loss = entropy_loss # self.get_redundancy_penalty()
         return elbo1, rec_loss1, KL_loss1, redundancy_loss
 
-    def forward(self, in1, mask1, bow1, in2, mask2, bow2):
-        llm_out1 = self.llm(in1, mask1)
-        llm_out2 = self.llm(in2, mask2)
-        enc1 = self._get_embedding(llm_out1, mask1)
-        enc2 = self._get_embedding(llm_out2, mask2)
+    def forward(self, input_features1, bow1, input_features2, bow2):
+        llm_out1 = self.sentence_transformer(input_features1)
+        llm_out2 = self.sentence_transformer(input_features2)
+        enc1 = llm_out1["sentence_embedding"]
+        enc2 = llm_out2["sentence_embedding"]
         elbo1, rec_loss1, KL_loss1, entropy_loss1 = self._get_elbo(bow1, enc1)
         elbo2, rec_loss2, KL_loss2, entropy_loss2 = self._get_elbo(bow2, enc2)
         elbo = elbo1 + elbo2
