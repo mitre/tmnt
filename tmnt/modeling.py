@@ -493,7 +493,9 @@ class BaseSeqBowVED(BaseVAE):
         if pre_trained_embedding is not None:
             self.embedding = nn.Linear(len(pre_trained_embedding.idx_to_vec),
                                            pre_trained_embedding.idx_to_vec[0].size, bias=False)
-        self.apply(self._init_weights)
+        #self.apply(self._init_weights)
+        self.latent_distribution.apply(self._init_weights)
+        self.decoder.apply(self._init_weights)
 
     def _init_weights(self, module):
         if isinstance(module, torch.nn.Linear):
