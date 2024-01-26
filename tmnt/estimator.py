@@ -1593,7 +1593,7 @@ class SeqBowMetricEstimator(SeqBowEstimator):
     def _get_model(self):
         llm_base_model = get_llm_model(self.llm_model_name).to(self.device)
         model = MetricSeqBowVED(llm_base_model, self.latent_distribution, num_classes=self.n_labels, device=self.device, 
-                                vocab_size = len(self.vocabulary), use_pooling=(self.llm_model_name.startswith("sentence-transformers")),
+                                vocab_size = len(self.vocabulary), use_pooling=self.pool_encoder,
                                 dropout=self.classifier_dropout, entropy_loss_coef=self.entropy_loss_coef)
         return model
         
