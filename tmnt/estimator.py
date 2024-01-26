@@ -1405,7 +1405,7 @@ class SeqBowEstimator(BaseEstimator):
                 "params": [
                     p for n, p in model.llm.named_parameters() if (n in decay_parameters and p.requires_grad)
                 ],
-                "weight_decay": 1e-5,
+                "weight_decay": 1e-3,
             },
             { "params": [
                 p for n, p in model.llm.named_parameters() if (n not in decay_parameters and p.requires_grad)
@@ -1452,6 +1452,7 @@ class SeqBowEstimator(BaseEstimator):
             if self.metric is not None:
                 self.metric.reset()
             model.train()
+            model.llm.train()
             
             for (batch_id, (data, aux_batch)) in enumerate(joint_loader):
                 # data_batch is either a 2-tuple of: (labeled, unlabeled)
@@ -1468,11 +1469,14 @@ class SeqBowEstimator(BaseEstimator):
                 update_loss_details(total_ls, elbo_ls, red_ls, label_ls)
                 if aux_batch is not None:
                     update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
+                    
+                #debug
 
                 if not accumulate or (batch_id + 1) % accumulate == 0:
-                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 1.0)
-                    lr_scheduler.step()
+                    #torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 1.0)
+                    optimizer.step()
                     dec_optimizer.step()
+                    lr_scheduler.step()
                     model.zero_grad()
                     step_num += 1
                 if (batch_id + 1) % (self.log_interval) == 0:
