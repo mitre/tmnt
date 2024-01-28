@@ -595,11 +595,11 @@ class MetricSeqBowVED(BaseSeqBowVED):
         elbo = elbo1 + elbo2
         rec_loss = rec_loss1 + rec_loss2
         KL_loss = KL_loss1 + KL_loss2
-        z_mu1 = self.latent_distribution.get_mu_encoding(enc2)
-        z_mu2 = self.latent_distribution.get_mu_encoding(enc2)
+        #z_mu1 = self.latent_distribution.get_mu_encoding(enc2)
+        #z_mu2 = self.latent_distribution.get_mu_encoding(enc2)
         redundancy_loss = entropy_loss1 + entropy_loss2 #self.get_redundancy_penalty()
-        return elbo, rec_loss, KL_loss, redundancy_loss, z_mu1, z_mu2
-        #return elbo, rec_loss, KL_loss, redundancy_loss, enc1, enc2
+        #return elbo, rec_loss, KL_loss, redundancy_loss, z_mu1, z_mu2
+        return elbo, rec_loss, KL_loss, redundancy_loss, enc1, enc2
 
 
 class GeneralizedSDMLLoss(_Loss):
