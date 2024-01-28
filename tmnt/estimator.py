@@ -1115,7 +1115,7 @@ class SeqBowEstimator(BaseEstimator):
                  classifier_dropout = 0.0,
                  pure_classifier_objective = False,
                  validate_each_epoch = False,
-                 entropy_loss_coef = 1000.0,
+                 entropy_loss_coef = 0.0,
                  pool_encoder = True,
                  **kwargs):
         super(SeqBowEstimator, self).__init__(*args, **kwargs)
