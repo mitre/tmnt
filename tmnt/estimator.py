@@ -1527,13 +1527,6 @@ class SeqBowEstimator(BaseEstimator):
         else:
             self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
                                 .format(epoch_id, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
-        #if self.reporter:
-        #if 'accuracy' in v_res:
-            #session.report({"objective": sc_obj, "coherence": v_res['npmi'], "perplexity": v_res['ppl'],
-            #                "redundancy": v_res['redundancy'], "accuracy": v_res['accuracy']})
-        #else:
-            #session.report({"objective": sc_obj, "coherence": v_res['npmi'], "perplexity": v_res['ppl'],
-            #            "redundancy": v_res['redundancy']})
         return sc_obj, v_res
                 
     
@@ -1610,13 +1603,8 @@ class SeqBowMetricEstimator(SeqBowEstimator):
             bow_batch_b = seqs_b[3].to_dense()
             sums += bow_batch_a.sum(axis=0)
             sums += bow_batch_b.sum(axis=0)
-        return sums.cpu().numpy()                               #def _get_model_bias_initialize(self, train_data):
-    #    model = self._get_model()
-    #    tr_bow_matrix = self._get_bow_matrix(train_data)
-        #model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
-    #    return model
+        return sums.cpu().numpy()        
         
-
     def _get_bow_matrix(self, dataloader, cache=False):
         bow_matrix = []
         for _, seqs in enumerate(dataloader):
@@ -1670,10 +1658,5 @@ class SeqBowMetricEstimator(SeqBowEstimator):
         v_res = self.validate(model, dev_data, epoch_id)
         self._output_status("Epoch [{}]. ==> elbo loss = {}; kldiv loss = {}"
                             .format(epoch_id, v_res['elbo_ls'], v_res['kl_ls']))
-        #session.report({"objective": sc_obj, "coherence": v_res['npmi'], "perplexity": v_res['ppl'],
-        #                "redundancy": v_res['redundancy']})
-        #if self.reporter:
-        #    self.reporter(epoch=epoch_id+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0,
-        #                  perplexity=0.0, redundancy=0.0)
         return v_res['kl_ls'], v_res
 
