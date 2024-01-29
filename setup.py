@@ -40,7 +40,9 @@ if __name__ == '__main__':
         'PySocks==1.6.8',
         'sacremoses>=0.0.38',
         'sentence-splitter==1.4',
-        'umap-learn==0.4.6',
+        'umap-learn[plot]>=0.5.5',
+        'numba',
+        'scipy',
         'tabulate>=0.8.7',
         'torch>=2.1.2',
         'torchtext>=0.13.0'
@@ -60,7 +62,7 @@ if __name__ == '__main__':
               "License :: OSI Approved :: Apache Software License",
               "Operating System :: OS Independent"
           ],
-          python_requires='>=3.8',
+          python_requires='>=3.10',
           setup_requires=setup_requires,
           install_requires=install_requires,
           packages=find_packages())

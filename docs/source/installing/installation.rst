@@ -51,36 +51,3 @@ Installation proceeds with a local pip install::
   cd tmnt
   pip install -e . 
 
-  
-Testing the Installation
-++++++++++++++++++++++++
-
-If the installation was done by cloning the TMNT repository, the ``train_model.py`` script
-in the ``bin/`` directory is a good place to start testing that everything is working correctly.
-
-.. note::
-   If installation was done without cloning the repository, download the ``train_model.py`` script
-   from Github manually and/or clone the repository.
-
-The following invocation should train a topic model on the example provided 20 news data
-for 27 training epochs::
-
-  python bin/train_model.py --tr_vec_file ./data/train.vec \
-  --val_vec_file ./data/test.vec --vocab_file ./data/train.vocab \
-  --config ./data/configs/train_model/model.2.config \
-  --save_dir ./_exps/ --log_level info
-
-As another test, try out the example: :ref:`sphx_glr_auto_examples_a_train_20news.py`
-
-Troubleshooting
-+++++++++++++++
-
-There are a couple known platforms/environments where installing TMNT can be a challenge.
-
-1. Windows installation.  TMNT can be installed on Windows, however it requires specific versions
-   of Microsoft Visual C++.
-
-2. Ubuntu installation.  Certain versions/images of Ubuntu, e.g. 18.04, have known problems using
-   pre-built MXNet libraries.  To run TMNT on these platforms it may be necessary to build MXNet from
-   source (see https://mxnet.apache.org/versions/1.8.0/get_started/build_from_source )
-   

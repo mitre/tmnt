@@ -47,7 +47,7 @@ tf_vectorizer.label_map = dict([ (train_data.target_names[i], i) for i in range(
 # %%
 # First, let's train a baseline comparison logistic regression
 # model using sklearn's SGDClassifier using the document-term matrices.
-sgd_params = dict(alpha=1e-5, penalty='l2', loss='log')
+sgd_params = dict(alpha=1e-5, penalty='l2', loss='log_loss')
 sgd_clf = SGDClassifier(**sgd_params)
 sgd_clf.fit(X_train, y_train)
 sgd_y_pred = sgd_clf.predict(X_test)
