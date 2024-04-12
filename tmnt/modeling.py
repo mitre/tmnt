@@ -775,3 +775,37 @@ class MultiNegativeCrossEntropyLoss(_Loss):
         return self._loss(x1, l1, x2, l2)    
 
 
+class SelfEmbeddingCrossEntropyLoss(_Loss):
+    """
+    Inputs:
+        - **x1**: Minibatch of data points with shape (batch_size, vector_dim)
+        - **x2**: Minibatch of data points with shape (batch_size, vector_dim)
+          Each item in x1 is a positive sample for the items with the same label in x2
+          That is, x1[0] and x2[0] form a positive pair iff label(x1[0]) = label(x2[0])
+          All data points in different rows should be decorrelated
+
+    Outputs:
+        - **loss**: loss tensor with shape (batch_size,).
+    """
+
+    def __init__(self, teacher_right=True, metric_loss_temp=0.1, batch_axis=0, **kwargs):
+        super(SelfEmbeddingCrossEntropyLoss, self).__init__(batch_axis, **kwargs)
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.metric_loss_temp = metric_loss_temp
+        self.teacher_right = teacher_right
+
+    def _loss(self, x1: torch.Tensor, l1: torch.Tensor, x2: torch.Tensor, l2: torch.Tensor):
+        """
+        the function computes the kl divergence between the negative distances
+        and the smoothed label matrix.
+        """
+        x1_norm = torch.nn.functional.normalize(x1, p=2, dim=1)
+        x2_norm = torch.nn.functional.normalize(x2, p=2, dim=1)
+        cross_side_distances = torch.mm(x1_norm, x2_norm.transpose(0,1))
+        single_side_distances = torch.mm(x2_norm, x2_norm.transpose(0,1)) if self.teacher_right else torch.mm(x1_norm, x1_norm.transpose(0,1))
+        # multiply by the batch size to obtain the sum loss (kl_loss averages instead of sum)
+        return self.cross_entropy_loss(cross_side_distances, single_side_distances.to(single_side_distances.device))
+
+
+    def forward(self, x1, l1, x2, l2):
+        return self._loss(x1, l1, x2, l2)    
