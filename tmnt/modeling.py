@@ -788,7 +788,7 @@ class SelfEmbeddingCrossEntropyLoss(_Loss):
         - **loss**: loss tensor with shape (batch_size,).
     """
 
-    def __init__(self, teacher_right=True, metric_loss_temp=0.1, batch_axis=0, **kwargs):
+    def __init__(self, teacher_right=True, metric_loss_temp=1.0, batch_axis=0, **kwargs):
         super(SelfEmbeddingCrossEntropyLoss, self).__init__(batch_axis, **kwargs)
         self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.metric_loss_temp = metric_loss_temp
@@ -801,8 +801,9 @@ class SelfEmbeddingCrossEntropyLoss(_Loss):
         """
         x1_norm = torch.nn.functional.normalize(x1, p=2, dim=1)
         x2_norm = torch.nn.functional.normalize(x2, p=2, dim=1)
-        cross_side_distances = torch.mm(x1_norm, x2_norm.transpose(0,1))
-        single_side_distances = torch.mm(x2_norm, x2_norm.transpose(0,1)) if self.teacher_right else torch.mm(x1_norm, x1_norm.transpose(0,1))
+        cross_side_distances = torch.mm(x1_norm, x2_norm.transpose(0,1)) / self.metric_loss_temp
+        single_side_distances = torch.mm(x2_norm, x2_norm.transpose(0,1)) / self.metric_loss_temp if self.teacher_right \
+            else torch.mm(x1_norm, x1_norm.transpose(0,1)) / self.metric_loss_temp
         # multiply by the batch size to obtain the sum loss (kl_loss averages instead of sum)
         return self.cross_entropy_loss(cross_side_distances, single_side_distances.to(single_side_distances.device))
 
