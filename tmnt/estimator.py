@@ -18,7 +18,7 @@ import json
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
 from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_llm_model
 from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
-from tmnt.modeling import SelfEmbeddingCrossEntropyLoss, GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
+from tmnt.modeling import CrossBatchCosineSimilarityLoss, GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import LogisticGaussianDistribution, BaseDistribution, GaussianDistribution, VonMisesDistribution
 
@@ -1573,11 +1573,11 @@ class SeqBowEstimator(BaseEstimator):
 class SeqBowMetricEstimator(SeqBowEstimator):
 
     def __init__(self, *args, sdml_smoothing_factor=0.3, metric_loss_temp=0.1, use_teacher_forcing=False, 
-                 teacher_forcing_right=True,
+                 teacher_forcing_mode='rand',
                  use_sdml=False, non_scoring_index=-1, **kwargs):
         super(SeqBowMetricEstimator, self).__init__(*args, **kwargs)
         if use_teacher_forcing:
-            self.loss_function = SelfEmbeddingCrossEntropyLoss(teacher_right=teacher_forcing_right, metric_loss_temp=metric_loss_temp)
+            self.loss_function = CrossBatchCosineSimilarityLoss(teacher_mode = teacher_forcing_mode)
         else:
             self.loss_function = \
                 GeneralizedSDMLLoss(smoothing_parameter=sdml_smoothing_factor, x2_downweight_idx=non_scoring_index) if use_sdml \
