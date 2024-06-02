@@ -36,7 +36,8 @@ class BaseVAE(nn.Module):
 
         self.latent_distribution = latent_distribution
         self.decoder = nn.Linear(self.n_latent, self.vocab_size).to(device)
-        #self.coherence_regularization = CoherenceRegularizer(self.coherence_reg_penalty, self.redundancy_reg_penalty)
+        self.npmi_with_diversity_loss : Optional[NPMILossWithDiversity] = None
+        self.npmi_alpha = 0.7
 
     def initialize_bias_terms(self, wd_freqs: Optional[np.ndarray]):
         if wd_freqs is not None:
@@ -45,6 +46,10 @@ class BaseVAE(nn.Module):
             with torch.no_grad():
                 self.decoder.bias = nn.Parameter(torch.tensor(log_freq, dtype=torch.float32, device=self.device))
                 self.decoder.bias.requires_grad_(False)
+
+    def initialize_npmi_loss(self, npmi_mat):
+        t_npmi_mat = torch.Tensor(npmi_mat, device=self.device)
+        self.npmi_with_diversity_loss = NPMILossWithDiversity(t_npmi_mat, device=self.device, alpha=self.npmi_alpha)
 
     def get_ordered_terms(self):
         """
@@ -62,26 +67,29 @@ class BaseVAE(nn.Module):
         """
         Returns unnormalized topic vectors
         """
-        z = torch.ones((1, self.n_latent), device=self.device)
+        z = torch.ones((self.n_latent,), device=self.device)
         jacobian = torch.autograd.functional.jacobian(self.decoder, z)
-        return jacobian.cpu().asnumpy()        
+        return jacobian.cpu().numpy()        
 
 
-    def add_coherence_reg_penalty(self, cur_loss):
-        if self.coherence_reg_penalty > 0.0 and self.embedding is not None:
-            w = self.decoder.weight.data
-            emb = self.embedding.weight.data
-            c, d = self.coherence_regularization(w, emb)
-            return (cur_loss + c + d), c, d
+    def add_npmi_and_diversity_loss(self, cur_loss):
+        if self.npmi_with_diversity_loss:
+            z = torch.ones((self.n_latent,), device=self.device)
+            jacobian = torch.autograd.functional.jacobian(self.decoder, z) 
+            npmi_loss = self.npmi_with_diversity_loss(jacobian)
+            npmi_loss = npmi_loss.sum()
+            print("npmi loss = {}".format(npmi_loss))
+            return (cur_loss + npmi_loss)
         else:
-            return (cur_loss, torch.zeros_like(cur_loss, device=self.device), torch.zeros_like(cur_loss, device=self.device))
+            return cur_loss
 
-    def get_loss_terms(self, data, y, KL, batch_size):
+
+    def get_loss_terms(self, data, y, KL):
         rr = data * torch.log(y+1e-12)
         recon_loss = -(rr.sum(dim=1))
         i_loss = KL + recon_loss
-        ii_loss, coherence_loss, redundancy_loss = self.add_coherence_reg_penalty(i_loss)
-        return ii_loss, recon_loss, coherence_loss, redundancy_loss
+        ii_loss = self.add_npmi_and_diversity_loss(i_loss)
+        return ii_loss, recon_loss
 
 
 class BowVAEModel(BaseVAE):
@@ -224,14 +232,14 @@ class BowVAEModel(BaseVAE):
         z, KL   = self.latent_distribution(enc_out, batch_size)
         xhat = self.decoder(z)
         y = torch.nn.functional.softmax(xhat, dim=1)
-        ii_loss, recon_loss, coherence_loss, redundancy_loss = \
-            self.get_loss_terms(data, y, KL, batch_size)
+        ii_loss, recon_loss = \
+            self.get_loss_terms(data, y, KL)
         if self.has_classifier:
             mu_out  = self.latent_distribution.get_mu_encoding(enc_out)
             classifier_outputs = self.classifier(self.lab_dr(mu_out))
         else:
             classifier_outputs = None
-        return ii_loss, KL, recon_loss, coherence_loss, redundancy_loss, classifier_outputs
+        return ii_loss, KL, recon_loss, classifier_outputs
 
 
 class MetricBowVAEModel(BowVAEModel):
@@ -240,13 +248,6 @@ class MetricBowVAEModel(BowVAEModel):
         self.kld_wt = 1.0
         super(MetricBowVAEModel, self).__init__(*args, **kwargs)
 
-
-    def get_redundancy_penalty(self):
-        w = self.decoder.weight.data
-        emb = self.embedding.weight.data if self.embedding is not None else w.transpose()
-        _, redundancy_loss = self.coherence_regularization(w, emb)
-        return redundancy_loss
-        
 
     def _get_elbo(self, bow, enc):
         batch_size = bow.shape[0]
@@ -277,159 +278,61 @@ class MetricBowVAEModel(BowVAEModel):
         return (elbo1 + elbo2), (rec_loss1 + rec_loss2), (KL_loss1 + KL_loss2), redundancy_loss, mu1, mu2
 
 
-class CovariateBowVAEModel(BowVAEModel):
-    """Bag-of-words topic model with labels used as co-variates
-    """
-    def __init__(self, covar_net_layers=1, *args, **kwargs):
-        super(CovariateBowVAEModel, self).__init__(*args, **kwargs)
-        self.covar_net_layers = covar_net_layers
-        with self.name_scope():
-            if self.n_covars < 1:  
-                self.cov_decoder = ContinuousCovariateModel(self.n_latent, self.vocab_size,
-                                                            total_layers=self.covar_net_layers, device=self.device)
-            else:
-                self.cov_decoder = CovariateModel(self.n_latent, self.n_covars, self.vocab_size,
-                                                  interactions=True, device=self.device)
+class NPMILossWithDiversity(nn.Module):
 
-
-    def encode_data_with_covariates(self, data, covars, include_bn=False):
-        """
-        Encode data to the mean of the latent distribution defined by the input `data`
-        """
-        emb_out = self.embedding(data)
-        enc_out = self.encoder(mx.nd.concat(emb_out, covars))
-        return self.latent_distribution.get_mu_encoding(enc_out, include_bn=include_bn)
-
-
-    def get_ordered_terms_with_covar_at_data(self, data, k, covar):
-        """
-        Uses test/training data-point as the input points around which term sensitivity is computed
-        """
-        data = data.to(self.device)
-        covar = covar.to(self.device)
-        jacobian = torch.zeros((self.vocab_size, self.n_latent), device=self.device)
-
-        batch_size = data.shape[0]
-        emb_out = self.embedding(data)
-
-        co_emb = torch.cat(emb_out, covar)
-        z = self.latent_distribution.get_mu_encoding(self.encoder(co_emb))
-        z.attach_grad()
-        outputs = []
-        with mx.autograd.record():
-            dec_out = self.decoder(z)
-            cov_dec_out = self.cov_decoder(z, covar)
-            y = mx.nd.softmax(cov_dec_out + dec_out, axis=1)
-            for i in range(self.vocab_size):
-                outputs.append(y[:,i])
-        for i, output in enumerate(outputs):
-            output.backward(retain_graph=True)
-            jacobian[i] += z.grad.sum(axis=0)
-        sorted_j = jacobian.argsort(axis=0, is_ascend=False)
-        return sorted_j
-
-    def get_topic_vectors(self, data, covar):
-        """
-        Returns unnormalized topic vectors based on the input data
-        """
-        data = data.as_in_context(self.model_ctx)
-        covar = covar.as_in_context(self.model_ctx)
-        jacobian = mx.nd.zeros(shape=(self.vocab_size, self.n_latent), ctx=self.model_ctx)
-
-        batch_size = data.shape[0]
-        emb_out = self.embedding(data)
-
-        co_emb = mx.nd.concat(emb_out, covar)
-        z = self.latent_distribution.get_mu_encoding(self.encoder(co_emb))
-        z.attach_grad()
-        outputs = []
-        with mx.autograd.record():
-            dec_out = self.decoder(z)
-            cov_dec_out = self.cov_decoder(z, covar)
-            y = mx.nd.softmax(cov_dec_out + dec_out, axis=1)
-            for i in range(self.vocab_size):
-                outputs.append(y[:,i])
-        for i, output in enumerate(outputs):
-            output.backward(retain_graph=True)
-            jacobian[i] += z.grad.sum(axis=0)
-        return jacobian
-        
-
-    def forward(self, F, data, covars):
-        batch_size = data.shape[0]
-        emb_out = self.embedding(data)
-        if self.n_covars > 0:
-            covars = F.one_hot(covars, self.n_covars)
-        co_emb = F.concat(emb_out, covars)
-        z, KL = self.run_encode(F, co_emb, batch_size)
-        dec_out = self.decoder(z)
-        cov_dec_out = self.cov_decoder(z, covars)
-        y = F.softmax(dec_out + cov_dec_out, axis=1)
-        ii_loss, recon_loss, coherence_loss, redundancy_loss = \
-            self.get_loss_terms(F, data, y, KL, batch_size)
-        return ii_loss, KL, recon_loss, coherence_loss, redundancy_loss, None
-
-        
-class CovariateModel(nn.Module):
-
-    def __init__(self, n_topics, n_covars, vocab_size, interactions=False, device='cpu'):
-        self.n_topics = n_topics
-        self.n_covars = n_covars
-        self.vocab_size = vocab_size
-        self.interactions = interactions
+    def __init__(self, npmi_matrix: torch.Tensor, device: torch.device, k=20, alpha=0.7, use_diversity_loss=True):
+        super(NPMILossWithDiversity, self).__init__()
+        self.alpha = alpha
+        self.npmi_matrix = npmi_matrix
+        self.use_diversity_loss = use_diversity_loss
         self.device = device
-        super(CovariateModel, self).__init__()
-        with self.name_scope():
-            self.cov_decoder = torch.nn.Linear(n_covars, self.vocab_size, bias=False)
-            if self.interactions:
-                self.cov_inter_decoder = torch.nn.Linear(self.n_covars * self.n_topics, self.vocab_size, bias=False)
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, torch.nn.Linear):
-            torch.nn.init.xavier_uniform_(module.weight.data)
-                
-
-    def forward(self, topic_distrib, covars):
-        score_C = self.cov_decoder(covars)
-        if self.interactions:
-            td_rsh = topic_distrib.unsqueeze(1)
-            cov_rsh = covars.unsqueeze(2)
-            cov_interactions = cov_rsh * td_rsh    ## shape (N, Topics, Covariates) -- outer product
-            batch_size = cov_interactions.shape[0]
-            cov_interactions_rsh = torch.reshape(cov_interactions, (batch_size, self.n_topics * self.n_covars))
-            score_CI = self.cov_inter_decoder(cov_interactions_rsh)
-            return score_CI + score_C
-        else:
-            return score_C
-            
-
-class ContinuousCovariateModel(nn.Module):
-
-    def __init__(self, n_topics, vocab_size, total_layers = 1, device='device'):
-        self.n_topics  = n_topics
-        self.n_scalars = 1   # number of continuous variables
-        self.model_ctx = ctx
-        self.time_topic_dim = 300
-        super(ContinuousCovariateModel, self).__init__()
-
-        with self.name_scope():
-            self.cov_decoder = nn.Sequential()
-            for i in range(total_layers):
-                if i < 1:
-                    in_units = self.n_scalars + self.n_topics
-                else:
-                    in_units = self.time_topic_dim
-                self.cov_decoder.add_module("linear_"+str(i), nn.Linear(in_units, self.time_topic_dim,
-                                               bias=(i < 1)))
-                self.cov_decoder.add_module("relu_"+str(i), nn.Relu())
-            self.cov_decoder.add_module("linear_out_", nn.Linear(self.time_topic_dim, vocab_size, bias=False))
-
-    def forward(self, topic_distrib, scalars):
-        inputs = torch.cat((topic_distrib, scalars), 0)
-        sc_transform = self.cov_decoder(inputs)
-        return sc_transform
+        self.k = k
         
+    def _row_wise_normalize_inplace(self, x, mask=None):
+        for row_idx, row in enumerate(x):
+            if mask != None:
+                row_mask = mask[row_idx]
+                row = row[row_mask]
+                x[row_idx][row_mask] = (row - row.min()) / (row.max() - row.min())
+            else:
+                row_min = row.min().item()
+                row_max = row.max().item()
+                x[row_idx] = (row - row_min)/(row_max - row_min)
+        return x
+
+    def _get_npmi_loss(self, jacobian):
+        #z = torch.ones((self.n_latent,), device=self.device)
+        #jacobian = torch.autograd.functional.jacobian(self.decoder, z)
+        #beta = self.model.get_topic_vectors().t() # |T| x |V|
+        beta = jacobian.t()
+        n_topics = beta.shape[0]
+        self.npmi_matrix.fill_diagonal_(1)
+        topk_idx = torch.topk(beta, self.k, dim=1)[1]
+        topk_mask = torch.zeros_like(beta)
+        for row_idx, indices in enumerate(topk_idx):
+            topk_mask[row_idx, indices] = 1
+        beta_mask = (1 - topk_mask) * -99999
+        topk_mask = topk_mask.bool()
+        topk_softmax_beta = torch.softmax(beta + beta_mask, dim=1)
+        softmax_beta = torch.softmax(beta, dim=1)
+        weighted_npmi = 1 - self._row_wise_normalize_inplace(torch.matmul(topk_softmax_beta.detach(), self.npmi_matrix))
+        #print("Weighted_npmi sum = {}".format(weighted_npmi.sum()))
+        npmi_loss = 100 * (softmax_beta ** 2) * weighted_npmi
+        if self.use_diversity_loss:
+            diversity_mask = torch.zeros_like(beta).bool()
+            for topic_idx in range(n_topics):
+                other_rows_mask = torch.ones(n_topics).bool().to(self.device)
+                other_rows_mask[topic_idx] = False
+                diversity_mask[topic_idx] = topk_mask[other_rows_mask].sum(0) > 0
+            #print("Diversity mask sum = {}".format(diversity_mask.sum()))
+            npmi_loss = ( self.alpha * torch.masked_select(npmi_loss, diversity_mask)).sum() + \
+                        ((1 - self.alpha) * torch.masked_select(npmi_loss, ~diversity_mask)).sum()
+            npmi_loss *= 2
+        return npmi_loss
+
+    def forward(self, beta):
+        return self._get_npmi_loss(beta)
+
 
 class CoherenceRegularizer(nn.Module):
 
@@ -570,9 +473,10 @@ class SeqBowVED(BaseSeqBowVED):
             classifier_outputs = self.classifier(z_mu)
         else:
             classifier_outputs = None
+        redundancy_loss = entropy_loss
+        ii_loss = self.add_npmi_and_diversity_loss(elbo)
         redundancy_loss = entropy_loss  #self.get_redundancy_penalty()
-        elbo = elbo + redundancy_loss
-        return elbo, rec_loss, KL_loss, redundancy_loss, classifier_outputs
+        return ii_loss, rec_loss, KL_loss, redundancy_loss, classifier_outputs
 
 
 class MetricSeqBowVED(BaseSeqBowVED):

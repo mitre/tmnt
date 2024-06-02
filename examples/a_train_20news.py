@@ -26,6 +26,12 @@ tf_vectorizer = TMNTVectorizer(vocab_size=2000, count_vectorizer_kwargs=dict(max
 X, _ = tf_vectorizer.fit_transform(data)
 
 # %%
+# Calculate full NPMI matrix for coherence optimization
+from tmnt.eval_npmi import FullNPMI
+npmi_calc = FullNPMI()
+npmi_matrix = npmi_calc.get_full_vocab_npmi_matrix(X, tf_vectorizer)
+
+# %%
 # Setup logging which is good practice
 import logging
 from tmnt.utils.log_utils import logging_config
@@ -45,7 +51,8 @@ distribution = LogisticGaussianDistribution(100,20,dr=0.2,alpha=0.5, device=devi
 
 estimator = BowEstimator(vocabulary=tf_vectorizer.get_vocab(), latent_distribution=distribution, device=device,
                          log_method='log', lr=0.0075, batch_size=400, embedding_source='random', embedding_size=200,
-                         epochs=96, enc_hidden_dim=100, validate_each_epoch=False, quiet=False)
+                         epochs=64, enc_hidden_dim=100, validate_each_epoch=False, quiet=False, 
+                         npmi_matrix=npmi_matrix)
 
 #estimator = BowEstimator.from_config(config='../data/configs/train_model/model.config', vocabulary=tf_vectorizer.get_vocab())
 #tr_X, val_X = X[:1000], X[:1000] # in this case, use same data for training and validation

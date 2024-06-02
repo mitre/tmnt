@@ -42,7 +42,7 @@ if __name__ == '__main__':
         'sentence-splitter==1.4',
         'umap-learn[plot]>=0.5.5',
         'numba',
-        'scipy',
+        'scipy==1.12.0',
         'tabulate>=0.8.7',
         'torch>=2.1.2',
         'torchtext>=0.13.0'

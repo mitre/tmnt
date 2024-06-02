@@ -32,8 +32,15 @@ batch_size = 32
 seq_len = 64
 pad = True
 
-vectorizer = TMNTVectorizer(vocab_size=2000)
-vectorizer.fit_transform(train_data)
+vectorizer = TMNTVectorizer(vocab_size=200)
+X,_ = vectorizer.fit_transform(train_data)
+
+# %%
+# Calculate full NPMI matrix for coherence optimization
+from tmnt.eval_npmi import FullNPMI
+npmi_calc = FullNPMI()
+npmi_matrix = npmi_calc.get_full_vocab_npmi_matrix(X, vectorizer)
+
 
 supervised  = True
 use_logging = True
@@ -80,7 +87,7 @@ estimator = SeqBowEstimator(llm_model_name = tf_llm_name,
                             vocabulary = vectorizer.get_vocab(),
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=100.0, 
-                            lr=2e-5, decoder_lr=0.01, epochs=20)
+                            lr=2e-5, decoder_lr=0.01, epochs=20, npmi_matrix=npmi_matrix)
 
 
 # this will take quite some time without a GPU!

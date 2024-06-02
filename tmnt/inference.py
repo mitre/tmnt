@@ -10,8 +10,8 @@ import io
 import os
 import torch
 import pickle
-from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED, MetricSeqBowVED
-from tmnt.estimator import BowEstimator, CovariateBowEstimator, SeqBowEstimator, SeqBowMetricEstimator
+from tmnt.modeling import BowVAEModel, SeqBowVED, MetricSeqBowVED
+from tmnt.estimator import BowEstimator, SeqBowEstimator, SeqBowMetricEstimator
 from tmnt.data_loading import SparseDataLoader
 from tmnt.preprocess.vectorizer import TMNTVectorizer
 from tmnt.utils.recalibrate import recalibrate_scores
@@ -54,9 +54,6 @@ class BaseInferencer(object):
     def get_top_k_words_per_topic(self, k):
         raise NotImplementedError
 
-    def get_top_k_words_per_topic_per_covariate(self, k):
-        raise NotImplementedError
-    
     def get_pyldavis_details(self, sp_vec_file_or_X, y=None):
         w_pr, dt_matrix, doc_lengths, term_cnts = self.get_model_details(sp_vec_file_or_X, y=y)
         d1 = w_pr.cpu().detach().numpy().tolist()
@@ -80,12 +77,7 @@ class BowVAEInferencer(BaseInferencer):
         self.vocab = estimator.vocabulary
         self.n_latent = estimator.n_latent
         self.model = estimator.model
-        if isinstance(estimator.model, CovariateBowVAEModel):
-            self.covar_model = True
-            self.n_covars = estimator.model.n_covars
-            self.covar_net_layers = estimator.model.covar_net_layers
-        else:
-            self.covar_model = False
+        self.covar_model = False
 
     @classmethod
     def from_saved(cls, model_dir=None, device='cpu'):
@@ -96,12 +88,7 @@ class BowVAEInferencer(BaseInferencer):
         serialized_vectorizer_file = os.path.join(model_dir,'vectorizer.pkl')
         with io.open(config_file, 'r') as f:
             config_dict = json.load(f)
-        if config_dict['n_covars'] > 0:
-            estimator = CovariateBowEstimator.from_config(config_dict['n_covars'],
-                                                          config_file, vocab_file,
-                                                          pretrained_param_file=param_file)
-        else:
-            estimator = BowEstimator.from_saved(model_dir)
+        estimator = BowEstimator.from_saved(model_dir)
         estimator.initialize_with_pretrained()
         if os.path.exists(serialized_vectorizer_file):
             with open(serialized_vectorizer_file, 'rb') as fp:
@@ -174,16 +161,12 @@ class BowVAEInferencer(BaseInferencer):
         for _, (data,labels) in enumerate(infer_iter):
             with torch.no_grad():
                 data = data.to(self.device)
-                if self.covar_model and labels is not None:
-                    labels = labels.to(self.device)
-                    encs = self.model.encode_data_with_covariates(data, labels, include_bn=include_bn)
-                else:                        
-                    encs = self.model.encode_data(data, include_bn=include_bn)
-                    if include_predictions:
-                        if self.model.multilabel:
-                            preds = list(self.model.predict(data).sigmoid().detach().numpy())
-                        else:
-                            preds = list(self.model.predict(data).softmax(dim=1).detach().numpy())
+                encs = self.model.encode_data(data, include_bn=include_bn)
+                if include_predictions:
+                    if self.model.multilabel:
+                        preds = list(self.model.predict(data).sigmoid().detach().numpy())
+                    else:
+                        preds = list(self.model.predict(data).softmax(dim=1).detach().numpy())
                 if use_probs:
                     #e1 = (encs - encs.min(dim=1).unsqueeze(1)).astype('float64')
                     e1 = (encs - encs.min(dim=1)[0].unsqueeze(1))
@@ -232,31 +215,6 @@ class BowVAEInferencer(BaseInferencer):
             topic_terms.append(top_k)
         return topic_terms
 
-
-    def get_top_k_words_per_topic_per_covariate(self, k):
-        n_topics = self.n_latent
-        w = self.model.cov_decoder.cov_inter_decoder.collect_params().get('weight').data()
-        n_covars = int(w.shape[1] / n_topics)
-        topic_terms = []
-        for i in range(n_covars):
-            cv_i_slice = w[:, (i * n_topics):((i+1) * n_topics)]
-            sorted_ids = cv_i_slice.argsort(dim=0, is_ascend=False)
-            cv_i_terms = []
-            for t in range(n_topics):
-                top_k = [ self.vocab.lookup_token(int(i)) for i in list(sorted_ids[:k, t].asnumpy()) ]
-                cv_i_terms.append(top_k)
-            topic_terms.append(cv_i_terms)
-        return topic_terms
-
-    def get_covariate_model_details(self):
-        ## 1) C x K x W tensor with |C|  P(term|topic) probability matricies where |C| is number of co-variates
-        w = self.model.cov_decoder.cov_inter_decoder.collect_params().get('weight').data().transpose()
-        w_rsh = w.reshape(-1,self.n_latent, w.shape[1])
-        return w_rsh.softmax(dim=2)
-    
-
-    def get_top_k_words_per_topic_over_scalar_covariate(self, k, min_v=0.0, max_v=1.0, step=0.1):
-        raise NotImplemented
 
     def predict_text(self, txt: List[str], pred_threshold: float = 0.5) -> Tuple[List[str], List[np.ndarray], np.ndarray]:
         """Take a list of input documents/passages as strings and return document encodings (topics) and classification outputs

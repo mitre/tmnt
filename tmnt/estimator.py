@@ -17,7 +17,7 @@ import json
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
 from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_llm_model
-from tmnt.modeling import BowVAEModel, CovariateBowVAEModel, SeqBowVED
+from tmnt.modeling import BowVAEModel, SeqBowVED
 from tmnt.modeling import CrossBatchCosineSimilarityLoss, GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import LogisticGaussianDistribution, BaseDistribution, GaussianDistribution, VonMisesDistribution
@@ -80,6 +80,7 @@ class BaseEstimator(object):
                  coherence_via_encoder: bool = False,
                  pretrained_param_file: Optional[str] = None,
                  warm_start: bool = False,
+                 npmi_matrix: Optional[torch.Tensor] = None,
                  test_batch_size: int = 0):
         self.vocabulary = vocabulary
         self.log_method = log_method
@@ -100,6 +101,7 @@ class BaseEstimator(object):
         self.warm_start = warm_start
         self.num_val_words = -1 ## will be set later for computing Perplexity on validation dataset
         self.latent_distribution.device = self.device
+        self.npmi_matrix : Optional[torch.Tensor] = npmi_matrix ## used with NPMI loss
 
 
     def _np_one_hot(self, vec, n_outputs):
@@ -150,8 +152,7 @@ class BaseEstimator(object):
                 unique_term_ids.add(topic_ids[j])
         redundancy = (1.0 - (float(len(unique_term_ids)) / num_topics / unique_limit)) ** 2
         return npmi, redundancy
-
-
+    
     def _get_objective_from_validation_result(self, val_result):
         """
         Get the final objective value from the various validation metrics.
@@ -417,7 +418,7 @@ class BaseBowEstimator(BaseEstimator):
         with torch.no_grad():
             for i, ((data,labels),) in enumerate(dataloader):
                 data = data.to(self.device)
-                _, kl_loss, rec_loss, _, _, _ = self._forward(self.model, data)
+                _, kl_loss, rec_loss, _ = self._forward(self.model, data)
                 total_rec_loss += float(rec_loss.sum())
                 total_kl_loss += float(kl_loss.sum())
         if ((total_rec_loss + total_kl_loss) / total_words) < 709.0:
@@ -517,7 +518,7 @@ class BaseBowEstimator(BaseEstimator):
             labels = torch.zeros(data.shape[0]).unsqueeze(dim=1)
         labels = labels.to(self.device)
         
-        elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
+        elbo_ls, kl_ls, rec_ls, predicted_labels = \
             self._forward(self.model, data)
         if self.has_classifier:
             labels = labels.float() if self.multilabel else labels
@@ -529,13 +530,13 @@ class BaseBowEstimator(BaseEstimator):
         else:
             total_ls = elbo_ls.mean()
             label_ls = torch.zeros(total_ls.shape)
-        return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
+        return elbo_ls, kl_ls, rec_ls, label_ls, total_ls
 
     def _get_unlabeled_losses(self, model, data):
-        elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
-            self._forward(self.model, data)
+        elbo_ls, kl_ls, rec_ls, predicted_labels = \
+            self._forward(model, data)
         total_ls = elbo_ls.mean() / self.gamma
-        return elbo_ls, kl_ls, rec_ls, red_ls, total_ls
+        return elbo_ls, kl_ls, rec_ls, total_ls
 
     def fit_with_validation_loaders(self, train_dataloader, validation_dataloader, aux_dataloader,
                                     train_X_size, val_X_size, aux_X_size, total_val_words, val_X=None, val_y=None):
@@ -550,14 +551,14 @@ class BaseBowEstimator(BaseEstimator):
             lab_losses  = []
             self.model.train()
             for i, (data_batch, aux_batch) in enumerate(joint_loader):
-                elbo_ls, kl_loss, _, _, lab_loss, total_ls = self._get_losses(self.model, data_batch)
+                elbo_ls, kl_loss, _, lab_loss, total_ls = self._get_losses(self.model, data_batch)
                 elbo_mean = elbo_ls.mean()
                 if aux_batch is not None:
                     total_ls.backward(retain_graph=True)
                     aux_data, = aux_batch
                     aux_data, _ = aux_data # ignore (null) label
                     aux_data = aux_data.to(self.device)
-                    elbo_ls_a, kl_loss_a, _, _, total_ls_a = self._get_unlabeled_losses(self.model, aux_data)
+                    elbo_ls_a, kl_loss_a, _, total_ls_a = self._get_unlabeled_losses(self.model, aux_data)
                     total_ls_a.backward()
                 else:
                     total_ls.backward()
@@ -601,11 +602,6 @@ class BaseBowEstimator(BaseEstimator):
         else:
             self._output_status("Epoch [{}]. Objective = {} ==> PPL = {}. NPMI ={}. Redundancy = {}."
                                 .format(epoch+1, sc_obj, v_res['ppl'], v_res['npmi'], v_res['redundancy']))
-        #session.report({"objective": sc_obj, "coherence": v_res['npmi'], "perplexity": v_res['ppl'],
-        #                "redundancy": v_res['redundancy']})
-        #if self.reporter:
-        #    self.reporter(epoch=epoch+1, objective=sc_obj, time_step=time.time(),
-        #                  coherence=v_res['npmi'], perplexity=v_res['ppl'], redundancy=v_res['redundancy'])
         return sc_obj, v_res
 
 
@@ -615,6 +611,8 @@ class BaseBowEstimator(BaseEstimator):
         if self.model is None or not self.warm_start:
             self.model = self._get_model()
             self.model.initialize_bias_terms(wd_freqs.squeeze())  ## initialize bias weights to log frequencies
+        if self.npmi_matrix is not None:
+            self.model.initialize_npmi_loss(self.npmi_matrix)
         return x_size
 
     
@@ -644,6 +642,7 @@ class BaseBowEstimator(BaseEstimator):
         X_data = train_dataloader.dataset.data
         train_dataloader = SingletonWrapperLoader(train_dataloader)
         train_X_size = X_data.shape
+        print("**** Setting up model with biases")
         _ = self.setup_model_with_biases(X_data)
 
         if aux_X is not None:
@@ -718,7 +717,7 @@ class BowEstimator(BaseBowEstimator):
 
         Returns:
             Tuple of:
-                elbo, kl_loss, rec_loss, coherence_loss, redundancy_loss, reconstruction
+                elbo, kl_loss, rec_loss, reconstruction
         """
         return model(data)
 
@@ -822,6 +821,8 @@ class BowMetricEstimator(BowEstimator):
         model = self._get_model()
         tr_bow_matrix = self._get_bow_matrix(train_data)
         model.initialize_bias_terms(tr_bow_matrix.sum(axis=0))
+        if self.npmi_matrix is not None:
+            self.model.initialize_npmi_loss(self.npmi_matrix)
         return model
 
     def _forward(self, model, data):
@@ -936,171 +937,6 @@ class BowMetricEstimator(BowEstimator):
 
 
 
-class CovariateBowEstimator(BaseBowEstimator):
-
-    def __init__(self, *args, n_covars=0, **kwargs):
-
-        super().__init__(*args, **kwargs)
-
-        self.covar_net_layers = 1 ### XXX - temp hardcoded
-        self.n_covars = n_covars
-
-
-    @classmethod
-    def from_config(cls, n_covars, *args, **kwargs):
-        est = super().from_config(*args, **kwargs)
-        est.n_covars = n_covars
-        return est
-    
-    def _get_model(self):
-        """
-        Returns
-        MXNet model initialized using provided hyperparameters
-        """
-        if self.embedding_source != 'random':
-            #e_type, e_name = tuple(self.embedding_source.split(':'))
-            pt_embedding = pretrained_aliases('glove.6B.100d')
-            pretrained = pt_embedding.get_vecs_by_tokens(self.vocabulary)
-            emb_size = 100
-            #pt_embedding = nlp.embedding.create(e_type, source=e_name)
-            #self.vocabulary.set_embedding(pt_embedding)
-            #emb_size = len(self.vocabulary.embedding.idx_to_vec[0])
-            #for word in self.vocabulary.embedding._idx_to_token:
-            #    if (self.vocabulary.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-            #        self.vocabulary.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
-        else:
-            emb_size = self.embedding_size
-        model = \
-            CovariateBowVAEModel(n_covars=self.n_covars,
-                                 enc_dim=self.enc_hidden_dim, embedding_size=emb_size,
-                                 fixed_embedding=self.fixed_embedding, latent_distribution=self.latent_distribution,
-                                 coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                                 ctx=self.ctx)
-        return model
-
-
-    def _get_losses(self, model, batch_data):
-        # batch_data has form: ((data, covars),)
-        (data,covars), = batch_data
-        data = data.to(self.device)
-        covars = covars.to(self.device)        
-        elbo_ls, kl_ls, rec_ls, coherence_loss, red_ls, predicted_labels = \
-            self._forward(self.model, data, covars)
-        total_ls = elbo_ls.mean()
-        label_ls = mx.nd.zeros(total_ls.shape)
-        return elbo_ls, kl_ls, rec_ls, red_ls, label_ls, total_ls
-    
-
-    def _get_config(self):
-        config = super()._get_config()
-        config['n_covars'] = self.n_covars
-        return config
-    
-    
-    def _forward(self,
-                 model: BowVAEModel,
-                 data: torch.Tensor,
-                 covars: torch.Tensor) -> Tuple[torch.Tensor,
-                                                 torch.Tensor,
-                                                 torch.Tensor,
-                                                 torch.Tensor,
-                                                 torch.Tensor,
-                                                 torch.Tensor,
-                                                 torch.Tensor] :
-        """
-        Forward pass of BowVAE model given the supplied data
-
-        Parameters:
-            model: Model that returns elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
-            data: Document word matrix of shape (n_train_samples, vocab_size) 
-            covars: Covariate matrix. shape [n_samples, n_covars]
-
-        Returns:
-            (tuple): Tuple of: 
-                elbo, kl_loss, rec_loss, l1_pen, coherence_loss, redundancy_loss, reconstruction
-        """
-        self.train_data = data
-        self.train_labels = covars
-        return model(data, covars)
-
-
-    def _npmi_per_covariate(self, X, y, k=10):
-        """
-        Calculate NPMI(Normalized Pointwise Mutual Information) for each covariate for data X
-
-        Parameters:
-            X (array-like or sparse matrix): Document word matrix. shape [n_samples, vocab_size]
-            y (array-like or sparse matrix): Covariate matrix. shape [n_samples, n_covars]
-            k (int): Threshold at which to compute npmi. optional (default=10)
-
-        Returns:
-            (dict): Dictionary of npmi scores for each covariate.
-        """
-        X_train = X.toarray()
-        y_train = y
-        covars = np.unique(y_train, axis=0)
-        covar_npmi = {}
-        npmi_total = 0
-        for covar in covars:
-            mask = (y_train == covar).all(axis=1)
-            X_covar, y_covar = torch.tensor(X_train[mask], dtype='float'), torch.tensor(y_train[mask], dtype='float')
-            sorted_ids = self.model.get_ordered_terms_with_covar_at_data(X_covar,k, y_covar)
-            top_k_words_per_topic = [[int(i) for i in list(sorted_ids[:k, t].asnumpy())] for t in range(self.n_latent)]
-            npmi_eval = EvaluateNPMI(top_k_words_per_topic)
-            npmi = npmi_eval.evaluate_csr_mat(X_covar)
-
-            #if(self.label_map):
-            #    covar_key = covar[0]
-            #else:
-            #    covar_key = np.where(covar)[0][0]
-            covar_keky = covar[0]
-            covar_npmi[covar_key] = npmi
-            npmi_total += npmi
-        return npmi_total / len(covars)
-
-    def _npmi(self, X, k=10):
-        return super()._npmi(X, k=k)
-        #return self._npmi_per_covariate(X, y, k)
-
-    def _get_objective_from_validation_result(self, v_res):
-        return v_res['npmi']
-
-    def validate(self, X, y):
-        npmi, redundancy = self._npmi(X)
-        return {'npmi': npmi, 'redundancy': redundancy, 'ppl': 0.0}
-
-    def get_topic_vectors(self) -> torch.Tensor:
-        """
-        Get topic vectors of the fitted model.
-
-        Returns:
-            topic_vectors: Topic word distribution. topic_distribution[i, j] represents word j in topic i. 
-                shape=(n_latent, vocab_size)
-        """
-
-        return self.model.get_topic_vectors(self.train_data, self.train_labels)
-
-    def initialize_with_pretrained(self):
-        assert(self.pretrained_param_file is not None)
-        self.model = self._get_model()
-        self.model.load_parameters(self.pretrained_param_file, allow_missing=False)
-        
-
-    def transform(self, X: sp.csr.csr_matrix, y: np.ndarray):
-        """
-        Transform data X and y according to the fitted model.
-
-        Parameters:
-            X: Document word matrix of shape {n_samples, n_features)
-            y: Covariate matrix of shape (n_train_samples, n_covars)
-
-        Returns:
-            Document topic distribution for X and y of shape=(n_samples, n_latent)
-        """
-        x_mxnet, y_mxnet = mx.nd.array(X, dtype=np.float32), mx.nd.array(y, dtype=np.float32)
-        return self.model.encode_data_with_covariates(x_mxnet, y_mxnet).asnumpy()
-    
-
 class SeqBowEstimator(BaseEstimator):
 
     def __init__(self, *args,
@@ -1213,6 +1049,9 @@ class SeqBowEstimator(BaseEstimator):
         model = self._get_model()
         tr_bow_counts = self._get_bow_wd_counts(train_data)
         model.initialize_bias_terms(tr_bow_counts)
+        if self.npmi_matrix is not None:
+            print("****** INITIALIZING NPMI LOSS FUNCTION *******")
+            model.initialize_npmi_loss(self.npmi_matrix)
         return model
         
     
