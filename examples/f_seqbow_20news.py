@@ -23,7 +23,7 @@ data, y = fetch_20newsgroups(shuffle=True, random_state=1,
 # along with small maximum sequence lengths to allow for the example to complete
 # in short order without a GPU
 # Larger sequence sizes and training sets should be used in practice
-tr_size = 100 # 6000
+tr_size = 1000 # 6000
 train_data = data[:tr_size]
 dev_data   = data[-tr_size:]
 train_y    = y[:tr_size]
@@ -83,7 +83,7 @@ if classes:
 else:
     label_map = {}
     
-device_str = 'cpu' # 'cuda'
+device_str = 'cuda' # 'cpu' # 'cuda'
 train_loader = get_llm_dataloader(train_ds, vectorizer, tf_llm_name, label_map, batch_size, seq_len, device=device_str )
 dev_loader = get_llm_dataloader(dev_ds, vectorizer, tf_llm_name, label_map, batch_size, seq_len, device=device_str)
 if aux_ds is not None:

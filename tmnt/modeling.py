@@ -42,7 +42,7 @@ class BaseVAE(nn.Module):
                 self.decoder.bias.requires_grad_(False)
 
     def initialize_npmi_loss(self, npmi_mat, npmi_lambda=0.7, npmi_scale=100.0):
-        t_npmi_mat = torch.Tensor(npmi_mat, device=self.device)
+        t_npmi_mat = torch.Tensor(npmi_mat).to(self.device)
         self.npmi_with_diversity_loss = NPMILossWithDiversity(t_npmi_mat, device=self.device, npmi_lambda=npmi_lambda, npmi_scale=npmi_scale)
 
     def get_ordered_terms(self):
