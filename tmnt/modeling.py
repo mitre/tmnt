@@ -48,7 +48,7 @@ class BaseVAE(nn.Module):
                 self.decoder.bias.requires_grad_(False)
 
     def initialize_npmi_loss(self, npmi_mat):
-        t_npmi_mat = torch.Tensor(npmi_mat, device=self.device)
+        t_npmi_mat = torch.Tensor(npmi_mat).to(self.device)
         self.npmi_with_diversity_loss = NPMILossWithDiversity(t_npmi_mat, device=self.device, alpha=self.npmi_alpha)
 
     def get_ordered_terms(self):
@@ -78,7 +78,6 @@ class BaseVAE(nn.Module):
             jacobian = torch.autograd.functional.jacobian(self.decoder, z) 
             npmi_loss = self.npmi_with_diversity_loss(jacobian)
             npmi_loss = npmi_loss.sum()
-            print("npmi loss = {}".format(npmi_loss))
             return (cur_loss + npmi_loss)
         else:
             return cur_loss

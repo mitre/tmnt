@@ -23,17 +23,17 @@ data, y = fetch_20newsgroups(shuffle=True, random_state=1,
 # along with small maximum sequence lengths to allow for the example to complete
 # in short order without a GPU
 # Larger sequence sizes and training sets should be used in practice
-tr_size = 100
+tr_size = 100 # 6000
 train_data = data[:tr_size]
 dev_data   = data[-tr_size:]
 train_y    = y[:tr_size]
 dev_y      = y[-tr_size:]
-batch_size = 32
-seq_len = 64
+batch_size = 16
+seq_len = 128
 pad = True
 
-vectorizer = TMNTVectorizer(vocab_size=200)
-X,_ = vectorizer.fit_transform(train_data)
+vectorizer = TMNTVectorizer(vocab_size=2000,count_vectorizer_kwargs={'token_pattern': r'\b[A-Za-z][A-Za-z][A-Za-z]+\b'})
+X,_ = vectorizer.fit_transform(train_data) 
 
 # %%
 # Calculate full NPMI matrix for coherence optimization
@@ -42,7 +42,7 @@ npmi_calc = FullNPMI()
 npmi_matrix = npmi_calc.get_full_vocab_npmi_matrix(X, vectorizer)
 
 
-supervised  = True
+supervised  = False # True
 use_logging = True
 
 # %%
@@ -70,16 +70,32 @@ dev_y_s = ['class_'+str(y) for y in dev_y]
 # We'll use distilbert here as it's more compute efficient than BERT
 tf_llm_name = 'distilbert-base-uncased'
 
-train_ds = list(zip(train_y_s, train_data))
-dev_ds   = list(zip(dev_y_s, dev_data))
-aux_ds   = None
-label_map = { l:i for i,l in enumerate(classes) }
-train_loader = get_llm_dataloader(train_ds, vectorizer, tf_llm_name, label_map, 16, 128 )
-dev_loader = get_llm_dataloader(dev_ds, vectorizer, tf_llm_name, label_map, 16, 128)
+if supervised:
+    train_ds = list(zip(train_y_s, train_data))
+    dev_ds   = list(zip(dev_y_s, dev_data))
+else:
+    train_ds = list(zip([None for _ in train_y], train_data))
+    dev_ds   = list(zip([None for _ in dev_y], dev_data))
 
-latent_distribution = LogisticGaussianDistribution(768,80,dr=0.1,alpha=2.0)
+aux_ds   = None # data[tr_size:(tr_size+1000)] 
+if classes:
+    label_map = { l:i for i,l in enumerate(classes) }
+else:
+    label_map = {}
+    
+device_str = 'cpu' # 'cuda'
+train_loader = get_llm_dataloader(train_ds, vectorizer, tf_llm_name, label_map, batch_size, seq_len, device=device_str )
+dev_loader = get_llm_dataloader(dev_ds, vectorizer, tf_llm_name, label_map, batch_size, seq_len, device=device_str)
+if aux_ds is not None:
+    aux_loader = get_llm_dataloader(aux_ds, vectorizer, tf_llm_name, None, batch_size, seq_len, device=device_str)
+else:
+    aux_loader = None
 
-device = torch.device('cpu')
+num_topics = 20 ## 80 is pretty high for topic modeling, but may be a good size if the goal is classification
+
+latent_distribution = LogisticGaussianDistribution(768,num_topics,dr=0.1,alpha=2.0, device=device_str)
+
+device = torch.device(device_str)
 
 estimator = SeqBowEstimator(llm_model_name = tf_llm_name,
                             latent_distribution = latent_distribution,
@@ -87,11 +103,11 @@ estimator = SeqBowEstimator(llm_model_name = tf_llm_name,
                             vocabulary = vectorizer.get_vocab(),
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=100.0, 
-                            lr=2e-5, decoder_lr=0.01, epochs=20, npmi_matrix=npmi_matrix)
+                            lr=2e-5, decoder_lr=0.01, epochs=4, npmi_matrix=npmi_matrix)
 
 
 # this will take quite some time without a GPU!
-#estimator.fit_with_validation(train_loader, dev_loader, None)
+#estimator.fit_with_validation(train_loader, dev_loader, aux_loader)
 #os.makedirs('_model_dir', exist_ok=True)
 
 # save the model
@@ -101,7 +117,7 @@ estimator = SeqBowEstimator(llm_model_name = tf_llm_name,
 # An inference object is then created which enables the application of the model to raw text
 # data and/or directly to document-term matrices
 #from tmnt.inference import SeqVEDInferencer
-#inferencer = SeqVEDInferencer(estimator, max_length=seq_len, pre_vectorizer=vectorizer, ctx=ctx)
+#inferencer = SeqVEDInferencer(estimator, max_length=seq_len, pre_vectorizer=vectorizer)
 
 
 # %%
