@@ -993,7 +993,6 @@ class SeqBowEstimator(BaseEstimator):
                         n_labels        = config.get('n_labels', n_labels),
                         latent_distribution = latent_distribution,
                         batch_size      = int(config['batch_size']),
-                        redundancy_reg_penalty = 0.0,
                         warmup_ratio = config['warmup_ratio'],
                         classifier_dropout = config['classifier_dropout'],
                         epochs = int(config['epochs']),
@@ -1060,7 +1059,6 @@ class SeqBowEstimator(BaseEstimator):
         config['epochs'] = self.epochs
         #config['embedding_source'] = self.embedding_source
         config['gamma'] = self.gamma
-        config['redundancy_reg_penalty'] = self.redundancy_reg_penalty
         config['warmup_ratio'] = self.warmup_ratio
         config['llm_model_name'] = self.llm_model_name
         config['classifier_dropout'] = self.classifier_dropout
