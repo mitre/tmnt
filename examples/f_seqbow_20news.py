@@ -83,7 +83,7 @@ if classes:
 else:
     label_map = {}
     
-device_str = 'cuda' # 'cpu' # 'cuda'
+device_str = 'cpu' # 'cuda'
 train_loader = get_llm_dataloader(train_ds, vectorizer, tf_llm_name, label_map, batch_size, seq_len, device=device_str )
 dev_loader = get_llm_dataloader(dev_ds, vectorizer, tf_llm_name, label_map, batch_size, seq_len, device=device_str)
 if aux_ds is not None:
