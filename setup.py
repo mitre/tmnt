@@ -35,7 +35,7 @@ if __name__ == '__main__':
         'joblib>=0.8.4',
         'future>=0.18.2',
         'funcy>=1.16',
-        'pandas==1.5.3',
+        'pandas>=2.0.0',
         'pyOpenSSL==18.0.0',
         'PySocks==1.6.8',
         'sacremoses>=0.0.38',

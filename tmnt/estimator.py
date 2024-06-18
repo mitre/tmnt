@@ -17,7 +17,7 @@ import json
 
 from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
 from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_llm_model
-from tmnt.modeling import BowVAEModel, SeqBowVED
+from tmnt.modeling import BowVAEModel, SeqBowVED, BaseVAE
 from tmnt.modeling import CrossBatchCosineSimilarityLoss, GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import LogisticGaussianDistribution, BaseDistribution, GaussianDistribution, VonMisesDistribution
@@ -57,8 +57,6 @@ class BaseEstimator(object):
         latent_distribution: Latent distribution of the variational autoencoder - defaults to LogisticGaussian with 20 dimensions
         optimizer: optimizer (default = "adam")
         lr: Learning rate of training. (default=0.005)
-        coherence_reg_penalty: Regularization penalty for topic coherence. optional (default=0.0)
-        redundancy_reg_penalty: Regularization penalty for topic redundancy. optional (default=0.0)
         batch_size: Batch training size. optional (default=128)
         epochs : Number of training epochs. optional(default=40)
         coherence_via_encoder: Flag to use encoder to derive coherence scores (via gradient attribution)
@@ -73,26 +71,24 @@ class BaseEstimator(object):
                  device: Optional[str] = 'cpu',
                  latent_distribution: BaseDistribution = None,
                  lr: float = 0.005, 
-                 coherence_reg_penalty: float = 0.0,
-                 redundancy_reg_penalty: float = 0.0,
                  batch_size: int = 128,
                  epochs: int = 40,
                  coherence_via_encoder: bool = False,
                  pretrained_param_file: Optional[str] = None,
                  warm_start: bool = False,
                  npmi_matrix: Optional[torch.Tensor] = None,
+                 npmi_lambda: float = 0.7,
+                 npmi_scale: float = 100.0,
                  test_batch_size: int = 0):
         self.vocabulary = vocabulary
         self.log_method = log_method
         self.quiet = quiet
-        self.model = None
+        self.model : Optional[BaseVAE] = None
         self.coherence_coefficient = coherence_coefficient
         self.device = device
         self.latent_distribution = latent_distribution
         self.lr = lr
         self.n_latent = self.latent_distribution.n_latent
-        self.coherence_reg_penalty = coherence_reg_penalty
-        self.redundancy_reg_penalty = redundancy_reg_penalty
         self.batch_size = batch_size
         self.test_batch_size = test_batch_size or batch_size
         self.epochs = epochs
@@ -102,6 +98,8 @@ class BaseEstimator(object):
         self.num_val_words = -1 ## will be set later for computing Perplexity on validation dataset
         self.latent_distribution.device = self.device
         self.npmi_matrix : Optional[torch.Tensor] = npmi_matrix ## used with NPMI loss
+        self.npmi_lambda = npmi_lambda
+        self.npmi_scale  = npmi_scale
 
 
     def _np_one_hot(self, vec, n_outputs):
@@ -303,12 +301,9 @@ class BaseBowEstimator(BaseEstimator):
         latent_distrib = config['latent_distribution']
         n_latent = int(config['n_latent'])
         enc_hidden_dim = int(config['enc_hidden_dim'])
-        coherence_reg_penalty = float(config['coherence_loss_wt'])
-        redundancy_reg_penalty = float(config['redundancy_loss_wt'])
         batch_size = int(config['batch_size'])
         embedding_source = config['embedding']['source']
         fixed_embedding  = config['embedding'].get('fixed') == True
-        covar_net_layers = config['covar_net_layers']
         n_encoding_layers = config['num_enc_layers']
         enc_dr = config['enc_dr']
         epochs = int(config['epochs'])
@@ -334,8 +329,7 @@ class BaseBowEstimator(BaseEstimator):
                     coherence_coefficient=coherence_coefficient,
                     device=device, lr=lr, latent_distribution=latent_distribution, 
                     enc_hidden_dim=enc_hidden_dim,
-                    coherence_reg_penalty=coherence_reg_penalty,
-                    redundancy_reg_penalty=redundancy_reg_penalty, batch_size=batch_size, 
+                    batch_size=batch_size, 
                     embedding_source=embedding_source, embedding_size=emb_size, fixed_embedding=fixed_embedding,
                     num_enc_layers=n_encoding_layers, enc_dr=enc_dr, 
                     epochs=epochs, log_method='log', coherence_via_encoder=coherence_via_encoder,
@@ -353,11 +347,8 @@ class BaseBowEstimator(BaseEstimator):
         config['batch_size']         = self.batch_size
         config['num_enc_layers']     = self.n_encoding_layers
         config['enc_dr']             = self.enc_dr
-        config['coherence_loss_wt']  = self.coherence_reg_penalty
-        config['redundancy_loss_wt'] = self.redundancy_reg_penalty
         config['n_labels']           = self.n_labels
         config['covar_net_layers']   = 1
-        config['n_covars']           = 0
         if isinstance(self.latent_distribution, VonMisesDistribution):
             config['latent_distribution'] = {'dist_type':'vmf', 'kappa': self.latent_distribution.kappa}
         elif isinstance(self.latent_distribution, LogisticGaussianDistribution):
@@ -379,7 +370,6 @@ class BaseBowEstimator(BaseEstimator):
         sp_file = os.path.join(model_dir, 'model.config')
         vocab_file = os.path.join(model_dir, 'vocab.json')
         logging.info("Model parameters, configuration and vocabulary written to {}".format(model_dir))
-        #self.model.save_parameters(pfile)
         torch.save(self.model, pfile)
         config = self._get_config()
         specs = json.dumps(config, sort_keys=True, indent=4)
@@ -481,7 +471,6 @@ class BaseBowEstimator(BaseEstimator):
         return v_res
 
     def validate(self, val_X, val_y):
-        #val_dataloader = SparseDataLoader(val_X, val_y, batch_size=self.test_batch_size)
         val_dataloader = SingletonWrapperLoader(SparseDataLoader(val_X, val_y, batch_size=self.test_batch_size))
         total_val_words = val_X.sum()
         if self.num_val_words < 0:
@@ -612,7 +601,7 @@ class BaseBowEstimator(BaseEstimator):
             self.model = self._get_model()
             self.model.initialize_bias_terms(wd_freqs.squeeze())  ## initialize bias weights to log frequencies
         if self.npmi_matrix is not None:
-            self.model.initialize_npmi_loss(self.npmi_matrix)
+            self.model.initialize_npmi_loss(self.npmi_matrix, npmi_lambda=self.npmi_lambda, npmi_scale=self.npmi_scale)
         return x_size
 
     
@@ -642,7 +631,6 @@ class BaseBowEstimator(BaseEstimator):
         X_data = train_dataloader.dataset.data
         train_dataloader = SingletonWrapperLoader(train_dataloader)
         train_X_size = X_data.shape
-        print("**** Setting up model with biases")
         _ = self.setup_model_with_biases(X_data)
 
         if aux_X is not None:
@@ -746,8 +734,7 @@ class BowEstimator(BaseBowEstimator):
                             gamma = self.gamma,
                             multilabel = self.multilabel,
                             latent_distribution=self.latent_distribution, 
-                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                            n_covars=0, device=self.device)
+                            device=self.device)
         if self.pretrained_param_file is not None:
             model = torch.load(self.pretrained_param_file)
         model.to(self.device)
@@ -810,8 +797,7 @@ class BowMetricEstimator(BowEstimator):
                             gamma = self.gamma,
                             multilabel = self.multilabel,
                             latent_distribution=self.latent_distribution, 
-                            coherence_reg_penalty=self.coherence_reg_penalty, redundancy_reg_penalty=self.redundancy_reg_penalty,
-                              n_covars=0, device=self.device)
+                            device=self.device)
         if self.pretrained_param_file is not None:
             model.load_parameters(self.pretrained_param_file, allow_missing=False)
         return model
@@ -929,12 +915,7 @@ class BowMetricEstimator(BowEstimator):
                             .format(epoch, v_res['avg_prec'], v_res['avg_prec'], v_res['au_roc'], v_res['ndcg'],
                                     v_res['top_1'], v_res['top_2'], v_res['top_3'], v_res['top_4']))
         self._output_status("  AP Scores: {}".format(v_res['ap_scores']))
-        #session.report({"objective": v_res['avg_prec'], "perplexity": v_res['ppl']})
-        #if self.reporter:
-        #    self.reporter(epoch=epoch+1, objective=v_res['avg_prec'], time_step=time.time(), coherence=0.0,
-        #                  perplexity=0.0, redundancy=0.0)
         return v_res['avg_prec'], v_res
-
 
 
 class SeqBowEstimator(BaseEstimator):

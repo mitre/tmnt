@@ -22,22 +22,16 @@ from typing import List, Tuple, Dict, Optional, Union, NoReturn
 class BaseVAE(nn.Module):
 
     def __init__(self, vocab_size=2000, latent_distribution=LogisticGaussianDistribution(100, 20),
-                 coherence_reg_penalty=0.0, redundancy_reg_penalty=0.0,
-                 n_covars=0, device='cpu', **kwargs):
+                 device='cpu', **kwargs):
         super(BaseVAE, self).__init__(**kwargs)        
         self.vocab_size = vocab_size        
         self.n_latent   = latent_distribution.n_latent
         self.enc_size   = latent_distribution.enc_size
-        self.coherence_reg_penalty = coherence_reg_penalty
-        self.redundancy_reg_penalty = redundancy_reg_penalty
-        self.n_covars = n_covars
         self.device = device
         self.embedding = None
-
         self.latent_distribution = latent_distribution
         self.decoder = nn.Linear(self.n_latent, self.vocab_size).to(device)
         self.npmi_with_diversity_loss : Optional[NPMILossWithDiversity] = None
-        self.npmi_alpha = 0.7
 
     def initialize_bias_terms(self, wd_freqs: Optional[np.ndarray]):
         if wd_freqs is not None:
@@ -47,9 +41,9 @@ class BaseVAE(nn.Module):
                 self.decoder.bias = nn.Parameter(torch.tensor(log_freq, dtype=torch.float32, device=self.device))
                 self.decoder.bias.requires_grad_(False)
 
-    def initialize_npmi_loss(self, npmi_mat):
+    def initialize_npmi_loss(self, npmi_mat, npmi_lambda=0.7, npmi_scale=100.0):
         t_npmi_mat = torch.Tensor(npmi_mat, device=self.device)
-        self.npmi_with_diversity_loss = NPMILossWithDiversity(t_npmi_mat, device=self.device, alpha=self.npmi_alpha)
+        self.npmi_with_diversity_loss = NPMILossWithDiversity(t_npmi_mat, device=self.device, npmi_lambda=npmi_lambda, npmi_scale=npmi_scale)
 
     def get_ordered_terms(self):
         """
@@ -78,7 +72,6 @@ class BaseVAE(nn.Module):
             jacobian = torch.autograd.functional.jacobian(self.decoder, z) 
             npmi_loss = self.npmi_with_diversity_loss(jacobian)
             npmi_loss = npmi_loss.sum()
-            print("npmi loss = {}".format(npmi_loss))
             return (cur_loss + npmi_loss)
         else:
             return cur_loss
@@ -101,7 +94,6 @@ class BowVAEModel(BaseVAE):
         embedding_size (int): Number of dimensions for embedding layer
         n_encoding_layers (int): Number of layers used for the encoder. (default = 1)
         enc_dr (float): Dropout after each encoder layer. (default = 0.1)
-        n_covars (int): Number of values for categorical co-variate (0 for non-CovariateData BOW model)
         device (str): context device 
     """
     def __init__(self,
@@ -121,7 +113,7 @@ class BowVAEModel(BaseVAE):
         self.gamma    = gamma
         self.classifier_dropout=classifier_dropout
         self.has_classifier = self.n_labels > 1
-        self.encoding_dims = [self.embedding_size + self.n_covars] + [enc_dim for _ in range(n_encoding_layers)]
+        self.encoding_dims = [self.embedding_size] + [enc_dim for _ in range(n_encoding_layers)]
         self.embedding = torch.nn.Sequential()
         self.embedding.add_module("linear", torch.nn.Linear(self.vocab_size, self.embedding_size))
         self.embedding.add_module("tanh", torch.nn.Tanh())
@@ -280,10 +272,11 @@ class MetricBowVAEModel(BowVAEModel):
 
 class NPMILossWithDiversity(nn.Module):
 
-    def __init__(self, npmi_matrix: torch.Tensor, device: torch.device, k=20, alpha=0.7, use_diversity_loss=True):
+    def __init__(self, npmi_matrix: torch.Tensor, device: torch.device, k=20, npmi_lambda=0.7, npmi_scale=100.0, use_diversity_loss=True):
         super(NPMILossWithDiversity, self).__init__()
-        self.alpha = alpha
+        self.npmi_lambda = npmi_lambda
         self.npmi_matrix = npmi_matrix
+        self.npmi_scale  = npmi_scale
         self.use_diversity_loss = use_diversity_loss
         self.device = device
         self.k = k
@@ -301,9 +294,6 @@ class NPMILossWithDiversity(nn.Module):
         return x
 
     def _get_npmi_loss(self, jacobian):
-        #z = torch.ones((self.n_latent,), device=self.device)
-        #jacobian = torch.autograd.functional.jacobian(self.decoder, z)
-        #beta = self.model.get_topic_vectors().t() # |T| x |V|
         beta = jacobian.t()
         n_topics = beta.shape[0]
         self.npmi_matrix.fill_diagonal_(1)
@@ -317,21 +307,20 @@ class NPMILossWithDiversity(nn.Module):
         softmax_beta = torch.softmax(beta, dim=1)
         weighted_npmi = 1 - self._row_wise_normalize_inplace(torch.matmul(topk_softmax_beta.detach(), self.npmi_matrix))
         #print("Weighted_npmi sum = {}".format(weighted_npmi.sum()))
-        npmi_loss = 100 * (softmax_beta ** 2) * weighted_npmi
+        npmi_loss = self.npmi_scale * (softmax_beta ** 2) * weighted_npmi
         if self.use_diversity_loss:
             diversity_mask = torch.zeros_like(beta).bool()
             for topic_idx in range(n_topics):
                 other_rows_mask = torch.ones(n_topics).bool().to(self.device)
                 other_rows_mask[topic_idx] = False
                 diversity_mask[topic_idx] = topk_mask[other_rows_mask].sum(0) > 0
-            #print("Diversity mask sum = {}".format(diversity_mask.sum()))
-            npmi_loss = ( self.alpha * torch.masked_select(npmi_loss, diversity_mask)).sum() + \
-                        ((1 - self.alpha) * torch.masked_select(npmi_loss, ~diversity_mask)).sum()
+            npmi_loss = ( self.npmi_lambda * torch.masked_select(npmi_loss, diversity_mask)).sum() + \
+                        ((1 - self.npmi_lambda) * torch.masked_select(npmi_loss, ~diversity_mask)).sum()
             npmi_loss *= 2
         return npmi_loss
 
-    def forward(self, beta):
-        return self._get_npmi_loss(beta)
+    def forward(self, jacobian):
+        return self._get_npmi_loss(jacobian)
 
 
 class CoherenceRegularizer(nn.Module):
