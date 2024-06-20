@@ -105,7 +105,7 @@ Using the Model for Inference
 Given an estimator that has been *fit*, we can instantiate the result for *inference* by
 creating a :py:class:`tmnt.inferencer.BowVAEInferencer` object::
 
-  from tmnt.inferencer import BowVAEInferencer
+  from tmnt.inference import BowVAEInferencer
   inferencer = BowVAEInferencer(estimator, vectorizer=tf_vectorizer)
 
 The ``BowVAEInferencer`` object encapsulates the trained model, the estimator used to fit the
