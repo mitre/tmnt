@@ -41,13 +41,14 @@ llm_catalog = {
     'allenai/scibert_scivocab_uncased': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
     'johngiorgi/declutr-sci-base': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
     'BAAI/bge-base-en-v1.5': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
-    'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained)
-    ## add more model options here if desired
+    'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
+    'Alibaba-NLP/gte-base-en-v1.5': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained)
+    ## add more model options here ...
     }
 
 def get_llm(model_name):
     tok_fn, model_fn = llm_catalog.get(model_name, ((AutoTokenizer.from_pretrained, AutoModel.from_pretrained)))
-    return tok_fn(model_name), model_fn(model_name)
+    return tok_fn(model_name), model_fn(model_name, trust_remote_code=True)
 
 def get_llm_tokenizer(model_name):
     tok_fn, model_fn = llm_catalog.get(model_name, ((AutoTokenizer.from_pretrained, AutoModel.from_pretrained)))    
@@ -55,7 +56,7 @@ def get_llm_tokenizer(model_name):
 
 def get_llm_model(model_name):
     tok_fn, model_fn = llm_catalog.get(model_name, ((AutoTokenizer.from_pretrained, AutoModel.from_pretrained)))        
-    return model_fn(model_name)
+    return model_fn(model_name, trust_remote_code=True)
 
 def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
     label_pipeline = lambda x: label_map.get(x, 0)

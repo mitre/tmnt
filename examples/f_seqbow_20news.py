@@ -42,7 +42,7 @@ npmi_calc = FullNPMI()
 npmi_matrix = npmi_calc.get_full_vocab_npmi_matrix(X, vectorizer)
 
 
-supervised  = False # True
+supervised  = True # False # True
 use_logging = True
 
 # %%
@@ -68,7 +68,8 @@ dev_y_s = ['class_'+str(y) for y in dev_y]
 
 # %%
 # We'll use distilbert here as it's more compute efficient than BERT
-tf_llm_name = 'distilbert-base-uncased'
+#tf_llm_name, use_pooling = 'distilbert-base-uncased', False
+tf_llm_name, use_pooling = 'Alibaba-NLP/gte-base-en-v1.5', False
 
 if supervised:
     train_ds = list(zip(train_y_s, train_data))
@@ -99,7 +100,7 @@ device = torch.device(device_str)
 
 estimator = SeqBowEstimator(llm_model_name = tf_llm_name,
                             latent_distribution = latent_distribution,
-                            n_labels = num_classes,
+                            n_labels = num_classes, pool_encoder=use_pooling,
                             vocabulary = vectorizer.get_vocab(),
                             batch_size=batch_size, device=device, log_interval=1,
                             log_method=log_method, gamma=100.0, 

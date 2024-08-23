@@ -285,16 +285,11 @@ class BaseBowEstimator(BaseEstimator):
                 logging.error("File {} does not appear to be a valid vocabulary file".format(vocabulary))
                 raise Exception("Invalid Json Configuration File")            
             vocabulary = torchtext.vocab.vocab(voc_js)
-        #if vocabulary['embedding'] is not None:
-        if False:
-            raise Exception("Pre-trained embeddings not yet (re-)supported")
-            #emb_size = vocabulary['embedding'].idx_to_vec[0].size
-        else:
-            emb_size = config['embedding'].get('size')
-            if not emb_size:
-                emb_size = config['derived_info'].get('embedding_size')
-            if not emb_size:
-                raise Exception("Embedding size must be provided as the 'size' attribute of 'embedding' or as 'derived_info.embedding_size'")
+        emb_size = config['embedding'].get('size')
+        if not emb_size:
+            emb_size = config['derived_info'].get('embedding_size')
+        if not emb_size:
+            raise Exception("Embedding size must be provided as the 'size' attribute of 'embedding' or as 'derived_info.embedding_size'")
         gamma = config.get('gamma', 1.0)
         multilabel = config.get('multilabel', False)
         lr = config['lr']
@@ -781,12 +776,6 @@ class BowMetricEstimator(BowEstimator):
     def _get_model(self, bow_size=-1):
         if self.embedding_source != 'random':
             e_type, e_name = tuple(self.embedding_source.split(':'))
-            #pt_embedding = nlp.embedding.create(e_type, source=e_name)
-            #self.vocabulary.set_embedding(pt_embedding)
-            #emb_size = len(self.vocabulary.embedding.idx_to_vec[0])
-            #for word in self.vocabulary.embedding._idx_to_token:
-            #    if (self.vocabulary.embedding[word] == mx.nd.zeros(emb_size)).sum() == emb_size:
-            #        self.vocabulary.embedding[word] = mx.nd.random.normal(0, 0.1, emb_size)
         else:
             emb_size = self.embedding_size
         model = \
@@ -1030,7 +1019,6 @@ class SeqBowEstimator(BaseEstimator):
         tr_bow_counts = self._get_bow_wd_counts(train_data)
         model.initialize_bias_terms(tr_bow_counts)
         if self.npmi_matrix is not None:
-            print("****** INITIALIZING NPMI LOSS FUNCTION *******")
             model.initialize_npmi_loss(self.npmi_matrix)
         return model
         
@@ -1057,7 +1045,6 @@ class SeqBowEstimator(BaseEstimator):
         else:
             config['latent_distribution'] = {'dist_type':'gaussian'}
         config['epochs'] = self.epochs
-        #config['embedding_source'] = self.embedding_source
         config['gamma'] = self.gamma
         config['warmup_ratio'] = self.warmup_ratio
         config['llm_model_name'] = self.llm_model_name
@@ -1091,9 +1078,6 @@ class SeqBowEstimator(BaseEstimator):
                   log_interval, epoch_id, learning_rate):
         """Generate and print out the log message for training. """
         if self.has_classifier:
-            #metric_nm, metric_val = self.metric.compute()
-            #if not isinstance(metric_nm, list):
-            #    metric_nm, metric_val = [metric_nm], [metric_val]
             metric_nm = "AUPRC"
             try:
                 metric_val = self.metric.compute()
@@ -1126,7 +1110,6 @@ class SeqBowEstimator(BaseEstimator):
         rows = 0
         for i, data in enumerate(dataloader):
             seqs, = data
-            #bow_batch = list(seqs[3].squeeze(axis=1))
             bow_batch = list(seqs[3])
             rows += len(bow_batch)
             if i >= max_rows:
@@ -1170,10 +1153,7 @@ class SeqBowEstimator(BaseEstimator):
             label_ls = label_ls.mean()
             total_ls = (self.gamma * label_ls) + elbo_ls.mean()
             if not self.multilabel:
-                #label_ind = label.argmax(dim=0)
-                #self.metric.update([out], [label_ind])
                 self.metric.update(torch.tensor(out), torch.tensor(label))
-                #self.metric.update(torch.Tensor([out]), torch.Tensor([label_ind]))
             else:
                 self.metric.update([out], [label])
         else:
@@ -1214,7 +1194,6 @@ class SeqBowEstimator(BaseEstimator):
         joint_loader = PairedDataLoader(train_data, aux_data)
         num_train_steps = len(joint_loader) * self.epochs
 
-        ## The following from HuggingFace trainer.py lines 1047 to 1063
         decay_parameters = get_parameter_names(model.llm, ALL_LAYERNORM_LAYERS)
         decay_parameters = [name for name in decay_parameters if "bias" not in name]
         non_llm_parameters = [name for name,_ in model.named_parameters() if not name.startswith("llm")]
@@ -1288,10 +1267,8 @@ class SeqBowEstimator(BaseEstimator):
                 if aux_batch is not None:
                     update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
                     
-                #debug
-
                 if not accumulate or (batch_id + 1) % accumulate == 0:
-                    #torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 1.0)
+                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 1.0)
                     optimizer.step()
                     dec_optimizer.step()
                     lr_scheduler.step()

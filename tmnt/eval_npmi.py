@@ -115,6 +115,25 @@ class EvaluateNPMI(object):
                 npmi = (log10(n_docs) + log10(bigram_cnt) - log10(unigram_1) - log10(unigram_2)) / (log10(n_docs) - log10(bigram_cnt) + 1e-4)
             npmi_matrix[w1, w2] = npmi
         return npmi_matrix
+    
+class EvaluateNPMIUmass(object):
+
+    def __init__(self, npmi_matrix: np.array, vectorizer: TMNTVectorizer):
+        self.vectorizer = vectorizer
+        self.npmi_matrix = npmi_matrix # by convention this will be lower-triangular
+        dim = npmi_matrix.shape[0]
+        for mc in range(self.npmi_matrix.shape[0]):
+            for i in range(mc+1,dim):
+                self.npmi_matrix[mc,i] = self.npmi_matrix[i,mc]
+    
+    def evaluate_topics(self, topic_ids):
+        npmi_score = 0.0
+        total_size = len(topic_ids) * len(topic_ids[0])
+        for topic in topic_ids:
+            for (w1, w2) in combinations(topic):
+                npmi_score += self.npmi_matrix[w1, w2]
+        return npmi_score / total_size
+
 
 
 class FullNPMI(object):
