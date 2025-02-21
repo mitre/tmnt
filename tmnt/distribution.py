@@ -299,7 +299,8 @@ class ConceptLogisticGaussianDistribution(nn.Module):
         #self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
         #self.mu_encoder = Sequential(self.mu_proj, nn.Softplus().to(device))
         self.activation = TopK(k=k_sparsity)
-        self.mu_encoder = Sequential(nn.Linear(enc_size, n_concepts), self.activation, nn.Linear(n_concepts, n_latent)).to(device)
+        self.core_sparse = Sequential(nn.Linear(enc_size, n_concepts), self.activation).to(device)
+        self.mu_encoder = Sequential(self.core_sparse, nn.Linear(n_concepts, n_latent)).to(device)
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
         self.softmax = nn.Softmax(dim=1).to(device)
         self.softplus = nn.Softplus().to(device)      
@@ -312,7 +313,7 @@ class ConceptLogisticGaussianDistribution(nn.Module):
         self.prior_logvar = torch.tensor([math.log(prior_var)], device=device)
 
         #self.lv_encoder = nn.Linear(enc_size, n_latent).to(device)
-        self.lv_encoder = Sequential(nn.Linear(enc_size, n_concepts), self.activation, nn.Linear(n_concepts, n_latent))
+        self.lv_encoder = Sequential(self.core_sparse, nn.Linear(n_concepts, n_latent)).to(device)
         self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
         self.post_sample_dr_o = nn.Dropout(dr)
 
