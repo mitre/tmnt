@@ -21,6 +21,7 @@ from tmnt.modeling import BowVAEModel, SeqBowVED, BaseVAE
 from tmnt.modeling import CrossBatchCosineSimilarityLoss, GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
 from tmnt.eval_npmi import EvaluateNPMI
 from tmnt.distribution import LogisticGaussianDistribution, BaseDistribution, GaussianDistribution, VonMisesDistribution
+from tmnt.utils.vocab import Vocab
 
 ## evaluation routines
 from torcheval.metrics import MultilabelAUPRC, MulticlassAUPRC
@@ -38,7 +39,6 @@ import pickle
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 import torch
-import torchtext
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
@@ -249,7 +249,7 @@ class BaseBowEstimator(BaseEstimator):
                                device        = device)
 
     @classmethod
-    def from_config(cls, config: Union[str, dict], vocabulary: Union[str, torchtext.vocab.Vocab],
+    def from_config(cls, config: Union[str, dict], vocabulary: Union[str, Vocab],
                     n_labels: int = 0,
                     coherence_coefficient: float = 8.0,
                     coherence_via_encoder: bool = False,
@@ -948,7 +948,7 @@ class SeqBowEstimator(BaseEstimator):
     @classmethod
     def from_config(cls,
                     config: Union[str, dict],
-                    vocabulary: torchtext.vocab.Vocab,
+                    vocabulary: Vocab,
                     log_interval: int = 1,
                     pretrained_param_file: Optional[str] = None,
                     n_labels: Optional[int] = None,                    
@@ -974,7 +974,7 @@ class SeqBowEstimator(BaseEstimator):
                 raise Exception("Invalid Json Configuration File")
         ldist_def = config['latent_distribution']
         llm_model_name = config['llm_model_name']
-        model = torch.load(pretrained_param_file, map_location=device)
+        model = torch.load(pretrained_param_file, map_location=device, weights_only=False)
 
         latent_distribution = model.latent_distribution
         estimator = cls(llm_model_name = llm_model_name,
@@ -1006,7 +1006,7 @@ class SeqBowEstimator(BaseEstimator):
             config_file = os.path.join(model_dir, 'model.config')
         with open(config_file) as f:
             config = json.loads(f.read())
-        vocab = torch.load(vocab_file)
+        vocab = torch.load(vocab_file, weights_only=False)
         return cls.from_config(config,
                                vocabulary = vocab,
                                log_interval = log_interval,

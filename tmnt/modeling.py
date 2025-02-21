@@ -56,7 +56,6 @@ class BaseVAE(nn.Module):
         sorted_j = jacobian.argsort(dim=0, descending=True)
         return sorted_j.cpu().numpy()
     
-
     def get_topic_vectors(self):
         """
         Returns unnormalized topic vectors
@@ -462,9 +461,8 @@ class SeqBowVED(BaseSeqBowVED):
             classifier_outputs = self.classifier(z_mu)
         else:
             classifier_outputs = None
-        redundancy_loss = entropy_loss
         ii_loss = self.add_npmi_and_diversity_loss(elbo)
-        redundancy_loss = entropy_loss  #self.get_redundancy_penalty()
+        redundancy_loss = ii_loss  #self.get_redundancy_penalty()
         return ii_loss, rec_loss, KL_loss, redundancy_loss, classifier_outputs
 
 

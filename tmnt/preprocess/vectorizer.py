@@ -6,15 +6,12 @@ Copyright (c) 2019-2021 The MITRE Corporation.
 import io
 import os
 import json
-import torchtext
-from torchtext.vocab import vocab as build_vocab
+from tmnt.utils.vocab import Vocab, build_vocab
 import glob
 from multiprocessing import Pool, cpu_count
 from mantichora import mantichora
 from atpbar import atpbar
 import collections
-import threading
-import logging
 import threading
 import scipy
 import scipy.sparse as sp
@@ -27,7 +24,6 @@ from typing import List, Dict, Optional, Any, Tuple
 from collections import OrderedDict
 
 __all__ = ['TMNTVectorizer']
-
 
 class TMNTVectorizer(object):
 
@@ -57,7 +53,7 @@ class TMNTVectorizer(object):
     def __init__(self, text_key: str = 'body', label_key: Optional[str] = None, min_doc_size: int = 1,
                  label_remap: Optional[Dict[str,str]] = None,
                  json_out_dir: Optional[str] = None, vocab_size: int = 2000, file_pat: str = '*.json',
-                 encoding: str = 'utf-8', initial_vocabulary: Optional[torchtext.vocab.Vocab] = None,
+                 encoding: str = 'utf-8', initial_vocabulary: Optional[Vocab] = None,
                  additional_feature_keys: List[str] = None, stop_word_file: str = None,
                  split_char: str = ',',
                  max_ws_tokens: int = -1,
@@ -113,11 +109,11 @@ class TMNTVectorizer(object):
         return list(set(wds))
 
     
-    def get_vocab(self) -> torchtext.vocab.Vocab:
-        """Returns the Torchtext vocabulary associated with the vectorizer
+    def get_vocab(self) -> Vocab:
+        """Returns the vocabulary associated with the vectorizer
 
         Returns:
-            Torchtext vocabulary
+            vocabulary
         """
         if self.vocab is not None:
             return self.vocab
@@ -374,4 +370,6 @@ class TMNTVectorizer(object):
         X = self._tr_json_dir(self.vectorizer.fit_transform, json_dir)
         y = self._get_ys_dir(json_dir)
         return X, y
+
+
 

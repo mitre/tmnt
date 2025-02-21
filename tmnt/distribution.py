@@ -14,6 +14,7 @@ from torch.nn import Sequential
 import torch
 from scipy import special as sp
 import torch
+from typing import Callable, Literal, Optional, Tuple, TypeVar, Union
 
 
 __all__ = ['BaseDistribution', 'GaussianDistribution', 'GaussianUnitVarDistribution', 'LogisticGaussianDistribution',
@@ -266,5 +267,92 @@ class Projection(BaseDistribution):
         
         
     
+class TopK(nn.Module):
+    def __init__(
+        self, k: int, postact_fn: Callable[[torch.Tensor], torch.Tensor] = nn.ReLU()
+    ):
+        super().__init__()
+        self.k = k
+        self.postact_fn = postact_fn
 
-    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        topk = torch.topk(x, k=self.k, dim=-1)
+        values = self.postact_fn(topk.values)
+        result = torch.zeros_like(x)
+        result.scatter_(-1, topk.indices, values)
+        return result
+
+class ConceptLogisticGaussianDistribution(nn.Module):
+    """Sparse concept encoding with Logistic normal/Gaussian latent distribution with specified prior
+
+    Parameters:
+        n_latent (int): Dimentionality of the latent distribution
+        device (device): Torch computational context (cpu or gpu[id])
+        dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
+        alpha (float): Value the determines prior variance as 1/alpha - (2/n_latent) + 1/(n_latent^2)
+    """
+    def __init__(self, enc_size, n_latent, n_concepts=16000, k_sparsity=32, device='cpu', dr=0.1, alpha=1.0):
+        super(ConceptLogisticGaussianDistribution, self).__init__()
+        self.n_latent = n_latent
+        self.enc_size = enc_size
+        self.device = device
+        #self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
+        #self.mu_encoder = Sequential(self.mu_proj, nn.Softplus().to(device))
+        self.activation = TopK(k=k_sparsity)
+        self.mu_encoder = Sequential(nn.Linear(enc_size, n_concepts), self.activation, nn.Linear(n_concepts, n_latent)).to(device)
+        self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
+        self.softmax = nn.Softmax(dim=1).to(device)
+        self.softplus = nn.Softplus().to(device)      
+        self.on_simplex = True
+        self.alpha = alpha
+        self.n_concepts = n_concepts
+
+        prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
+        self.prior_var = torch.tensor([prior_var], device=device)
+        self.prior_logvar = torch.tensor([math.log(prior_var)], device=device)
+
+        #self.lv_encoder = nn.Linear(enc_size, n_latent).to(device)
+        self.lv_encoder = Sequential(nn.Linear(enc_size, n_concepts), self.activation, nn.Linear(n_concepts, n_latent))
+        self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
+        self.post_sample_dr_o = nn.Dropout(dr)
+
+
+    ## this is required by most priors
+    def _get_gaussian_sample(self, mu, lv, batch_size):
+        eps = Normal(torch.zeros(batch_size, self.n_latent), 
+                     torch.ones(batch_size, self.n_latent)).sample().to(self.device)
+        return (mu + torch.exp(0.5*lv).to(self.device) * eps)
+
+    def _get_kl_term(self, mu, lv):
+        posterior_var = torch.exp(lv)
+        delta = mu
+        dt = torch.div(delta * delta, self.prior_var)
+        v_div = torch.div(posterior_var, self.prior_var)
+        lv_div = self.prior_logvar - lv
+        return (0.5 * (torch.sum((v_div + dt + lv_div), 1) - self.n_latent)).to(self.device)
+
+    def forward(self, data, batch_size):
+        """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
+        """
+        mu = self.mu_encoder(data)
+        mu_bn = self.mu_bn(mu)        
+        lv = self.lv_encoder(data)
+        lv_bn = self.lv_bn(lv)
+        z_p = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
+        KL = self._get_kl_term(mu, lv)
+        z = self.post_sample_dr_o(z_p)
+        return self.softmax(z), KL
+
+    def get_mu_encoding(self, data, include_bn=True, normalize=False):
+        """Provide the distribution mean as the natural result of running the full encoder
+        
+        Parameters:
+            data (:class:`mxnet.ndarray.NDArray`): Output of pre-latent encoding layers
+        Returns:
+            encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
+        """
+        enc = self.mu_encoder(data)
+        if include_bn:
+            enc = self.mu_bn(enc)
+        mu = self.softmax(enc) if normalize else enc
+        return mu    

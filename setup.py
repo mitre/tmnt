@@ -44,8 +44,7 @@ if __name__ == '__main__':
         'numba',
         'scipy==1.12.0',
         'tabulate>=0.8.7',
-        'torch>=2.1.2',
-        'torchtext>=0.13.0'
+        'torch>=2.1.2'
     ]
 
     setup(name=("tmnt"),

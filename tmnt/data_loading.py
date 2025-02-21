@@ -25,9 +25,7 @@ from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 import torch
 from torch.utils.data import DataLoader, Sampler, WeightedRandomSampler, RandomSampler
-from torchtext.vocab import vocab as build_vocab
-from torchtext.data.utils import get_tokenizer
-from torchtext.vocab import build_vocab_from_iterator
+from tmnt.utils.vocab import build_vocab
 from transformers import DistilBertTokenizer, DistilBertModel, AutoTokenizer, AutoModel, DistilBertTokenizer, BertModel, DistilBertModel, OpenAIGPTModel
 from sklearn.model_selection import StratifiedKFold
 
