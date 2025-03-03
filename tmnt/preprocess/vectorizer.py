@@ -24,6 +24,7 @@ from sklearn.utils import check_array
 from sklearn.preprocessing import normalize
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.utils.validation import FLOAT_DTYPES, check_is_fitted
+from sklearn.feature_extraction._stop_words import ENGLISH_STOP_WORDS
 
 
 __all__ = ['TMNTVectorizer', 'CTFIDFVectorizer']
@@ -60,6 +61,8 @@ class TMNTVectorizer(object):
                  additional_feature_keys: List[str] = None, stop_word_file: str = None,
                  split_char: str = ',',
                  max_ws_tokens: int = -1,
+                 source_key: Optional[str] = None,
+                 source_json: Optional[str] = None,
                  count_vectorizer_kwargs: Dict[str, Any] = {'max_df':0.95, 'min_df':0.0, 'stop_words':'english'}):
         self.encoding = encoding
         self.max_ws_tokens = max_ws_tokens
@@ -77,10 +80,51 @@ class TMNTVectorizer(object):
         self.cv_kwargs = self._update_count_vectorizer_args(count_vectorizer_kwargs, stop_word_file)
         if not 'token_pattern' in self.cv_kwargs:
             self.cv_kwargs['token_pattern'] = r'\b[A-Za-z][A-Za-z]+\b'
+        if source_key and source_json:
+            source_terms = self._get_source_specific_terms(source_json, 10, text_key, source_key, 
+                                                           {'token_pattern': self.cv_kwargs['token_pattern'],
+                                                           'stop_words': self.cv_kwargs['stop_words'],
+                                                            'max_df': 1.0, 'min_df':0.0})
+            stop_words = set(source_terms)
+            stop_words.update(set(ENGLISH_STOP_WORDS))
+            self.cv_kwargs['stop_words'] = frozenset(stop_words)
         self.vectorizer = CountVectorizer(max_features=self.vocab_size, 
                                           vocabulary=(initial_vocabulary.get_itos() if initial_vocabulary else None),
                                           **self.cv_kwargs)
         self.label_map = {}
+
+
+    def _get_source_specific_terms(self, json_file, k: int, text_key: str, source_key: str, cv_kwargs):
+        by_source = {}
+        with io.open(json_file) as fp:
+            for l in fp:
+                js = json.loads(l)
+                txt = js[text_key]
+                src = js[source_key]
+                if src not in by_source:
+                    by_source[src] = []
+                by_source[src].append(txt)
+        docs_by_source = [''.join(txts) for txts in by_source.values()]
+        print(cv_kwargs)
+        count_vectorizer = CountVectorizer(**cv_kwargs)
+        count = count_vectorizer.fit_transform(docs_by_source)
+        ctfidf = CTFIDFVectorizer().fit_transform(count)
+        tok_to_idx = list(count_vectorizer.vocabulary_.items())
+        tok_to_idx.sort(key = lambda x: x[1])
+        ordered_vocab = OrderedDict([ (k,1) for (k,_) in tok_to_idx ])
+        ovocab = build_vocab(ordered_vocab)
+        per_source_tokens = []
+        for i in range(ctfidf.shape[0]):
+            ts = ctfidf[i].toarray().squeeze()
+            per_source_tokens.append(ovocab.lookup_tokens((-ts).argsort()[:k]))
+        final_tokens_intersect = set(per_source_tokens[0])
+        final_tokens_union = set(per_source_tokens[0])
+        for src_tokens in per_source_tokens:
+            final_tokens_intersect.intersection_update(src_tokens)
+            final_tokens_union.update(src_tokens)
+        res = final_tokens_union - final_tokens_intersect
+        print("Removed terms = {}".format(res))
+        return final_tokens_union - final_tokens_intersect
 
 
         
@@ -381,7 +425,7 @@ class CTFIDFVectorizer(TfidfTransformer):
         super(CTFIDFVectorizer, self).__init__(*args, **kwargs)
         self._idf_diag = None
 
-    def fit(self, X: sp.csr_matrix, n_samples: int):
+    def fit(self, X: sp.csr_matrix):
         """Learn the idf vector (global term weights)
 
         Parameters
@@ -428,7 +472,7 @@ class CTFIDFVectorizer(TfidfTransformer):
         if not sp.issparse(X):
             X = sp.csr_matrix(X, dtype=np.float64)
 
-        n_samples, n_features = X.shape
+        _, n_features = X.shape
 
         # idf_ being a property, the automatic attributes detection
         # does not work as usual and we need to specify the attribute

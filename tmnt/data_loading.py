@@ -56,17 +56,18 @@ def get_llm_model(model_name):
     tok_fn, model_fn = llm_catalog.get(model_name, ((AutoTokenizer.from_pretrained, AutoModel.from_pretrained)))        
     return model_fn(model_name, trust_remote_code=True)
 
-def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
+def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, bow_target_texts=None, 
+                                 shuffle=False, device='cpu'):
     label_pipeline = lambda x: label_map.get(x, 0)
     text_pipeline  = get_llm_tokenizer(llm_name)
     
     def collate_batch(batch):
         label_list, text_list, mask_list, bow_list = [], [], [], []
-        for (_label, _text) in batch:
+        for (_label, _text, _target_text) in batch:
             label_list.append(label_pipeline(_label))
             tokenized_result = text_pipeline(_text, return_tensors='pt', padding='max_length',
                                            max_length=max_len, truncation=True)
-            bag_of_words,_ = bow_vectorizer.transform([_text])
+            bag_of_words,_ = bow_vectorizer.transform([_target_text])
             processed_text = tokenized_result['input_ids']
             mask = tokenized_result['attention_mask']
             mask_list.append(mask)
@@ -77,7 +78,12 @@ def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batc
         mask_list  = torch.vstack(mask_list)
         bow_list   = torch.vstack([ sparse_coo_to_tensor(bow_vec.tocoo()) for bow_vec in bow_list ])
         return label_list.to(device), text_list.to(device), mask_list.to(device), bow_list.to(device)
-    return DataLoader(data, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_batch)
+    if bow_target_texts is not None:
+        assert len(bow_vectorizer) == len(data)
+        full_data = [ (label, txt, alt_text) for ((label, txt), alt_text) in zip(data, bow_target_texts)]
+    else:
+        full_data = [ (label, txt, txt) for (label, txt) in data]
+    return DataLoader(full_data, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_batch)
 
 def get_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
     return SingletonWrapperLoader(get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=shuffle, device=device))
