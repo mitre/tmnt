@@ -79,7 +79,7 @@ def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batc
         bow_list   = torch.vstack([ sparse_coo_to_tensor(bow_vec.tocoo()) for bow_vec in bow_list ])
         return label_list.to(device), text_list.to(device), mask_list.to(device), bow_list.to(device)
     if bow_target_texts is not None:
-        assert len(bow_vectorizer) == len(data)
+        assert len(bow_target_texts) == len(data)
         full_data = [ (label, txt, alt_text) for ((label, txt), alt_text) in zip(data, bow_target_texts)]
     else:
         full_data = [ (label, txt, txt) for (label, txt) in data]
