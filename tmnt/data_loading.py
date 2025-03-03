@@ -85,8 +85,9 @@ def get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batc
         full_data = [ (label, txt, txt) for (label, txt) in data]
     return DataLoader(full_data, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_batch)
 
-def get_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=False, device='cpu'):
-    return SingletonWrapperLoader(get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, shuffle=shuffle, device=device))
+def get_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, bow_target_texts=None, shuffle=False, device='cpu'):
+    return SingletonWrapperLoader(get_unwrapped_llm_dataloader(data, bow_vectorizer, llm_name, label_map, batch_size, max_len, 
+                                                               bow_target_texts=bow_target_texts, shuffle=shuffle, device=device))
 
 
 def get_llm_paired_dataloader(data_a, data_b, bow_vectorizer, llm_name, label_map, batch_size, max_len_a, max_len_b, 
