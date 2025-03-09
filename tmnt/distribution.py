@@ -29,12 +29,10 @@ class BaseDistribution(nn.Module):
         self.enc_size = enc_size
         self.device = device
         self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
-        #self.mu_encoder = Sequential(self.mu_proj, nn.Softplus().to(device))
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
         self.softmax = nn.Softmax(dim=1).to(device)
         self.softplus = nn.Softplus().to(device)      
         self.on_simplex = on_simplex
-        #self.mu_bn.collect_params().setattr('grad_req', 'null')
 
     ## this is required by most priors
     def _get_gaussian_sample(self, mu, lv, batch_size):
@@ -296,14 +294,11 @@ class ConceptLogisticGaussianDistribution(nn.Module):
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
-        #self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
-        #self.mu_encoder = Sequential(self.mu_proj, nn.Softplus().to(device))
         self.activation = TopK(k=k_sparsity)
         self.core_sparse = Sequential(nn.Linear(enc_size, n_concepts), self.activation).to(device)
         self.mu_encoder = Sequential(self.core_sparse, nn.Linear(n_concepts, n_latent)).to(device)
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
         self.softmax = nn.Softmax(dim=1).to(device)
-        self.softplus = nn.Softplus().to(device)      
         self.on_simplex = True
         self.alpha = alpha
         self.n_concepts = n_concepts
@@ -312,7 +307,8 @@ class ConceptLogisticGaussianDistribution(nn.Module):
         self.prior_var = torch.tensor([prior_var], device=device)
         self.prior_logvar = torch.tensor([math.log(prior_var)], device=device)
 
-        #self.lv_encoder = nn.Linear(enc_size, n_latent).to(device)
+        ## NOTE: the weights to model the log-variance are separate but the sparse encoder is shared
+        ## between the lv_encoder and mu_encoder (above)
         self.lv_encoder = Sequential(self.core_sparse, nn.Linear(n_concepts, n_latent)).to(device)
         self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
         self.post_sample_dr_o = nn.Dropout(dr)
