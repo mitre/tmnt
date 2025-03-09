@@ -125,6 +125,7 @@ class BowVAEModel(BaseVAE):
 
     def _init_weights(self, module):
         if isinstance(module, torch.nn.Linear):
+            torch.nn.init.kaiming_uniform_(module.weight.data)
             torch.nn.init.xavier_uniform_(module.weight.data)
             
             
