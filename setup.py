@@ -26,6 +26,7 @@ if __name__ == '__main__':
     ]
     install_requires = [
         'optuna',
+	'datasets',
         'mantichora>=0.9.5',
         'transformers[torch]',
         'torcheval',
