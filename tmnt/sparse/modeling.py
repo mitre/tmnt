@@ -191,6 +191,7 @@ class TopKSAE(BaseAutoencoder):
             return l2_loss_aux
         else:
             return torch.tensor(0, dtype=x.dtype, device=x.device)
+
 class VanillaSAE(BaseAutoencoder):
     def __init__(self, cfg):
         super().__init__(cfg)

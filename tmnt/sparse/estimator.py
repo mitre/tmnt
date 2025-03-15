@@ -53,7 +53,7 @@ def train_sparse_encoder_decoder(sed: BaseAutoencoder, activation_store: Activat
         sed_output = sed(batch)
 
         loss = sed_output["loss"]
-        pbar.set_postfix({"Loss": f"{loss.item():.4f}", "L0": f"{sed_output['l0_norm']:.4f}", "L2": f"{sed_output['l2_loss']:.4f}", "L1": f"{sed_output['l1_loss']:.4f}", "L1_norm": f"{sed_output['l1_norm']:.4f}"})
+        pbar.set_postfix({"Loss": f"{loss.item():.4f}", "Dead": f"{sed_output['num_dead_features']:.4f}", "L0": f"{sed_output['l0_norm']:.4f}", "L2": f"{sed_output['l2_loss']:.4f}", "L1": f"{sed_output['l1_loss']:.4f}", "L1_norm": f"{sed_output['l1_norm']:.4f}"})
         loss.backward()
         torch.nn.utils.clip_grad_norm_(sed.parameters(), cfg["max_grad_norm"])
         sed.make_decoder_weights_and_grad_unit_norm()
