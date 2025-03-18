@@ -4,22 +4,63 @@ import torch.nn.functional as F
 import torch.autograd as autograd
 
 
+class BaseEncoder(nn.Module):
+    
+    def __init__(self, cfg):
+        super().__init__()
+        self.cfg = cfg
+        torch.manual_seed(self.cfg['seed'])
+        self.b_enc = nn.Parameter(torch.zeros(self.cfg['dict_size']))
+        self.W_enc = nn.Parameter(
+            torch.nn.init.kaiming_uniform_(
+                torch.empty(self.cfg['act_size'], self.cfg['dict_size'])
+            )
+        )
+        self.to(cfg['dtype']).to(cfg['device'])
+
+    def preprocess_input(self, x):
+        if self.cfg.get("input_unit_norm", False):
+            x_mean = x.mean(dim=-1, keepdim=True)
+            x = x - x_mean
+            x_std = x.std(dim=-1, keepdim=True)
+            x = x / (x_std + 1e-5)
+            return x, x_mean, x_std
+        else:
+            return x, None, None
+        
+
+    def forward(self, x, b_dec=None):
+        raise NotImplementedError
+    
+
+
+class BaseDecoder(nn.Module):
+
+    def __init__(self, cfg, W_enc):
+        self.cfg = cfg
+        torch.manual_seed(self.cfg['seed'])
+        self.W_dec = nn.Parameter(torch.zeros(self.cfg['act_size']))
+        self.W_dec = nn.Parameter(
+            torch.nn.init.kaiming_uniform_(
+                torch.empy(self.cfg['dict_size'], self.cfg['act_size'])
+            )
+        )
+        self.W_dec.data[:] = W_enc.t().data
+        self.W_dec.data[:] = self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
+        self.to(cfg['dtype']).to(cfg['device'])
+
 class BaseAutoencoder(nn.Module):
     """Base class for autoencoder models."""
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, encoder):
         super().__init__()
 
         self.cfg = cfg
         torch.manual_seed(self.cfg["seed"])
+        
+        self.encoder = encoder
 
         self.b_dec = nn.Parameter(torch.zeros(self.cfg["act_size"]))
-        self.b_enc = nn.Parameter(torch.zeros(self.cfg["dict_size"]))
-        self.W_enc = nn.Parameter(
-            torch.nn.init.kaiming_uniform_(
-                torch.empty(self.cfg["act_size"], self.cfg["dict_size"])
-            )
-        )
         self.W_dec = nn.Parameter(
             torch.nn.init.kaiming_uniform_(
                 torch.empty(self.cfg["dict_size"], self.cfg["act_size"])
@@ -32,16 +73,6 @@ class BaseAutoencoder(nn.Module):
         )
 
         self.to(cfg["dtype"]).to(cfg["device"])
-
-    def preprocess_input(self, x):
-        if self.cfg.get("input_unit_norm", False):
-            x_mean = x.mean(dim=-1, keepdim=True)
-            x = x - x_mean
-            x_std = x.std(dim=-1, keepdim=True)
-            x = x / (x_std + 1e-5)
-            return x, x_mean, x_std
-        else:
-            return x, None, None
 
     def postprocess_output(self, x_reconstruct, x_mean, x_std):
         if self.cfg.get("input_unit_norm", False):
@@ -62,14 +93,14 @@ class BaseAutoencoder(nn.Module):
         self.num_batches_not_active[acts.sum(0) > 0] = 0
 
 
-class BatchTopKSAE(BaseAutoencoder):
+class BatchTopKEncoder(BaseEncoder):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-    def forward(self, x):
+    def forward(self, x, b_dec):
         x, x_mean, x_std = self.preprocess_input(x)
 
-        x_cent = x - self.b_dec
+        x_cent = x - b_dec
         acts = F.relu(x_cent @ self.W_enc)
         acts_topk = torch.topk(acts.flatten(), self.cfg["top_k"] * x.shape[0], dim=-1)
         acts_topk = (
@@ -77,6 +108,17 @@ class BatchTopKSAE(BaseAutoencoder):
             .scatter(-1, acts_topk.indices, acts_topk.values)
             .reshape(acts.shape)
         )
+        return acts, acts_topk, x_mean, x_std
+
+
+
+class BatchTopKSAE(BaseAutoencoder):
+    def __init__(self, cfg:dict , encoder: BatchTopKEncoder):
+        super().__init__(cfg)
+        self.encoder = encoder
+
+    def forward(self, x):
+        acts, acts_topk, x_mean, x_std = self.encoder(x, self.b_dec)
         x_reconstruct = acts_topk @ self.W_dec + self.b_dec
 
         self.update_inactive_features(acts_topk)
@@ -147,6 +189,7 @@ class TopKSAE(BaseAutoencoder):
         self.update_inactive_features(acts_topk)
         output = self.get_loss_dict(x, x_reconstruct, acts, acts_topk, x_mean, x_std)
         return output
+
     def get_loss_dict(self, x, x_reconstruct, acts, acts_topk, x_mean, x_std):
         l2_loss = (x_reconstruct.float() - x.float()).pow(2).mean()
         l1_norm = acts_topk.float().abs().sum(-1).mean()
