@@ -52,7 +52,7 @@ class BaseDecoder(nn.Module):
 class BaseAutoencoder(nn.Module):
     """Base class for autoencoder models."""
 
-    def __init__(self, cfg, encoder):
+    def __init__(self, cfg, encoder: BaseEncoder):
         super().__init__()
 
         self.cfg = cfg
@@ -66,7 +66,7 @@ class BaseAutoencoder(nn.Module):
                 torch.empty(self.cfg["dict_size"], self.cfg["act_size"])
             )
         )
-        self.W_dec.data[:] = self.W_enc.t().data
+        self.W_dec.data[:] = self.encoder.W_enc.t().data
         self.W_dec.data[:] = self.W_dec / self.W_dec.norm(dim=-1, keepdim=True)
         self.num_batches_not_active = torch.zeros((self.cfg["dict_size"],)).to(
             cfg["device"]
