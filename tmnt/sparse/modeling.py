@@ -114,8 +114,7 @@ class BatchTopKEncoder(BaseEncoder):
 
 class BatchTopKSAE(BaseAutoencoder):
     def __init__(self, cfg:dict , encoder: BatchTopKEncoder):
-        super().__init__(cfg)
-        self.encoder = encoder
+        super().__init__(cfg, encoder)
 
     def forward(self, x):
         acts, acts_topk, x_mean, x_std = self.encoder(x, self.b_dec)
