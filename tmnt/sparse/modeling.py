@@ -154,21 +154,29 @@ class BatchTopKSAE(BaseAutoencoder):
             return torch.tensor(0, dtype=x.dtype, device=x.device)
 
 
-class TopKSAE(BaseAutoencoder):
+class TopKEncoder(BaseEncoder):
     def __init__(self, cfg):
         super().__init__(cfg)
 
     def forward(self, x):
         x, x_mean, x_std = self.preprocess_input(x)
 
-        x_cent = x - self.b_dec
-        acts = F.relu(x_cent @ self.W_enc)
-        acts_topk = torch.topk(acts, self.cfg["top_k"], dim=-1)
-        acts_topk = torch.zeros_like(acts).scatter(
-            -1, acts_topk.indices, acts_topk.values
+        acts = F.relu(x @ self.W_enc)
+        acts_topk = torch.topk(acts.flatten(), self.cfg["top_k"] * x.shape[0], dim=-1)
+        acts_topk = (
+            torch.zeros_like(acts.flatten())
+            .scatter(-1, acts_topk.indices, acts_topk.values)
+            .reshape(acts.shape)
         )
-        x_reconstruct = acts_topk @ self.W_dec + self.b_dec
+        return acts, acts_topk, x, x_mean, x_std 
 
+class TopKSAE(BaseAutoencoder):
+    def __init__(self, cfg: dict, encoder: TopKEncoder):
+        super().__init__(cfg, encoder)
+
+    def forward(self, x):
+        acts, acts_topk, x, x_mean, x_std = self.encoder(x)
+        x_reconstruct = acts_topk @ self.W_dec + self.b_dec
         self.update_inactive_features(acts_topk)
         output = self.get_loss_dict(x, x_reconstruct, acts, acts_topk, x_mean, x_std)
         return output
@@ -217,15 +225,24 @@ class TopKSAE(BaseAutoencoder):
             return l2_loss_aux
         else:
             return torch.tensor(0, dtype=x.dtype, device=x.device)
+        
 
-class VanillaSAE(BaseAutoencoder):
+class VanillaEncoder(BaseEncoder):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-    def forward(self, x):
+    def forward(self, x): 
         x, x_mean, x_std = self.preprocess_input(x)
-        x_cent = x - self.b_dec
-        acts = F.relu(x_cent @ self.W_enc + self.b_enc)
+        acts = F.relu(x @ self.W_enc + self.b_enc)
+        return acts, x, x_mean, x_std
+
+
+class VanillaSAE(BaseAutoencoder):
+    def __init__(self, cfg, encoder: VanillaEncoder):
+        super().__init__(cfg, encoder)
+
+    def forward(self, x):
+        acts, x, x_mean, x_std = self.encoder(x)
         x_reconstruct = acts @ self.W_dec + self.b_dec
         self.update_inactive_features(acts)
         output = self.get_loss_dict(x, x_reconstruct, acts, x_mean, x_std)
@@ -319,21 +336,27 @@ class StepFunction(autograd.Function):
             * grad_output
         )
         return x_grad, threshold_grad, None  # None for bandwidth
+    
+
+class JumpReLUEncoder(BaseEncoder):
+    def __init__(self, cfg):
+        super().__init__(cfg)
+
+    def forward(self, x):
+        x, x_mean, x_std = self.preprocess_input(x)
+
+        pre_activations = torch.relu(x @ self.W_enc + self.b_enc)
+        feature_magnitudes = self.jumprelu(pre_activations)
+        return feature_magnitudes, x, x_mean, x_std
+
 
 class JumpReLUSAE(BaseAutoencoder):
     def __init__(self, cfg):
         super().__init__(cfg)
         self.jumprelu = JumpReLU(feature_size=cfg["dict_size"], bandwidth=cfg["bandwidth"], device=cfg["device"])
 
-    def forward(self, x, use_pre_enc_bias=False):
-        x, x_mean, x_std = self.preprocess_input(x)
-
-        if use_pre_enc_bias:
-            x = x - self.b_dec
-
-        pre_activations = torch.relu(x @ self.W_enc + self.b_enc)
-        feature_magnitudes = self.jumprelu(pre_activations)
-
+    def forward(self, x):
+        feature_magnitudes, x, x_mean, x_std = self.encoder(x)
         x_reconstructed = feature_magnitudes @ self.W_dec + self.b_dec
 
         return self.get_loss_dict(x, x_reconstructed, feature_magnitudes, x_mean, x_std)
