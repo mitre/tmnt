@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd as autograd
 
-
 class BaseEncoder(nn.Module):
     
     def __init__(self, cfg):
@@ -28,10 +27,6 @@ class BaseEncoder(nn.Module):
         else:
             return x, None, None
         
-
-    def forward(self, x, b_dec=None):
-        raise NotImplementedError
-    
 
 class BaseAutoencoder(nn.Module):
     """Base class for autoencoder models."""

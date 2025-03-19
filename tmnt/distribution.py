@@ -15,6 +15,7 @@ import torch
 from scipy import special as sp
 import torch
 from typing import Callable, Literal, Optional, Tuple, TypeVar, Union
+from tmnt.sparse.modeling import TopKEncoder
 
 
 __all__ = ['BaseDistribution', 'GaussianDistribution', 'GaussianUnitVarDistribution', 'LogisticGaussianDistribution',
