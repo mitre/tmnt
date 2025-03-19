@@ -155,13 +155,10 @@ class TopKEncoder(BaseEncoder):
 
     def forward(self, x):
         x, x_mean, x_std = self.preprocess_input(x)
-
         acts = F.relu(x @ self.W_enc)
-        acts_topk = torch.topk(acts.flatten(), self.cfg["top_k"] * x.shape[0], dim=-1)
-        acts_topk = (
-            torch.zeros_like(acts.flatten())
-            .scatter(-1, acts_topk.indices, acts_topk.values)
-            .reshape(acts.shape)
+        acts_topk = torch.topk(acts, self.cfg["top_k"], dim=-1)
+        acts_topk = torch.zeros_like(acts).scatter(
+            -1, acts_topk.indices, acts_topk.values
         )
         return acts, acts_topk, x, x_mean, x_std 
 
