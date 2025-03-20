@@ -287,9 +287,10 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
-        self.sparse_encoder = sparse_encoder
+        self.sparse_encoder = sparse_encoder.to(device)
         self.n_concepts = sparse_encoder.get_dict_size()
-        self.mu_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
+        self.sparse_to_mu = nn.Linear(self.n_concepts, n_latent).to(device)
+        #self.mu_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
         self.softmax = nn.Softmax(dim=1).to(device)
         self.on_simplex = True
@@ -301,7 +302,8 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
 
         ## NOTE: the weights to model the log-variance are separate but the sparse encoder is shared
         ## between the lv_encoder and mu_encoder (above)
-        self.lv_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
+        self.sparse_to_lv = nn.Linear(self.n_concepts, n_latent).to(device)
+        #self.lv_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
         self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
         self.post_sample_dr_o = nn.Dropout(dr)
 
@@ -332,9 +334,10 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
     def forward(self, data, batch_size):
         """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
         """
-        mu = self.mu_encoder(data)
+        sparse = self.sparse_encoder(data)
+        mu = self.sparse_to_mu(sparse)
         mu_bn = self.mu_bn(mu)        
-        lv = self.lv_encoder(data)
+        lv = self.sparse_to_lv(sparse)
         lv_bn = self.lv_bn(lv)
         z_p = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
         KL = self._get_kl_term(mu, lv)
@@ -349,7 +352,8 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         Returns:
             encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
         """
-        enc = self.mu_encoder(data)
+        sparse = self.sparse_encoder(data)
+        enc = self.sparse_to_mu(sparse)
         if include_bn:
             enc = self.mu_bn(enc)
         mu = self.softmax(enc) if normalize else enc
