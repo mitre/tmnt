@@ -283,7 +283,7 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         alpha (float): Value the determines prior variance as 1/alpha - (2/n_latent) + 1/(n_latent^2)
     """
     def __init__(self, enc_size, n_latent, sparse_encoder: TopKEncoder, device='cpu', dr=0.1, alpha=1.0):
-        super(ConceptLogisticGaussianDistribution, self).__init__()
+        super(ConceptLogisticGaussianDistribution, self).__init__(enc_size, n_latent, device, on_simplex=True)
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
