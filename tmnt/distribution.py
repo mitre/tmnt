@@ -334,7 +334,7 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
     def forward(self, data, batch_size):
         """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
         """
-        sparse = self.sparse_encoder(data)
+        _, sparse, _, _, _ = self.sparse_encoder(data)
         mu = self.sparse_to_mu(sparse)
         mu_bn = self.mu_bn(mu)        
         lv = self.sparse_to_lv(sparse)
@@ -352,7 +352,7 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         Returns:
             encoding (:class:`mxnet.ndarray.NDArray`): Encoding vector representing unnormalized topic proportions
         """
-        sparse = self.sparse_encoder(data)
+        _, sparse, _, _, _ = self.sparse_encoder(data)
         enc = self.sparse_to_mu(sparse)
         if include_bn:
             enc = self.mu_bn(enc)
