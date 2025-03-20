@@ -943,6 +943,7 @@ class SeqBowEstimator(BaseEstimator):
         self._bow_matrix = None
         self.entropy_loss_coef = entropy_loss_coef
         self.pool_encoder = pool_encoder
+        self.freeze_pre_encoder_weights = False
 
 
     @classmethod
@@ -1013,6 +1014,9 @@ class SeqBowEstimator(BaseEstimator):
                                pretrained_param_file = param_file,
                                device = device)
     
+    def freeze_pre_encoder(self):
+        self.freeze_pre_encoder_weights = True
+        
 
     def _get_model_bias_initialize(self, train_data):
         model = self._get_model()
@@ -1030,6 +1034,7 @@ class SeqBowEstimator(BaseEstimator):
                           entropy_loss_coef=self.entropy_loss_coef,
                           dropout=self.classifier_dropout)
         return model
+    
 
     def _get_config(self):
         config = {}
@@ -1185,8 +1190,10 @@ class SeqBowEstimator(BaseEstimator):
         if self.model is None or not self.warm_start:
             self.model = self._get_model_bias_initialize(train_data)
 
-        model = self.model
+        if self.freeze_pre_encoder_weights:
+            self.model.freeze_pre_encoder()
 
+        model = self.model
         accumulate = False
         v_res      = None
 

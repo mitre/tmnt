@@ -21,19 +21,13 @@ from tmnt.sparse.modeling import TopKEncoder
 __all__ = ['BaseDistribution', 'GaussianDistribution', 'GaussianUnitVarDistribution', 'LogisticGaussianDistribution',
            'VonMisesDistribution']
 
-
 class BaseDistribution(nn.Module):
     
-    def __init__(self, enc_size, n_latent, device, on_simplex=False):
+    def __init__(self, enc_size, n_latent, device, on_simplex=True):
         super(BaseDistribution, self).__init__()
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
-        self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
-        self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
-        self.softmax = nn.Softmax(dim=1).to(device)
-        self.softplus = nn.Softplus().to(device)      
-        self.on_simplex = on_simplex
 
     ## this is required by most priors
     def _get_gaussian_sample(self, mu, lv, batch_size):
@@ -48,11 +42,25 @@ class BaseDistribution(nn.Module):
     
     def get_mu_encoding(self, data, include_bn):
         raise NotImplemented 
+    
+    def freeze_pre_encoder(self) -> None:
+        raise NotImplemented
+
+    def unfreeze_pre_encoder(self) -> None:
+        raise NotImplemented
 
 
+class SimpleDistribution(BaseDistribution):
+    def __init__(self, enc_size, n_latent, device, on_simplex=False):
+        super(SimpleDistribution, self).__init__(enc_size, n_latent, device, on_simplex=on_simplex)
+        self.mu_encoder = nn.Linear(enc_size, n_latent).to(device)
+        self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
+        self.softmax = nn.Softmax(dim=1).to(device)
+        self.softplus = nn.Softplus().to(device)      
+        self.on_simplex = on_simplex
 
 
-class GaussianDistribution(BaseDistribution):
+class GaussianDistribution(SimpleDistribution):
     """Gaussian latent distribution with diagnol co-variance.
 
     Parameters:
@@ -99,7 +107,7 @@ class GaussianDistribution(BaseDistribution):
         
 
 
-class GaussianUnitVarDistribution(BaseDistribution):
+class GaussianUnitVarDistribution(SimpleDistribution):
     """Gaussian latent distribution with fixed unit variance.
 
     Parameters:
@@ -142,7 +150,7 @@ class GaussianUnitVarDistribution(BaseDistribution):
         return mu
         
 
-class LogisticGaussianDistribution(BaseDistribution):
+class LogisticGaussianDistribution(SimpleDistribution):
     """Logistic normal/Gaussian latent distribution with specified prior
 
     Parameters:
@@ -199,7 +207,7 @@ class LogisticGaussianDistribution(BaseDistribution):
         return mu
         
     
-class VonMisesDistribution(BaseDistribution):
+class VonMisesDistribution(SimpleDistribution):
     
     def __init__(self, enc_size, n_latent, kappa=100.0, dr=0.1, device='cpu'):
         super(VonMisesDistribution, self).__init__(enc_size, n_latent, device, on_simplex=False)
@@ -239,7 +247,7 @@ class VonMisesDistribution(BaseDistribution):
         
     
 
-class Projection(BaseDistribution):
+class Projection(SimpleDistribution):
 
     def __init__(self, enc_size, n_latent, device='cpu'):
         super(Projection, self).__init__(enc_size, n_latent, device)
@@ -265,23 +273,7 @@ class Projection(BaseDistribution):
         return enc
         
         
-    
-class TopK(nn.Module):
-    def __init__(
-        self, k: int, postact_fn: Callable[[torch.Tensor], torch.Tensor] = nn.ReLU()
-    ):
-        super().__init__()
-        self.k = k
-        self.postact_fn = postact_fn
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        topk = torch.topk(x, k=self.k, dim=-1)
-        values = self.postact_fn(topk.values)
-        result = torch.zeros_like(x)
-        result.scatter_(-1, topk.indices, values)
-        return result
-
-class ConceptLogisticGaussianDistribution(nn.Module):
+class ConceptLogisticGaussianDistribution(BaseDistribution):
     """Sparse concept encoding with Logistic normal/Gaussian latent distribution with specified prior
 
     Parameters:
@@ -290,19 +282,18 @@ class ConceptLogisticGaussianDistribution(nn.Module):
         dr (float): Dropout value for dropout applied post sample. optional (default = 0.2)
         alpha (float): Value the determines prior variance as 1/alpha - (2/n_latent) + 1/(n_latent^2)
     """
-    def __init__(self, enc_size, n_latent, n_concepts=16000, k_sparsity=32, device='cpu', dr=0.1, alpha=1.0):
+    def __init__(self, enc_size, n_latent, sparse_encoder: TopKEncoder, device='cpu', dr=0.1, alpha=1.0):
         super(ConceptLogisticGaussianDistribution, self).__init__()
         self.n_latent = n_latent
         self.enc_size = enc_size
         self.device = device
-        self.activation = TopK(k=k_sparsity)
-        self.core_sparse = Sequential(nn.Linear(enc_size, n_concepts), self.activation).to(device)
-        self.mu_encoder = Sequential(self.core_sparse, nn.Linear(n_concepts, n_latent)).to(device)
+        self.sparse_encoder = sparse_encoder
+        self.n_concepts = sparse_encoder.get_dict_size()
+        self.mu_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
         self.softmax = nn.Softmax(dim=1).to(device)
         self.on_simplex = True
         self.alpha = alpha
-        self.n_concepts = n_concepts
 
         prior_var = 1 / self.alpha - (2.0 / n_latent) + 1 / (self.n_latent * self.n_latent)
         self.prior_var = torch.tensor([prior_var], device=device)
@@ -310,9 +301,18 @@ class ConceptLogisticGaussianDistribution(nn.Module):
 
         ## NOTE: the weights to model the log-variance are separate but the sparse encoder is shared
         ## between the lv_encoder and mu_encoder (above)
-        self.lv_encoder = Sequential(self.core_sparse, nn.Linear(n_concepts, n_latent)).to(device)
+        self.lv_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
         self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
         self.post_sample_dr_o = nn.Dropout(dr)
+
+
+    def freeze_pre_encoder(self):
+        self.sparse_encoder.W_enc.requires_grad = False
+        self.sparse_encoder.b_enc.requires_grad = False
+
+    def unfreeze_pre_encoder(self):
+        self.sparse_encoder.W_enc.requires_grad = True
+        self.sparse_encoder.b_enc.requires_grad = True
 
 
     ## this is required by most priors

@@ -17,6 +17,9 @@ class BaseEncoder(nn.Module):
         )
         self.to(cfg['dtype']).to(cfg['device'])
 
+    def get_dict_size(self):
+        return int(self.cfg['dict_size'])
+
     def preprocess_input(self, x):
         if self.cfg.get("input_unit_norm", False):
             x_mean = x.mean(dim=-1, keepdim=True)

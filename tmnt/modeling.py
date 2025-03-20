@@ -45,6 +45,9 @@ class BaseVAE(nn.Module):
         t_npmi_mat = torch.Tensor(npmi_mat).to(self.device)
         self.npmi_with_diversity_loss = NPMILossWithDiversity(t_npmi_mat, device=self.device, npmi_lambda=npmi_lambda, npmi_scale=npmi_scale)
 
+    def freeze_pre_encoder(self):
+        pass
+
     def get_ordered_terms(self):
         """
         Returns the top K terms for each topic based on sensitivity analysis. Terms whose 
@@ -360,7 +363,7 @@ class CoherenceRegularizer(nn.Module):
 class BaseSeqBowVED(BaseVAE):
     def __init__(self,
                  llm,
-                 latent_dist,
+                 latent_dist: BaseDistribution,
                  num_classes=0,
                  dropout=0.0,
                  vocab_size=2000,
@@ -401,6 +404,11 @@ class BaseSeqBowVED(BaseVAE):
             return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
         else:
             return model_output.last_hidden_state[:,0,:]
+        
+    def freeze_pre_encoding(self):
+        for p in self.llm.parameters():
+            p.requires_grad = False
+        self.latent_distribution.freeze_pre_encoder()
 
     def get_ordered_terms(self):
         """
@@ -447,6 +455,9 @@ class SeqBowVED(BaseSeqBowVED):
             self.classifier = torch.nn.Sequential()
             self.classifier.add_module("dr", nn.Dropout(self.dropout).to(self.device))
             self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes).to(self.device))
+
+    def freeze_pre_encoding(self):
+        self.latent_distribution.freeze
         
     def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
         llm_output = self.llm(input_ids, attention_mask)
