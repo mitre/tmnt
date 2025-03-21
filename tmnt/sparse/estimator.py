@@ -27,14 +27,14 @@ class ActivationsStore:
             self.dataloader_iter = iter(self.dataloader)
             return next(self.dataloader_iter)['data']
 
-def build_activation_store(json_input_texts, emb_model_path, arrow_output, device='cpu'):
+def build_activation_store(json_input_texts, emb_model_path, arrow_output, json_txt_key='text', device='cpu'):
 
     inferencer = SeqVEDInferencer.from_saved(emb_model_path, device=device)
     with io.open(json_input_texts) as fp:
         with ArrowWriter(path=arrow_output) as writer:
             for l in fp:
                 js = json.loads(l)
-                tokenization_result = inferencer.prep_text(js['text'])
+                tokenization_result = inferencer.prep_text(js[json_txt_key])
                 llm_out = inferencer.model.llm(tokenization_result['input_ids'].to(inferencer.device), 
                                             tokenization_result['attention_mask'].to(inferencer.device))
                 cls_vec = inferencer.model._get_embedding(llm_out, tokenization_result['attention_mask'].to(inferencer.device))
