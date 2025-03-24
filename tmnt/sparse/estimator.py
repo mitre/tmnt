@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
-from datasets import Dataset
+from datasets import Dataset, IterableDataset
 import tqdm
 from datasets.arrow_writer import ArrowWriter
 from tmnt.inference import SeqVEDInferencer
@@ -15,8 +15,11 @@ class ActivationsStore:
     ):
         self.device = cfg["device"]
         self.activation_path = cfg["activation_path"]
-        self.dataloader = DataLoader(Dataset.from_file(self.activation_path).with_format('torch', device=self.device), 
-                batch_size=cfg["batch_size"], shuffle=True)
+        shuffle = cfg.get("shuffle_data", False)
+        #self.dataset = Dataset.from_file(self.activation_path).with_format('torch', device=self.device)
+        self.dataset = Dataset.from_file(self.activation_path).shuffle(seed=42).with_format('torch', device=self.device)
+        self.dataloader = DataLoader(self.dataset, 
+                batch_size=cfg["batch_size"], shuffle=shuffle)
         self.dataloader_iter = iter(self.dataloader)
         self.cfg = cfg
 
