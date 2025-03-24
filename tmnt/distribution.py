@@ -343,6 +343,10 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         KL = self._get_kl_term(mu, lv)
         z = self.post_sample_dr_o(z_p)
         return self.softmax(z), KL
+    
+    def get_sparse_encoding(self, data):
+        _, sparse, _, _, _ = self.sparse_encoder(data)
+        return sparse
 
     def get_mu_encoding(self, data, include_bn=True, normalize=False):
         """Provide the distribution mean as the natural result of running the full encoder
