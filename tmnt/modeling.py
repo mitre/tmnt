@@ -405,7 +405,7 @@ class BaseSeqBowVED(BaseVAE):
         else:
             return model_output.last_hidden_state[:,0,:]
         
-    def freeze_pre_encoding(self):
+    def freeze_pre_encoder(self):
         for p in self.llm.parameters():
             p.requires_grad = False
         self.latent_distribution.freeze_pre_encoder()
@@ -456,8 +456,6 @@ class SeqBowVED(BaseSeqBowVED):
             self.classifier.add_module("dr", nn.Dropout(self.dropout).to(self.device))
             self.classifier.add_module("l_out", nn.Linear(self.n_latent, self.num_classes).to(self.device))
 
-    def freeze_pre_encoding(self):
-        self.latent_distribution.freeze
         
     def forward(self, input_ids, attention_mask, bow=None):  # pylint: disable=arguments-differ
         llm_output = self.llm(input_ids, attention_mask)
