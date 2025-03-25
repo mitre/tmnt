@@ -48,7 +48,7 @@ def build_activation_store(json_input_texts, emb_model_path, arrow_output, json_
 def build_activation_store_batching(json_input_texts, emb_model_path, arrow_output, batch_size=42, json_txt_key='text', device='cpu'):
     inferencer = SeqVEDInferencer.from_saved(emb_model_path, device=device)
     def encode_batch(txt_batch):
-        tokenization_result = inferencer.prep_text(js[json_txt_key])
+        tokenization_result = inferencer.prep_text(txt_batch)
         llm_out = inferencer.model.llm(tokenization_result['input_ids'].to(inferencer.device), 
                                             tokenization_result['attention_mask'].to(inferencer.device))
         cls_vec = inferencer.model._get_embedding(llm_out, tokenization_result['attention_mask'].to(inferencer.device))
