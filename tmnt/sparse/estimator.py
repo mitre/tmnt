@@ -45,6 +45,35 @@ def build_activation_store(json_input_texts, emb_model_path, arrow_output, json_
                 writer.write({'data': enc})
             writer.finalize()
 
+def build_activation_store_batching(json_input_texts, emb_model_path, arrow_output, batch_size=42, json_txt_key='text', device='cpu'):
+    inferencer = SeqVEDInferencer.from_saved(emb_model_path, device=device)
+    def encode_batch(txt_batch):
+        tokenization_result = inferencer.prep_text(js[json_txt_key])
+        llm_out = inferencer.model.llm(tokenization_result['input_ids'].to(inferencer.device), 
+                                            tokenization_result['attention_mask'].to(inferencer.device))
+        cls_vec = inferencer.model._get_embedding(llm_out, tokenization_result['attention_mask'].to(inferencer.device))
+        encs : List[List[float]] = cls_vec.cpu().detach().tolist() 
+        return zip(txt_batch, encs)
+    
+    def write_encodings(writer: ArrowWriter, txt_enc_pairs):
+        for (t, e) in txt_enc_pairs:
+            writer.write({'text': t, 'data': e})
+
+    with io.open(json_input_texts) as fp:
+        with ArrowWriter(path=arrow_output) as writer:
+            txt_batch = []
+            for l in fp:
+                js = json.loads(l)
+                txt_batch.append(js[json_txt_key])
+                if len(txt_batch) >= batch_size:
+                    encodings = encode_batch(txt_batch)
+                    write_encodings(writer, encodings)
+                    txt_batch = []
+            if len(txt_batch) > 0:
+                encodings = encode_batch(txt_batch)
+                write_encodings(writer, encodings) 
+            writer.finalize() 
+
 
 def train_sparse_encoder_decoder(sed: BaseAutoencoder, activation_store: ActivationsStore, cfg: dict):
     num_batches = cfg["num_samples"] // cfg["batch_size"]
