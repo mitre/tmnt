@@ -1275,7 +1275,8 @@ class SeqBowEstimator(BaseEstimator):
                     update_loss_details(total_ls_2, elbo_ls_2, red_ls_2, None)
                     
                 if not accumulate or (batch_id + 1) % accumulate == 0:
-                    torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 1.0)
+                    if not self.freeze_pre_encoder_weights:
+                        torch.nn.utils.clip_grad.clip_grad_value_(model.llm.parameters(), 1.0)
                     optimizer.step()
                     dec_optimizer.step()
                     lr_scheduler.step()
