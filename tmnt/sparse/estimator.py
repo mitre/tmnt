@@ -30,9 +30,9 @@ class ActivationsStore:
             self.dataloader_iter = iter(self.dataloader)
             return next(self.dataloader_iter)['data']
 
-def build_activation_store(json_input_texts, emb_model_path, arrow_output, json_txt_key='text', device='cpu'):
+def build_activation_store(json_input_texts, emb_model_path, arrow_output, max_seq_len=512, json_txt_key='text', device='cpu'):
 
-    inferencer = SeqVEDInferencer.from_saved(emb_model_path, device=device)
+    inferencer = SeqVEDInferencer.from_saved(emb_model_path, max_length=max_seq_len, device=device)
     with io.open(json_input_texts) as fp:
         with ArrowWriter(path=arrow_output) as writer:
             for l in fp:
@@ -45,8 +45,8 @@ def build_activation_store(json_input_texts, emb_model_path, arrow_output, json_
                 writer.write({'data': enc})
             writer.finalize()
 
-def build_activation_store_batching(json_input_texts, emb_model_path, arrow_output, batch_size=42, json_txt_key='text', device='cpu'):
-    inferencer = SeqVEDInferencer.from_saved(emb_model_path, device=device)
+def build_activation_store_batching(json_input_texts, emb_model_path, arrow_output, max_seq_len=512, batch_size=42, json_txt_key='text', device='cpu'):
+    inferencer = SeqVEDInferencer.from_saved(emb_model_path, max_length=max_seq_len, device=device)
     def encode_batch(txt_batch):
         tokenization_result = inferencer.prep_text(txt_batch)
         llm_out = inferencer.model.llm(tokenization_result['input_ids'].to(inferencer.device), 
