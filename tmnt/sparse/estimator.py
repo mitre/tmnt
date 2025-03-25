@@ -17,7 +17,7 @@ class ActivationsStore:
         self.activation_path = cfg["activation_path"]
         shuffle = cfg.get("shuffle_data", False)
         #self.dataset = Dataset.from_file(self.activation_path).with_format('torch', device=self.device)
-        self.dataset = Dataset.from_file(self.activation_path).shuffle(seed=42).with_format('torch', device=self.device)
+        self.dataset = Dataset.from_file(self.activation_path).select_columns(['data']).shuffle(seed=42).with_format('torch', device=self.device)
         self.dataloader = DataLoader(self.dataset, 
                 batch_size=cfg["batch_size"], shuffle=shuffle)
         self.dataloader_iter = iter(self.dataloader)
