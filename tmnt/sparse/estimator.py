@@ -93,17 +93,4 @@ def train_sparse_encoder_decoder(sed: BaseAutoencoder, activation_store: Activat
         optimizer.zero_grad()
 
 
-def run_estimator_test():
-    from tmnt.sparse.config import get_default_cfg
-    from tmnt.sparse.modeling import BatchTopKSAE
-    cfg = get_default_cfg()
-    cfg['activation_path'] = '/Users/wellner/Projects/SIREN2025/t1.arrow'
-    cfg['device'] = 'cpu'
-    cfg['num_samples'] = 20000
-    cfg['batch_size'] = 200
-    act_store = ActivationsStore(cfg)
-    sed = BatchTopKSAE(cfg)
-    train_sparse_encoder_decoder(sed, act_store, cfg)
-    return sed
-
     
