@@ -290,7 +290,7 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         self.sparse_encoder = sparse_encoder.to(device)
         self.n_concepts = sparse_encoder.get_dict_size()
         self.sparse_to_mu = nn.Linear(self.n_concepts, n_latent).to(device)
-        #self.mu_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
+        self.sparse_bn = nn.BatchNorm1d(self.n_concepts, momentum=0.8, eps=0.0001).to(device)
         self.mu_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.0001).to(device)
         self.softmax = nn.Softmax(dim=1).to(device)
         self.on_simplex = True
@@ -303,7 +303,6 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         ## NOTE: the weights to model the log-variance are separate but the sparse encoder is shared
         ## between the lv_encoder and mu_encoder (above)
         self.sparse_to_lv = nn.Linear(self.n_concepts, n_latent).to(device)
-        #self.lv_encoder = Sequential(self.sparse_encoder, nn.Linear(self.n_concepts, n_latent)).to(device)
         self.lv_bn = nn.BatchNorm1d(n_latent, momentum = 0.8, eps=0.001).to(device)
         self.post_sample_dr_o = nn.Dropout(dr)
 
@@ -315,13 +314,6 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
     def unfreeze_pre_encoder(self):
         self.sparse_encoder.W_enc.requires_grad = True
         self.sparse_encoder.b_enc.requires_grad = True
-
-
-    ## this is required by most priors
-    def _get_gaussian_sample(self, mu, lv, batch_size):
-        eps = Normal(torch.zeros(batch_size, self.n_latent), 
-                     torch.ones(batch_size, self.n_latent)).sample().to(self.device)
-        return (mu + torch.exp(0.5*lv).to(self.device) * eps)
 
     def _get_kl_term(self, mu, lv):
         posterior_var = torch.exp(lv)
@@ -335,9 +327,10 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
         """
         _, sparse, _, _, _ = self.sparse_encoder(data)
-        mu = self.sparse_to_mu(sparse)
+        sparse_bn = self.sparse_bn(sparse)
+        mu = self.sparse_to_mu(sparse_bn)
         mu_bn = self.mu_bn(mu)        
-        lv = self.sparse_to_lv(sparse)
+        lv = self.sparse_to_lv(sparse_bn)
         lv_bn = self.lv_bn(lv)
         z_p = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
         KL = self._get_kl_term(mu, lv)
