@@ -18,8 +18,9 @@ from tmnt.utils.recalibrate import recalibrate_scores
 from sklearn.datasets import load_svmlight_file
 from functools import partial
 from tmnt.data_loading import get_llm_tokenizer
-
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
+from scipy.sparse import csr_matrix
+from tmnt.distribution import ConceptLogisticGaussianDistribution
 
 
 MAX_DESIGN_MATRIX = 250000000 
@@ -343,6 +344,9 @@ class MetricSeqVEDInferencer(SeqVEDInferencer):
         else:
             vectorizer = None
         return cls(estimator, max_length, pre_vectorizer=vectorizer, device=device)
+
+
+
 
 
 
