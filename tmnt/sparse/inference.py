@@ -13,7 +13,7 @@ import io, json
 
 
 def csr_to_indices_data(csr_mat):
-    return [ (csr_mat.getrow(ri).indices, csr_mat.getrow(ri).data) for ri in csr_mat.shape[0] ]
+    return [ (csr_mat.getrow(ri).indices, csr_mat.getrow(ri).data) for ri in range(csr_mat.shape[0]) ]
 
 def batch_process_to_arrow(model_path, json_input_texts, output_db_path, max_seq_len=512, device='cuda', batch_size=200, json_txt_key='text'):
 
@@ -23,11 +23,12 @@ def batch_process_to_arrow(model_path, json_input_texts, output_db_path, max_seq
         llm_out = inferencer.model.llm(tokenization_result['input_ids'].to(inferencer.device), 
                                             tokenization_result['attention_mask'].to(inferencer.device))
         cls_vecs = inferencer.model._get_embedding(llm_out, tokenization_result['attention_mask'].to(inferencer.device))
-        raw_concepts = inferencer.model.latent_distribution.get_sparse_encoding(cls_vecs)
+        raw_concepts = inferencer.model.latent_distribution.get_sparse_encoding(cls_vecs).cpu().detach()
         mu_emb = inferencer.model.latent_distribution.get_mu_encoding(cls_vecs)
         encs : List[List[float]] = cls_vecs.cpu().detach().tolist() 
         sparse_concepts : List[Tuple[List[int], List[float]]] = csr_to_indices_data(csr_matrix(raw_concepts))
         topic_embeddings : List[List[float]] = mu_emb.cpu().detach().tolist()
+        print("Lengths: {}, {}, {}, {}".format(len(txt_batch), len(encs), len(sparse_concepts), len(topic_embeddings)))
         return zip(txt_batch, encs, sparse_concepts, topic_embeddings)
     
     def write_encodings(writer: ArrowWriter, txt_enc_pairs):

@@ -327,10 +327,10 @@ class ConceptLogisticGaussianDistribution(BaseDistribution):
         """Generate a sample according to the logistic Gaussian latent distribution given the encoder outputs
         """
         _, sparse, _, _, _ = self.sparse_encoder(data)
-        sparse_bn = self.sparse_bn(sparse)
-        mu = self.sparse_to_mu(sparse_bn)
+        #sparse_bn = self.sparse_bn(sparse)
+        mu = self.sparse_to_mu(sparse)
         mu_bn = self.mu_bn(mu)        
-        lv = self.sparse_to_lv(sparse_bn)
+        lv = self.sparse_to_lv(sparse)
         lv_bn = self.lv_bn(lv)
         z_p = self._get_gaussian_sample(mu_bn, lv_bn, batch_size)
         KL = self._get_kl_term(mu, lv)
