@@ -40,7 +40,8 @@ llm_catalog = {
     'johngiorgi/declutr-sci-base': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
     'BAAI/bge-base-en-v1.5': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
     'pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
-    'Alibaba-NLP/gte-base-en-v1.5': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained)
+    'Alibaba-NLP/gte-base-en-v1.5': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained),
+    'intfloat/multilingual-e5-base': (AutoTokenizer.from_pretrained, AutoModel.from_pretrained)
     ## add more model options here ...
     }
 
