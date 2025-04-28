@@ -1,5 +1,7 @@
 import torch 
 
+__all__ = ['get_default_cfg']
+
 def get_default_cfg():
     default_cfg = {
         "seed": 49,

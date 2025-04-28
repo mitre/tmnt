@@ -15,7 +15,7 @@ import numpy as np
 import scipy.sparse as sp
 import json
 
-from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score, precision_recall_fscore_support
+from sklearn.metrics import average_precision_score, top_k_accuracy_score, roc_auc_score, ndcg_score
 from tmnt.data_loading import PairedDataLoader, SingletonWrapperLoader, SparseDataLoader, get_llm_model
 from tmnt.modeling import BowVAEModel, SeqBowVED, BaseVAE
 from tmnt.modeling import CrossBatchCosineSimilarityLoss, GeneralizedSDMLLoss, MultiNegativeCrossEntropyLoss, MetricSeqBowVED, MetricBowVAEModel
@@ -29,18 +29,15 @@ from torcheval.metrics import MultilabelAUPRC, MulticlassAUPRC
 ## huggingface specifics
 from transformers.trainer_pt_utils import get_parameter_names
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
-from transformers.optimization import AdamW, get_scheduler
+from transformers.optimization import get_scheduler
 
 ## model selection
 import optuna
 
-from itertools import cycle
 import pickle
 from typing import List, Tuple, Dict, Optional, Union, NoReturn
 
 import torch
-from torch.utils.data import Dataset, DataLoader
-from tqdm import tqdm
 
 MAX_DESIGN_MATRIX = 250000000
 

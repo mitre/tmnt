@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.autograd as autograd
 
+
+__all__ = ['BatchTopKEncoder', 'BatchTopKSAE', 'TopKEncoder', 'TopKSAE', 'VanillaEncoder', 'VanillaSAE', 'JumpReLUEncoder', 'JumpReLUSAE']
+
 class BaseEncoder(nn.Module):
     
     def __init__(self, cfg):

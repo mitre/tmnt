@@ -11,6 +11,7 @@ from datasets.arrow_writer import ArrowWriter
 from tmnt.inference import SeqVEDInferencer
 import io, json
 
+__all__ = ['batch_process_to_arrow']
 
 def csr_to_indices_data(csr_mat):
     return [ (csr_mat.getrow(ri).indices, csr_mat.getrow(ri).data) for ri in range(csr_mat.shape[0]) ]

@@ -8,6 +8,8 @@ import io, json
 from tmnt.sparse.modeling import BaseAutoencoder
 from typing import List
 
+__all__ = ['ActivationsStore', 'build_activation_store', 'build_activation_store_batching', 'train_sparse_encoder_decoder']
+
 class ActivationsStore:
     def __init__(
         self,
