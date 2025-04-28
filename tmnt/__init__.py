@@ -1,11 +1,8 @@
 # coding: utf-8
 
-import os
 from .distribution import *
 from .preprocess import *
-#from .models import *
+from .sparse import *
 from .utils import *
 
-os.environ["MXNET_STORAGE_FALLBACK_LOG_VERBOSE"] = "0"
-
-__all__ = distribution.__all__ + preprocess.__all__ + utils.__all__
+__all__ = distribution.__all__ + preprocess.__all__ + utils.__all__ + sparse.__all__
