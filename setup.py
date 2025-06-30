@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 from setuptools.command.install import install
 from pathlib import Path
 
-version = '0.7.61'
+version = '0.7.62'
 
 try:
     if not os.getenv('RELEASE'):
@@ -43,7 +43,7 @@ if __name__ == '__main__':
         'sentence-splitter==1.4',
         'umap-learn[plot]>=0.5.5',
         'numba',
-        'scipy==1.12.0',
+        'scipy>=1.12.0',
         'tabulate>=0.8.7',
         'torch>=2.1.2'
     ]

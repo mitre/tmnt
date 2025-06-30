@@ -6,7 +6,6 @@ Configuration objects for representing hyperparameters faciliating model selecti
 
 import yaml
 import io
-import autogluon.core as ag
 
 __all__ = ['BaseTMNTConfig']
 
