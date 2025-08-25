@@ -281,7 +281,7 @@ class BaseBowEstimator(BaseEstimator):
             except:
                 logging.error("File {} does not appear to be a valid vocabulary file".format(vocabulary))
                 raise Exception("Invalid Json Configuration File")            
-            vocabulary = torchtext.vocab.vocab(voc_js)
+            vocabulary = Vocab(voc_js)
         emb_size = config['embedding'].get('size')
         if not emb_size:
             emb_size = config['derived_info'].get('embedding_size')
