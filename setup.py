@@ -37,7 +37,7 @@ if __name__ == '__main__':
         'future>=0.18.2',
         'funcy>=1.16',
         'pandas>=2.0.0',
-        'pyOpenSSL==18.0.0',
+        'pyOpenSSL==26.0.0',
         'PySocks==1.6.8',
         'sacremoses>=0.0.38',
         'sentence-splitter==1.4',
